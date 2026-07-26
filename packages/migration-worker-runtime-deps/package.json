@@ -1,0 +1,10 @@
+{
+  "name": "@mima/migration-worker-runtime-deps",
+  "private": true,
+  "version": "0.2.0",
+  "type": "module",
+  "dependencies": {
+    "drizzle-orm": "0.45.2",
+    "pg": "8.22.0"
+  }
+}

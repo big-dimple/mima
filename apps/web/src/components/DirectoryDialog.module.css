@@ -1,0 +1,67 @@
+.form,
+.form label {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.form label,
+.parentLine,
+.preview {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.form input,
+.form select {
+  min-height: var(--control-standard);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 0 10px;
+  color: var(--text);
+  background: var(--panel);
+}
+
+.parentLine,
+.preview {
+  display: grid;
+  grid-template-columns: 88px minmax(0, 1fr);
+  align-items: baseline;
+  gap: 10px;
+}
+
+.parentLine strong,
+.preview strong {
+  min-width: 0;
+  color: var(--text);
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.preview {
+  padding: 9px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--panel-2);
+}
+
+.error {
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  color: var(--danger-strong);
+  background: var(--danger-weak);
+  font-size: 13px;
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+@media (max-width: 520px) {
+  .actions > button {
+    flex: 1;
+  }
+}

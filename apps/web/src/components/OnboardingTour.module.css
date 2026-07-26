@@ -1,0 +1,95 @@
+.layer {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  pointer-events: none;
+}
+
+/* 高亮框：用超大 box-shadow 把其余区域压暗，控件本身保持可见 */
+.spotlight {
+  position: fixed;
+  border-radius: 8px;
+  box-shadow: 0 0 0 9999px rgba(15, 25, 30, 0.55);
+  outline: 2px solid var(--accent);
+  pointer-events: none;
+}
+
+.card {
+  position: fixed;
+  max-height: calc(100vh - 24px);
+  overflow-y: auto;
+  background: var(--panel);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 14px 16px;
+  z-index: 81;
+  pointer-events: auto;
+  outline: none;
+}
+
+.cardHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.progress {
+  font-size: 12px;
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.body {
+  margin: 0 0 12px;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--text);
+}
+
+.cardActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.spacer {
+  flex: 1;
+}
+
+.skip {
+  font-size: 12px;
+  color: var(--faint);
+  padding: 6px 4px;
+}
+
+.skip:hover {
+  color: var(--muted);
+}
+
+.nav {
+  min-height: var(--control-standard);
+  padding: 0 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  background: var(--panel);
+  color: var(--text);
+}
+
+.nav:hover {
+  background: var(--panel-2);
+}
+
+.primary {
+  min-height: var(--control-standard);
+  padding: 0 16px;
+  border-radius: var(--radius-sm);
+  background: var(--accent);
+  color: var(--accent-contrast);
+  font-weight: 500;
+}
+
+.primary:hover {
+  background: var(--accent-hover);
+}

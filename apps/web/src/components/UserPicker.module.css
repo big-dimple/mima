@@ -1,0 +1,113 @@
+.root {
+  position: relative;
+  min-width: 0;
+  width: 100%;
+}
+
+.inputWrap {
+  min-height: var(--control-standard);
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 0 8px;
+  background: var(--panel);
+}
+
+.input {
+  min-width: 0;
+  flex: 1;
+  border: 0;
+  outline: 0;
+  background: transparent;
+}
+
+.options {
+  position: absolute;
+  z-index: 80;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  max-height: 260px;
+  overflow-y: auto;
+  background: var(--panel);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow);
+  padding: 4px;
+}
+
+.inlineOptions {
+  position: static;
+  margin-top: 4px;
+  max-height: min(320px, 42vh);
+}
+
+.option,
+.state {
+  width: 100%;
+  min-height: var(--control-standard);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 7px 9px;
+  border-radius: var(--radius-sm);
+  text-align: left;
+}
+
+.option small {
+  color: var(--faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.option:hover,
+.active {
+  background: var(--accent-weak);
+}
+
+.state {
+  color: var(--muted);
+  justify-content: center;
+}
+
+.spin {
+  animation: spin 800ms linear infinite;
+}
+
+.multi,
+.chips {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.chips {
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.chip {
+  min-height: var(--control-standard);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 5px 8px 5px 10px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.chip button {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}

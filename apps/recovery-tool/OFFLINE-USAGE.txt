@@ -1,0 +1,17 @@
+Mima企业恢复离线工具 0.2.0
+
+运行要求
+- 只在与办公网络隔离、受控且无屏幕录制的终端运行。
+- 安装 Node.js 24 或更高版本。
+- 下载后先核对同目录 .sha256 文件，再解压 ZIP。
+- .mimashare 恢复材料不得上传、截图、发送到聊天工具或进入常规备份。
+
+生成公开清单和三份恢复材料
+node mima-recovery-tool.mjs generate --ceremony-id <批次标识> --output-dir <新目录>
+
+三人分别保管生成的三份 .mimashare，任意两人一起恢复。只将 manifest.json 登记到Mima。
+
+处理已审批的恢复请求
+node mima-recovery-tool.mjs recover --input <恢复请求包.json> --share <材料一.mimashare> --share <材料二.mimashare> --output <恢复结果.json>
+
+只把恢复结果 JSON 交给请求绑定的目标用户导入浏览器。处理完成后按公司介质清理流程删除请求包和恢复结果。

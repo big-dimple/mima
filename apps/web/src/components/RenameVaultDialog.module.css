@@ -1,0 +1,60 @@
+.form,
+.form label {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.form label {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.form input {
+  min-height: var(--control-standard);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 0 10px;
+  color: var(--text);
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.advanced {
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+}
+
+.advanced summary {
+  min-height: var(--control-standard);
+  display: flex;
+  align-items: center;
+  color: var(--muted);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.advancedBody {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 4px 0;
+}
+
+.advancedBody p {
+  margin: 0;
+  color: var(--faint);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+@media (max-width: 520px) {
+  .actions > button {
+    flex: 1;
+  }
+}

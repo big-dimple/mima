@@ -1,0 +1,172 @@
+.header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 16px;
+  height: 48px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-weight: 600;
+  font-size: 15px;
+  color: var(--accent);
+  white-space: nowrap;
+}
+
+.status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.online,
+.connecting,
+.offline {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.online {
+  color: var(--accent);
+}
+
+.connecting {
+  color: var(--warn);
+}
+
+.offline {
+  color: var(--danger-strong);
+}
+
+.pending {
+  background: var(--warn-weak);
+  color: var(--warn);
+  border-radius: 999px;
+  padding: 1px 8px;
+}
+
+.spin {
+  animation: spin 1s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spin {
+    animation: none;
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.spacer {
+  flex: 1;
+}
+
+.user {
+  color: var(--muted);
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  max-width: min(28vw, 240px);
+}
+
+.guideBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: var(--control-standard);
+  padding: 0 10px;
+  border-radius: var(--radius-sm);
+  color: var(--accent);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.guideBtn:hover {
+  background: var(--accent-weak);
+}
+
+.desktopActions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.mobileMenu {
+  position: relative;
+  display: none;
+}
+
+.mobileMenuPanel {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 40;
+  width: 210px;
+  padding: 5px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+  box-shadow: var(--shadow);
+}
+
+.mobileMenuPanel button {
+  width: 100%;
+  min-height: var(--control-standard);
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 9px;
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: 13px;
+  text-align: left;
+}
+
+.mobileMenuPanel button:hover,
+.mobileMenuPanel button:focus-visible {
+  background: var(--accent-weak);
+  color: var(--accent);
+}
+
+@media (max-width: 960px) {
+  .user {
+    display: none;
+  }
+
+  .desktopActions {
+    display: none;
+  }
+
+  .mobileMenu {
+    display: block;
+  }
+}
+
+@media (max-width: 460px) {
+  .header {
+    gap: 2px;
+    padding: 0 6px;
+  }
+
+  .brand span {
+    display: none;
+  }
+
+  .status {
+    gap: 0;
+    font-size: 0;
+  }
+}

@@ -1,0 +1,177 @@
+.shell {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.offlineBanner {
+  background: var(--warn-weak);
+  color: var(--warn);
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+  padding: 6px 16px;
+}
+
+.panes {
+  flex: 1;
+  display: grid;
+  grid-template-columns: var(--nav-width) 12px var(--list-width) 12px minmax(480px, 1fr);
+  min-height: 0;
+  overflow: hidden;
+}
+
+.navPane,
+.listPane,
+.detailPane {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.navPane > *,
+.listPane > *,
+.detailPane > * {
+  height: 100%;
+}
+
+.detailPane {
+  background: var(--panel);
+  display: flex;
+  align-items: stretch;
+  justify-content: flex-start;
+}
+
+.detailPane > * {
+  width: min(100%, 760px);
+}
+
+.separator {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: col-resize;
+  touch-action: none;
+  background: var(--panel-2);
+  color: var(--faint);
+}
+
+.separator::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 5px;
+  width: 1px;
+  background: var(--border);
+}
+
+.separator svg {
+  position: relative;
+  z-index: 1;
+  flex: 0 0 auto;
+  background: var(--panel-2);
+}
+
+.separator:hover,
+.separator:focus-visible {
+  background: var(--accent-weak);
+  color: var(--accent);
+  outline: 0;
+}
+
+.separator:hover svg,
+.separator:focus-visible svg {
+  background: var(--accent-weak);
+}
+
+.separator:hover::after,
+.separator:focus-visible::after {
+  background: var(--accent);
+}
+
+.compactWorkspace {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.compactToolbar {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+  font-weight: 600;
+}
+
+.compactPanes {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(300px, 360px) minmax(0, 1fr);
+}
+
+.singlePane {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.singlePane > *,
+.compactPanes > * {
+  min-height: 0;
+}
+
+.drawerLayer {
+  position: absolute;
+  inset: 0;
+  z-index: var(--layer-drawer);
+}
+
+.drawerBackdrop {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  background: rgba(20, 30, 35, 0.35);
+}
+
+.drawer {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: min(320px, calc(100% - 48px));
+  display: flex;
+  flex-direction: column;
+  background: var(--panel-2);
+  box-shadow: var(--shadow);
+}
+
+.drawerHeader {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 10px 0 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+}
+
+.drawer > nav {
+  flex: 1;
+}
+
+:global(body.isResizing) {
+  cursor: col-resize;
+  user-select: none;
+}
+
+@media (max-width: 900px) {
+  .compactPanes {
+    grid-template-columns: minmax(280px, 42%) minmax(0, 1fr);
+  }
+}

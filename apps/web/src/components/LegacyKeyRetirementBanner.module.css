@@ -1,0 +1,29 @@
+.banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-height: var(--control-standard);
+  padding: 7px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--warn-weak);
+  color: var(--warn);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.banner svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
+.danger {
+  background: var(--danger-weak);
+  color: var(--danger-strong);
+}
+
+@media (max-width: 560px) {
+  .banner {
+    padding: 7px 10px;
+    font-size: 12px;
+  }
+}

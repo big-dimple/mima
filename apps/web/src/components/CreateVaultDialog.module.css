@@ -1,0 +1,37 @@
+.dialog {
+  width: min(480px, calc(100vw - 32px));
+  max-height: calc(100vh - 24px);
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.form label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.form input {
+  min-height: var(--control-standard);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 0 10px;
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+@media (max-width: 520px) {
+  .actions > button {
+    flex: 1;
+  }
+}

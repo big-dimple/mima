@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "migrations": [
+    { "id": "0001_base_schema", "file": "schema.sql", "sha256": "f0f8841f5d41a23497ec2e7f70fc47fc9278cededb531ee3395bb6c4022b697a" },
+    { "id": "0002_standalone_auth_groups", "file": "migrations/0002_standalone_auth_groups.sql", "sha256": "d4df7e70dfb3aaa25a2631394304eb06781f53746f9afcd3c28bd88499ec5681" },
+    { "id": "0003_zero_knowledge_e2ee", "file": "migrations/0003_zero_knowledge_e2ee.sql", "sha256": "a383530c6b256d141152e1c86040fa82c54a5278d66b47ae096052583b4f5a3a" },
+    { "id": "0004_enterprise_recovery_workflow", "file": "migrations/0004_enterprise_recovery_workflow.sql", "sha256": "b017bbfc00218c79781af288cbefdfc48ea6bc9202bbcf45e6f1c2408ff76d1f" },
+    { "id": "0005_client_owned_device_keys", "file": "migrations/0005_client_owned_device_keys.sql", "sha256": "4d07382df8bff25a23ab78bf997acc27d9e83dfc312cd1f3e6af53822e44ee6b" },
+    { "id": "0006_isolated_legacy_migration_worker", "file": "migrations/0006_isolated_legacy_migration_worker.sql", "sha256": "6f6e2ad1850f8ee5c505f1b7dc661ef05926775608d95c102b42aef8953c55a7" },
+    { "id": "0007_account_crypto_reset", "file": "migrations/0007_account_crypto_reset.sql", "sha256": "7835acb4f6749a591d40d79f6d5e6f5b1d3a38126bb06c4b445cb5b235c22303" },
+    { "id": "0008_vault_envelope_tasks", "file": "migrations/0008_vault_envelope_tasks.sql", "sha256": "d3f36e78fff094caeeb589be2c0cdd3f34ce514b77583d4115bd36fe41e47718" },
+    { "id": "0009_empty_vault_e2ee_initialize", "file": "migrations/0009_empty_vault_e2ee_initialize.sql", "sha256": "2bbba30127d99a54bd18ff325d3a5a01e7718d0f280aa99b7fe528c4655b8e94" },
+    { "id": "0010_enterprise_recovery_capability", "file": "migrations/0010_enterprise_recovery_capability.sql", "sha256": "d5aa9a1433fda4380acffbe00927fa6e1332e37923a796a35b4f59411e0a4a3a" },
+    { "id": "0011_legacy_key_retirement", "file": "migrations/0011_legacy_key_retirement.sql", "sha256": "fc90be2999fe76386be45b8d29c19d46b102619cc56c423c98f7eb0b8e235e8d" },
+    { "id": "0012_recovery_envelope_authorization", "file": "migrations/0012_recovery_envelope_authorization.sql", "sha256": "f25242f9e8c28bbaed3bcc333cc8b0800d5e8c8f0a5c8b16b8c417b9c41ff2b6" },
+    { "id": "0013_ownership_transfer_acceptance", "file": "migrations/0013_ownership_transfer_acceptance.sql", "sha256": "c46ef167e8ee1a0c0036bddf645e039919e3facb27bb5f0636f4de1fa7cf5b7a" },
+    { "id": "0014_vault_key_possession_proof", "file": "migrations/0014_vault_key_possession_proof.sql", "sha256": "f263b8d8fceaa7a624b9de61aa8e429562e1168e55301488c31a94fc4db0a140" },
+    { "id": "0015_job_scoped_migration_worker", "file": "migrations/0015_job_scoped_migration_worker.sql", "sha256": "d233f570ea8e29e6c56292287305b927012cedf34124ed36a07d559d47580349" },
+    { "id": "0016_personal_vault_optional_recovery", "file": "migrations/0016_personal_vault_optional_recovery.sql", "sha256": "8811b280597d41071a0ccf52ca0073abcc2594c3d06ea436fc6afc17fa33396e" },
+    { "id": "0017_optional_enterprise_recovery", "file": "migrations/0017_optional_enterprise_recovery.sql", "sha256": "9cc72b2e4ff267b6398a2b2f8758f55b040b9ecc7c01b955bd4990fb72e3d7e6" },
+    { "id": "0018_extension_session_unlock_challenges", "file": "migrations/0018_extension_session_unlock_challenges.sql", "sha256": "616de4fa2f0da541590edcc6e6a9598d69ec0b1c075bfa42342473bda812b0bf" },
+    { "id": "0019_enterprise_recovery_coverage_serialization", "file": "migrations/0019_enterprise_recovery_coverage_serialization.sql", "sha256": "582ee400ec61157c63c5dafff5391bf74ce640bc243d40f64a071fe01970bbf2" },
+    { "id": "0020_vault_header_format_nondowngrade", "file": "migrations/0020_vault_header_format_nondowngrade.sql", "sha256": "f9ba0db727eae0f2b37cfb4094a3f60986e66f05695bf978e99423f47cda6b66" },
+    { "id": "0021_team_vault_projects", "file": "migrations/0021_team_vault_projects.sql", "sha256": "527611a705819d0ed23e0169fde6d3cd1463a26e0527ba173928d8f9917a415e" }
+  ]
+}

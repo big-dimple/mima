@@ -1,0 +1,152 @@
+name: mima
+
+services:
+  postgres:
+    image: ${MIMA_POSTGRES_IMAGE:-postgres:18-trixie}
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: mima
+      POSTGRES_USER: mima
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres-password
+      PGDATA: /var/lib/postgresql/data
+    volumes:
+      - ${MIMA_BASE_DIR:?run deploy/mima.sh init}/postgres:/var/lib/postgresql/data
+      - ${MIMA_BASE_DIR:?run deploy/mima.sh init}/secrets/postgres-password:/run/secrets/postgres-password:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -d mima -U mima"]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+    networks: [internal]
+
+  migration:
+    profiles: [migration]
+    image: ${MIMA_MIGRATION_IMAGE:-mima-migration-worker:local}
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      target: migration-worker
+    restart: "no"
+    read_only: true
+    tmpfs: ["/tmp:size=32m,mode=1777"]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      MIMA_MIGRATION_DATABASE_URL_FILE: /run/secrets/migration-database-url
+      MIMA_MIGRATION_DATABASE_ROLE: ${MIMA_MIGRATION_DATABASE_ROLE:-mima_migration}
+      MIMA_LEGACY_CONTENT_KEY_DIR: /run/mima/legacy-content-keys
+    volumes:
+      - ${MIMA_BASE_DIR:?run deploy/mima.sh init}/migration-secrets/database-url:/run/secrets/migration-database-url:ro
+      - ${MIMA_BASE_DIR:?run deploy/mima.sh init}/keys/legacy-content:/run/mima/legacy-content-keys:ro
+    networks: [internal]
+
+  migration-role:
+    profiles: [migration-role]
+    image: ${MIMA_MIGRATION_IMAGE:-mima-migration-worker:local}
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      target: migration-worker
+    entrypoint: ["node", "apps/api/dist-migration-worker/provision-migration-role.js"]
+    restart: "no"
+    read_only: true
+    tmpfs: ["/tmp:size=16m,mode=1777"]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      MIMA_DATABASE_URL_FILE: /run/secrets/database-url
+      MIMA_MIGRATION_DATABASE_PASSWORD_FILE: /run/secrets/migration-database-password
+      MIMA_MIGRATION_DATABASE_ROLE: ${MIMA_MIGRATION_DATABASE_ROLE:-mima_migration}
+    volumes:
+      - ${MIMA_BASE_DIR:?run deploy/mima.sh init}/secrets/database-url:/run/secrets/database-url:ro
+      - ${MIMA_BASE_DIR:?run deploy/mima.sh init}/migration-secrets/database-password:/run/secrets/migration-database-password:ro
+    networks: [internal]
+
+  api:
+    image: ${MIMA_API_IMAGE:-mima-api:local}
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      target: api
+    restart: unless-stopped
+    read_only: true
+    tmpfs: [/tmp:size=64m,mode=1777]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file: ${MIMA_RUNTIME_ENV:-./runtime.env}
+    environment:
+      NODE_ENV: production
+      MIMA_API_HOST: 0.0.0.0
+      MIMA_API_PORT: "4174"
+      MIMA_DATABASE_URL_FILE: /run/secrets/database-url
+      MIMA_RUNTIME_KEY_DIR: /run/mima/runtime-keys
+      MIMA_AUDIT_KEY_DIR: /run/mima/audit-keys
+      MIMA_E2EE_REQUIRED: "true"
+      MIMA_EXTENSION_IDS: ${MIMA_EXTENSION_IDS:?extension identity missing}
+      MIMA_OIDC_CLIENT_SECRET_FILE: /run/secrets/oidc-client-secret
+      MIMA_FEISHU_APP_SECRET_FILE: /run/secrets/feishu-app-secret
+      MIMA_LDAP_BIND_PASSWORD_FILE: /run/secrets/ldap-bind-password
+      MIMA_DIRECTORY_TOKEN_FILE: /run/secrets/directory-token
+    volumes:
+      - ${MIMA_BASE_DIR:?run deploy/mima.sh init}/keys/runtime:/run/mima/runtime-keys:ro
+      - ${MIMA_BASE_DIR:?run deploy/mima.sh init}/keys/audit:/run/mima/audit-keys
+      - ${MIMA_BASE_DIR:?run deploy/mima.sh init}/secrets:/run/secrets:ro
+      - ${MIMA_BASE_DIR:?run deploy/mima.sh init}/config:/run/config:ro
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4174/api/readyz').then(r=>{if(!r.ok)process.exit(1)})"]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+    networks: [internal, egress]
+
+  gateway:
+    image: ${MIMA_WEB_IMAGE:-mima-web:local}
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      target: gateway
+      args:
+        MIMA_EXTENSION_API_BASE: ${MIMA_PUBLIC_BASE_URL:?HTTPS public base URL required}
+        MIMA_EXTENSION_PUBLIC_KEY: ${MIMA_EXTENSION_PUBLIC_KEY:?extension public key missing}
+        MIMA_EXTENSION_ID: ${MIMA_EXTENSION_IDS:?extension ID missing}
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "${MIMA_BIND_ADDRESS:-127.0.0.1}:${MIMA_PORT:-10087}:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/api/readyz | grep -Fq '\"ok\":true'"]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+    networks: [internal, edge]
+
+  recovery-tool:
+    profiles: [tools]
+    image: ${MIMA_RECOVERY_IMAGE:-mima-recovery-tool:local}
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      target: recovery-tool
+    read_only: true
+    tmpfs: [/tmp:size=32m,mode=1777]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+
+networks:
+  internal:
+    internal: true
+  egress: {}
+  edge: {}

@@ -1,0 +1,8 @@
+{
+  "name": "@mima/ui-tokens",
+  "private": true,
+  "version": "0.2.0",
+  "exports": {
+    "./tokens.css": "./tokens.css"
+  }
+}

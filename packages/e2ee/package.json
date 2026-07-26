@@ -1,0 +1,28 @@
+{
+  "name": "@mima/e2ee",
+  "private": true,
+  "version": "0.2.0",
+  "type": "module",
+  "sideEffects": false,
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run --root ../.. --project unit packages/e2ee/test"
+  },
+  "dependencies": {
+    "libsodium-wrappers-sumo": "^0.8.4",
+    "shamir-secret-sharing": "0.0.4"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.0"
+  }
+}

@@ -1,0 +1,50 @@
+{
+  "manifest_version": 3,
+  "minimum_chrome_version": "114",
+  "name": "Mima",
+  "version": "0.2.0",
+  "description": "Mima 浏览器扩展：本地解锁、精确匹配网址并填充登录表单",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA9hdb9s7InliiKJLBya8AeYdmLAnkShwAXeCRabJ60uJEDf9Eqb+yfyy/NXORucE1YFb+HUJD2f9ipF1Nm3MyFC0sjRmFrTAzTiVVCeMkK/iVz3K/+x/scVAId0h2J1wtWcYeJNC/06/9HuO2drg/MfKrHxsdGG0yj7/TG5HSeQAkYwk/hH3ygQg8Tpl+fBbPNCNmhJBlvKI2XQoIy2gyKJNbwC/PVQR11nm/S0gCfHhDIl1M6hKuBXDQc6PM1K6tiOloODHKIYHtiGDmHegLenmf/8UnC4p8EmxlArSJNR2MiYmh3eThmWcCra7wWf6IP8gF9K/G/S7nvY9NS8NcgQIDAQAB",
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
+  "permissions": ["activeTab", "scripting", "sidePanel", "storage", "tabs"],
+  "host_permissions": ["http://127.0.0.1/*", "http://localhost/*"],
+  "optional_host_permissions": ["http://*/*", "https://*/*"],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
+  },
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "externally_connectable": {
+    "matches": [
+      "http://127.0.0.1:4173/*",
+      "http://localhost:4173/*",
+      "http://[::1]:14273/*"
+    ]
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  "action": {
+    "default_title": "打开 Mima 侧边栏",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "24": "icons/icon-24.png",
+      "32": "icons/icon-32.png"
+    }
+  },
+  "commands": {
+    "open-panel": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+Space"
+      },
+      "description": "打开密码侧边栏"
+    }
+  }
+}

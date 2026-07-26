@@ -1,0 +1,427 @@
+.nav {
+  background: var(--panel-2);
+  border-right: 1px solid var(--border);
+  padding: 12px 8px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  container-type: inline-size;
+}
+
+.navTools {
+  min-height: var(--control-standard);
+  display: flex;
+  justify-content: flex-end;
+  padding: 0 2px;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin-bottom: 10px;
+}
+
+.vaultBlock {
+  min-width: 0;
+}
+
+.projectTree {
+  margin: 2px 4px 8px 22px;
+  padding: 4px 0 4px 8px;
+  border-left: 1px solid var(--border-strong);
+}
+
+.projectTitle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: var(--control-standard);
+  padding: 0 2px 0 8px;
+  color: var(--faint);
+  font-size: 11px;
+}
+
+.projectTitle > button {
+  margin-left: auto;
+}
+
+.projectToggle,
+.folderTitleToggle {
+  min-width: 0;
+  min-height: var(--control-standard);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+.projectToggle {
+  flex: 1;
+  margin-left: 0 !important;
+}
+
+.projectToggle > svg,
+.folderTitleToggle > svg {
+  flex: 0 0 auto;
+  transition: transform 120ms ease;
+}
+
+.projectCount {
+  font-variant-numeric: tabular-nums;
+}
+
+.projectList,
+.projectVault {
+  min-width: 0;
+}
+
+.projectBadge {
+  color: var(--accent);
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  padding: 0 6px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.folderTree {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 2px 4px 8px 22px;
+  padding: 4px 0 4px 8px;
+  border-left: 1px solid var(--border-strong);
+}
+
+.folderList,
+.folderBranch,
+.folderChildren {
+  min-width: 0;
+}
+
+.folderTitle {
+  min-height: var(--control-standard);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 0 2px 0 8px;
+  color: var(--faint);
+  font-size: 11px;
+}
+
+.folderTitleToggle {
+  flex: 1;
+}
+
+.folderTools {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex: 0 0 auto;
+}
+
+.folderTools > button {
+  width: var(--control-standard);
+  height: var(--control-standard);
+}
+
+.folderRow {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+  min-height: var(--control-standard);
+  padding: 2px 4px;
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  text-align: left;
+  transition: background 120ms ease, color 120ms ease, outline-color 120ms ease;
+}
+
+.folderRow:hover {
+  background: var(--panel);
+  color: var(--text);
+}
+
+.folderSelected,
+.folderSelected:hover {
+  background: var(--accent-weak);
+  color: var(--accent);
+}
+
+.folderDisclosure,
+.folderDisclosureSpacer {
+  width: 22px;
+  min-width: 22px;
+  min-height: var(--control-standard);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--faint);
+}
+
+.folderDisclosure:hover,
+.folderDisclosure:focus-visible {
+  color: var(--accent);
+  outline: 0;
+}
+
+.folderMain {
+  flex: 1;
+  min-width: 0;
+  min-height: var(--control-standard);
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 2px 3px;
+  color: inherit;
+  text-align: left;
+}
+
+/* 拖拽开始后标出所有合法落点；悬停目标再强化。轮廓不改变布局尺寸。 */
+.folderDropReady {
+  outline: 1px dashed var(--accent);
+  outline-offset: -2px;
+  background: var(--panel);
+}
+
+.folderDropReady .folderLabel,
+.folderDropReady .folderMain > svg {
+  color: var(--accent);
+}
+
+.folderDropTarget {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  border-radius: var(--radius-sm);
+  background: var(--accent-weak);
+}
+
+.folderLabel {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.folderSelected .folderLabel {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.folderCount {
+  flex: 0 0 auto;
+  color: var(--faint);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.sectionTitle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: var(--control-standard);
+  font-size: 11px;
+  letter-spacing: 0;
+  color: var(--faint);
+  padding: 0 2px;
+  text-transform: uppercase;
+}
+
+.sectionToggle {
+  display: inline-flex;
+  flex: 1;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  min-height: var(--control-standard);
+  padding: 4px 6px;
+  border-radius: var(--radius-sm);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+.sectionToggle:hover,
+.sectionToggle:focus-visible {
+  background: var(--panel);
+  color: var(--text);
+}
+
+.sectionToggle > svg {
+  flex: 0 0 auto;
+  transition: transform 120ms ease;
+}
+
+.sectionChevronCollapsed {
+  transform: rotate(-90deg);
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  max-width: 100%;
+  border-radius: var(--radius-sm);
+  transition: background 120ms ease;
+}
+
+.item:hover {
+  background: var(--accent-weak);
+}
+
+.selected {
+  background: var(--accent-weak);
+}
+
+.selected .itemLabel {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.itemMain {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 4px;
+  min-width: 0;
+  color: var(--muted);
+  text-align: left;
+}
+
+.vaultDisclosure,
+.disclosureSpacer {
+  width: 24px;
+  min-width: 24px;
+  min-height: var(--control-standard);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--faint);
+}
+
+.vaultDisclosure:hover,
+.vaultDisclosure:focus-visible {
+  color: var(--accent);
+  outline: 0;
+}
+
+.vaultDisclosure > svg,
+.folderDisclosure > svg {
+  transition: transform 120ms ease;
+}
+
+.vaultChevronCollapsed {
+  transform: rotate(-90deg);
+}
+
+.itemLabel {
+  flex: 1;
+  min-width: 0;
+  color: var(--text);
+  white-space: normal;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.itemActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding-right: 4px;
+  flex: 0 0 auto;
+}
+
+.itemActions > button {
+  min-width: 32px;
+  min-height: var(--control-standard);
+}
+
+.itemStacked {
+  flex-wrap: wrap;
+  padding-bottom: 4px;
+}
+
+.itemStacked .itemMain {
+  flex-basis: calc(100% - 24px);
+}
+
+.itemStacked .itemActions {
+  width: 100%;
+  justify-content: flex-start;
+  padding: 0 4px 0 31px;
+}
+
+.roleBadge {
+  font-size: 11px;
+  color: var(--faint);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0 6px;
+  white-space: nowrap;
+}
+
+.empty {
+  color: var(--faint);
+  font-size: 12px;
+  padding: 4px 8px;
+}
+
+.createForm {
+  display: flex;
+  gap: 4px;
+  padding: 4px 6px;
+}
+
+.createInput {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 4px 8px;
+  font-size: 13px;
+}
+
+.createOk {
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 0 6px;
+}
+
+.adminNote {
+  margin-top: auto;
+  font-size: 11px;
+  color: var(--faint);
+  padding: 8px;
+  border-top: 1px solid var(--border);
+  line-height: 1.5;
+}
+
+@container (min-width: 360px) {
+  .itemStacked {
+    flex-wrap: nowrap;
+    padding-bottom: 0;
+  }
+
+  .itemStacked .itemMain {
+    flex-basis: 0;
+  }
+
+  .itemStacked .itemActions {
+    width: auto;
+    padding: 0 4px 0 0;
+  }
+}

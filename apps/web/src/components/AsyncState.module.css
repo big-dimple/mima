@@ -1,0 +1,80 @@
+.state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  color: var(--faint);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.compact {
+  min-height: 64px;
+  padding: 16px;
+  flex-wrap: wrap;
+}
+
+.page {
+  min-height: 100%;
+  padding: 32px;
+  flex-direction: column;
+  text-align: center;
+}
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--layer-lock);
+  min-height: 100%;
+  background: rgba(244, 245, 246, 0.94);
+}
+
+.spin {
+  flex: 0 0 auto;
+  animation: spin 900ms linear infinite;
+}
+
+.errorIcon {
+  color: var(--danger-strong);
+}
+
+.title {
+  color: var(--text);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.message {
+  max-width: 460px;
+  color: var(--muted);
+}
+
+.retry {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 44px;
+  padding: 0 16px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.retry:hover {
+  background: var(--accent-weak);
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spin {
+    animation: none;
+  }
+}

@@ -1,0 +1,216 @@
+.content {
+  width: min(94vw, 640px);
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 8px 0 14px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.list {
+  display: grid;
+  gap: 1px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--border);
+}
+
+.device {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 11px;
+  padding: 11px;
+  background: var(--panel);
+}
+
+.deviceBody {
+  min-width: 0;
+}
+
+.deviceTitle {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px;
+  font-weight: 600;
+}
+
+.deviceTitle span {
+  padding: 1px 5px;
+  border-radius: var(--radius-sm);
+  background: var(--accent-weak);
+  color: var(--accent);
+  font-size: 11px;
+}
+
+.deviceTitle .revoked {
+  background: var(--danger-weak);
+  color: var(--danger-strong);
+}
+
+.deviceMeta,
+.device code {
+  display: block;
+  margin-top: 4px;
+  overflow-wrap: anywhere;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.rotation {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.rotation strong {
+  display: block;
+  font-size: 13px;
+}
+
+.rotation p {
+  max-width: 410px;
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.rotationToggle,
+.rotationForm button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: var(--control-standard);
+  border: 1px solid var(--danger);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--danger-strong);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.passwordToggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: var(--control-standard);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--accent);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.passwordToggle:disabled,
+.rotationToggle:disabled,
+.rotationForm button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.passwordForm {
+  width: min(100%, 280px);
+}
+
+.passwordFields {
+  display: grid;
+  gap: 5px;
+}
+
+.passwordFields label {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.passwordFields input {
+  min-width: 0;
+  width: 100%;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+  color: var(--text);
+  padding: 7px 8px;
+}
+
+.passwordActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.passwordError {
+  margin-top: 8px;
+  color: var(--danger-strong);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.rotationForm {
+  width: min(100%, 260px);
+}
+
+.rotationForm label {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.rotationForm > div {
+  display: flex;
+  gap: 6px;
+}
+
+.rotationForm input {
+  min-width: 0;
+  flex: 1;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+  color: var(--text);
+  padding: 7px 8px;
+}
+
+@media (max-width: 520px) {
+  .device {
+    align-items: start;
+  }
+
+  .deviceMeta {
+    line-height: 1.5;
+  }
+
+  .rotation {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .rotationForm {
+    width: 100%;
+  }
+
+  .passwordForm {
+    width: 100%;
+  }
+
+  .passwordActions > button {
+    flex: 1;
+  }
+}

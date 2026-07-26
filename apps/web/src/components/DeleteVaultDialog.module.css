@@ -1,0 +1,66 @@
+.warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px;
+  margin-bottom: 16px;
+  border: 1px solid var(--danger);
+  border-radius: var(--radius-sm);
+  background: var(--danger-weak);
+  color: var(--danger-strong);
+}
+
+.warning > svg {
+  flex: 0 0 auto;
+}
+
+.warning div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.warning strong,
+.warning span {
+  overflow-wrap: anywhere;
+}
+
+.warning span {
+  color: var(--text);
+  font-size: var(--font-sm);
+  line-height: 1.5;
+}
+
+.form,
+.form label {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.form label {
+  color: var(--muted);
+  font-size: var(--font-sm);
+}
+
+.form input {
+  min-height: var(--control-standard);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 0 10px;
+  color: var(--text);
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+@media (max-width: 520px) {
+  .actions > button {
+    flex: 1;
+  }
+}

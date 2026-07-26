@@ -1,0 +1,43 @@
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--control-standard);
+  min-height: var(--control-standard);
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.btn:hover:not(:disabled) {
+  background: var(--accent-weak);
+  color: var(--accent);
+}
+
+.btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.danger:hover:not(:disabled) {
+  background: var(--danger-weak);
+  color: var(--danger-strong);
+}
+
+.active {
+  background: var(--accent-weak);
+  color: var(--accent);
+}
+
+.tooltip {
+  background: var(--text);
+  color: var(--accent-contrast);
+  font-size: var(--font-xs);
+  border-radius: var(--radius-sm);
+  padding: 4px 8px;
+  z-index: var(--layer-toast);
+}

@@ -1,0 +1,144 @@
+.steps {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.7;
+  padding-left: 18px;
+  margin: 0 0 14px;
+}
+
+.download {
+  min-height: var(--control-standard);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  width: 100%;
+  margin: 2px 0 12px;
+  padding: 8px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.download:hover {
+  background: var(--panel-2);
+}
+
+.codeBox {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 18px;
+  margin-bottom: 10px;
+}
+
+.codeDetails {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.code {
+  font-family: var(--font-mono);
+  font-size: 26px;
+  letter-spacing: 0;
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.timer {
+  color: var(--warn);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.expired {
+  color: var(--danger-strong);
+  font-size: 12px;
+}
+
+.error {
+  color: var(--danger-strong);
+  background: var(--danger-weak);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  font-size: 13px;
+  margin-bottom: 10px;
+}
+
+.spin {
+  animation: spin 900ms linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 440px) {
+  .code {
+    font-size: 22px;
+    letter-spacing: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spin {
+    animation: none;
+  }
+}
+
+.note {
+  color: var(--faint);
+  font-size: 12px;
+  margin: 12px 0 0;
+  line-height: 1.5;
+}
+
+.approvalBox,
+.approved {
+  display: grid;
+  gap: 9px;
+  margin: 14px 0;
+  padding: 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--panel-2);
+}
+
+.approvalLabel {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.fingerprint {
+  overflow-wrap: anywhere;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.approvalBox p,
+.approved {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.approved {
+  display: block;
+  color: var(--success-text);
+}
