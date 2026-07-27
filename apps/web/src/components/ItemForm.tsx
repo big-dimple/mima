@@ -1,32 +1,42 @@
 import { useMemo, useRef, useState } from 'react';
-import { AlertTriangle, Save } from 'lucide-react';
+import { AlertTriangle, ArrowDown, ArrowUp, Plus, Save, Trash2, WandSparkles } from 'lucide-react';
 import type { DecryptedItemMeta, DecryptedItemMetaPatch } from '@mima/client-core';
 import type { ItemKind } from '@mima/contracts';
 import {
-  getItemPresentation,
   folderContainsPath,
+  getItemPresentation,
   ITEM_DESCRIPTION_MAX_LENGTH,
   LOGIN_URL_MAX_LENGTH,
+  LOGIN_URLS_MAX_COUNT,
   materializeVaultDirectories,
   normalizeFolderPath,
-  normalizeLoginUrl,
+  normalizeLoginUrls,
   normalizeOrigin,
 } from '@mima/domain';
 import { useIntentionalTextField } from '../hooks/useIntentionalTextField.ts';
 import { useApp, useMeta } from '../state/app-context.ts';
 import { useUi, type NewItemPreset } from '../state/ui-store.ts';
 import { ActionButton } from './ActionButton.tsx';
+import { IconButton } from './IconButton.tsx';
+import { ItemKindMark } from './ItemKindMark.tsx';
 import { PasswordGenerator } from './PasswordGenerator.tsx';
 import { SegmentedControl } from './SegmentedControl.tsx';
 import styles from './ItemForm.module.css';
 
-const KIND_OPTIONS: { value: ItemKind; label: string }[] = [
-  { value: 'login', label: getItemPresentation('login').kindLabel },
-  { value: 'api_token', label: getItemPresentation('api_token').kindLabel },
-  { value: 'secure_note', label: getItemPresentation('secure_note').kindLabel },
-];
+const KIND_OPTIONS: { value: ItemKind; label: string; icon: React.ReactNode }[] = (
+  ['login', 'api_token', 'secure_note'] as const
+).map((value) => ({
+  value,
+  label: getItemPresentation(value).kindLabel,
+  icon: <ItemKindMark kind={value} compact />,
+}));
 
 const CONCURRENT_EDIT_MESSAGE = '这条记录刚刚有了新修改。系统已暂停保存，避免覆盖他人的内容。你的输入仍保留在本页；请先复制需要保留的部分，再取消编辑并查看最新内容';
+
+type OptionalField = 'description' | 'linkedLogin' | 'tags' | 'favorite' | 'sensitivity';
+type UrlEntry = { id: string; value: string };
+
+let urlEntrySequence = 0;
 
 export function ItemForm({
   mode,
@@ -55,10 +65,11 @@ export function ItemForm({
   const [baseVersion] = useState<number | undefined>(initialItem?.version);
   const title = useIntentionalTextField(initialItem?.title ?? '');
   const username = useIntentionalTextField(initialItem?.username ?? '');
-  const loginUrl = useIntentionalTextField(initialItem?.loginUrl ?? initialItem?.origin ?? '');
   const description = useIntentionalTextField(initialItem?.description ?? '');
   const tags = useIntentionalTextField(initialItem?.tags.join(', ') ?? '');
   const secret = useIntentionalTextField('');
+  const [urlEntries, setUrlEntries] = useState<UrlEntry[]>(() => initialUrlEntries(initialItem));
+  const [urlsTouched, setUrlsTouched] = useState(false);
   const [folderPath, setFolderPath] = useState(
     initialItem?.folderPath ?? (
       mode === 'new' && targetVaultId === ui.selectedVaultId ? ui.selectedFolderPath ?? '' : ''
@@ -74,6 +85,11 @@ export function ItemForm({
   const [favorite, setFavorite] = useState(initialItem?.favorite ?? false);
   const [favoriteTouched, setFavoriteTouched] = useState(false);
   const [replaceSecret, setReplaceSecret] = useState(false);
+  const [generatorOpen, setGeneratorOpen] = useState(false);
+  const [optionalPickerOpen, setOptionalPickerOpen] = useState(false);
+  const [visibleOptionalFields, setVisibleOptionalFields] = useState<Set<OptionalField>>(
+    () => new Set(preset?.linkedLoginItemId ? ['linkedLogin'] : []),
+  );
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const submittingRef = useRef(false);
@@ -83,9 +99,7 @@ export function ItemForm({
   const presentation = getItemPresentation(kind);
   const secretEditorVisible = mode === 'new' || replaceSecret;
   const liveItem = initialItem ? items[initialItem.id] : undefined;
-  const formStale = mode === 'edit' && Boolean(initialItem) && (
-    !liveItem || liveItem.version !== baseVersion
-  );
+  const formStale = mode === 'edit' && Boolean(initialItem) && (!liveItem || liveItem.version !== baseVersion);
   const currentConflict = initialItem ? conflicts[initialItem.id] : undefined;
   const formConflicted = mode === 'edit' && Boolean(currentConflict);
   const formBlocked = formStale || formConflicted;
@@ -105,9 +119,11 @@ export function ItemForm({
 
   const normalizedTitle = title.value.trim();
   const normalizedUsername = kind === 'secure_note' ? null : username.value.trim() || null;
-  const normalizedLoginUrl = kind === 'login' && loginUrl.value.trim()
-    ? normalizeLoginUrl(loginUrl.value.trim())
-    : null;
+  const rawLoginUrls = kind === 'login'
+    ? urlEntries.map((entry) => entry.value.trim()).filter(Boolean)
+    : [];
+  const normalizedLoginUrls = normalizeLoginUrls(rawLoginUrls);
+  const normalizedLoginUrl = normalizedLoginUrls?.[0] ?? null;
   const normalizedOrigin = normalizedLoginUrl ? normalizeOrigin(normalizedLoginUrl) : null;
   const normalizedFolderPath = normalizeFolderPath(folderPath);
   const normalizedDescription = kind === 'secure_note' ? null : description.value.trim() || null;
@@ -121,11 +137,13 @@ export function ItemForm({
     if (kind !== 'secure_note' && username.touched && normalizedUsername !== initialItem.username) {
       patch.username = normalizedUsername;
     }
-    if (kind === 'login' && loginUrl.touched) {
-      const baselineLoginUrl = initialItem.loginUrl ?? initialItem.origin;
-      const normalizedBaselineLoginUrl = baselineLoginUrl ? normalizeLoginUrl(baselineLoginUrl) : null;
-      if (normalizedOrigin !== initialItem.origin) patch.origin = normalizedOrigin;
-      if (normalizedLoginUrl !== normalizedBaselineLoginUrl) patch.loginUrl = normalizedLoginUrl;
+    if (kind === 'login' && urlsTouched && normalizedLoginUrls !== null) {
+      const baselineUrls = getInitialLoginUrls(initialItem);
+      if (!sameStrings(normalizedLoginUrls, baselineUrls)) {
+        patch.loginUrls = normalizedLoginUrls;
+        patch.loginUrl = normalizedLoginUrl;
+        patch.origin = normalizedOrigin;
+      }
     }
     if (folderTouched && normalizedFolderPath !== (initialItem.folderPath ?? null)) {
       patch.folderPath = normalizedFolderPath;
@@ -157,7 +175,7 @@ export function ItemForm({
   const newDraftTouched = kindTouched
     || title.touched
     || username.touched
-    || loginUrl.touched
+    || urlsTouched
     || folderTouched
     || description.touched
     || linkedLoginTouched
@@ -165,16 +183,14 @@ export function ItemForm({
     || sensitivityTouched
     || favoriteTouched
     || secret.touched;
-  const hasChanges = mode === 'new'
-    ? newDraftTouched
-    : changesSecret || Object.keys(editPatch).length > 0;
+  const hasChanges = mode === 'new' ? newDraftTouched : changesSecret || Object.keys(editPatch).length > 0;
 
   const validate = (): string | null => {
     if (!normalizedTitle) return '标题不能为空';
     if ((mode === 'new' || folderTouched) && folderPath.trim() && normalizedFolderPath === null) {
       return '目录格式不正确，请使用 / 分层，最多 5 级且每级不超过 40 个字符';
     }
-    if ((mode === 'new' || loginUrl.touched) && kind === 'login' && loginUrl.value.trim() && !normalizedLoginUrl) {
+    if ((mode === 'new' || urlsTouched) && kind === 'login' && normalizedLoginUrls === null) {
       return '网址格式不正确，例如 https://portal.example.test';
     }
     if ((mode === 'new' || description.touched) && description.value.length > ITEM_DESCRIPTION_MAX_LENGTH) {
@@ -208,22 +224,58 @@ export function ItemForm({
     setKind(nextKind);
     setKindTouched(true);
     username.reset();
-    loginUrl.reset();
     description.reset();
     secret.reset();
+    setUrlEntries([createUrlEntry('')]);
+    setUrlsTouched(false);
     setLinkedLoginItemId('');
     setLinkedLoginTouched(false);
+    setVisibleOptionalFields(new Set());
+    setOptionalPickerOpen(false);
+    setGeneratorOpen(false);
   };
 
   const handleReplaceSecret = (enabled: boolean) => {
     setReplaceSecret(enabled);
+    setGeneratorOpen(false);
     if (!enabled) secret.reset();
   };
 
+  const updateUrlEntry = (id: string, value: string) => {
+    setUrlEntries((current) => current.map((entry) => entry.id === id ? { ...entry, value } : entry));
+    setUrlsTouched(true);
+  };
+
+  const addUrlEntry = () => {
+    if (urlEntries.length >= LOGIN_URLS_MAX_COUNT) return;
+    setUrlEntries((current) => [...current, createUrlEntry('')]);
+  };
+
+  const removeUrlEntry = (id: string) => {
+    setUrlEntries((current) => {
+      const next = current.filter((entry) => entry.id !== id);
+      return next.length > 0 ? next : [createUrlEntry('')];
+    });
+    setUrlsTouched(true);
+  };
+
+  const moveUrlEntry = (index: number, delta: -1 | 1) => {
+    const target = index + delta;
+    if (target < 0 || target >= urlEntries.length) return;
+    setUrlEntries((current) => {
+      const next = [...current];
+      [next[index], next[target]] = [next[target]!, next[index]!];
+      return next;
+    });
+    setUrlsTouched(true);
+  };
+
+  const addOptionalField = (field: OptionalField) => {
+    setVisibleOptionalFields((current) => new Set([...current, field]));
+  };
+
   const assertNoConflict = () => {
-    if (initialItem && store.getState().conflicts[initialItem.id]) {
-      throw new Error(CONCURRENT_EDIT_MESSAGE);
-    }
+    if (initialItem && store.getState().conflicts[initialItem.id]) throw new Error(CONCURRENT_EDIT_MESSAGE);
   };
 
   const submit = async (event: React.FormEvent) => {
@@ -254,15 +306,14 @@ export function ItemForm({
           username: normalizedUsername,
           origin: normalizedOrigin,
           loginUrl: normalizedLoginUrl,
+          loginUrls: normalizedLoginUrls ?? [],
           folderPath: normalizedFolderPath,
           description: normalizedDescription,
           linkedLoginItemId: normalizedLinkedLoginItemId,
           tags: normalizedTags,
           favorite,
           sensitivity: highSensitivity ? 'high' : 'medium',
-          secretValue: kind === 'login' && (!secret.touched || secret.value.length === 0)
-            ? null
-            : secret.value,
+          secretValue: kind === 'login' && (!secret.touched || secret.value.length === 0) ? null : secret.value,
         });
         secret.reset();
         keepSavedItemVisible(id, normalizedFolderPath);
@@ -300,6 +351,8 @@ export function ItemForm({
     }
   };
 
+  const optionalFields = optionalFieldsFor(kind);
+
   return (
     <form className={styles.form} aria-busy={busy} autoComplete="off" onSubmit={submit}>
       <div className={styles.head}>
@@ -321,20 +374,13 @@ export function ItemForm({
       {mode === 'new' && (
         <div className={styles.field}>
           <label className={styles.label}>类型</label>
-          <SegmentedControl label="条目类型" value={kind} options={KIND_OPTIONS} onChange={handleKindChange} />
+          <SegmentedControl label="条目类型" value={kind} options={KIND_OPTIONS} onChange={handleKindChange} layout="equal" />
         </div>
       )}
 
       <div className={styles.field}>
         <label className={styles.label} htmlFor="f-title">标题 *</label>
-        <input
-          id="f-title"
-          name="item-title"
-          className={styles.input}
-          {...bindIntentionalField(title)}
-          autoComplete="off"
-          autoFocus
-        />
+        <input id="f-title" name="item-title" className={styles.input} {...bindIntentionalField(title)} autoComplete="off" autoFocus />
       </div>
 
       <div className={styles.field}>
@@ -350,7 +396,9 @@ export function ItemForm({
           }}
         >
           <option value="">未分类</option>
-          {folderOptions.map((path) => <option key={path} value={path}>{path}</option>)}
+          {folderOptions.map((path) => (
+            <option key={path} value={path} title={path}>{directoryOptionLabel(path)}</option>
+          ))}
         </select>
       </div>
 
@@ -368,22 +416,86 @@ export function ItemForm({
         </div>
       )}
 
-      {kind === 'login' && (
+      {mode === 'edit' && (
+        <label className={styles.secretToggle}>
+          <input type="checkbox" checked={replaceSecret} onChange={(event) => handleReplaceSecret(event.target.checked)} />
+          {secretToggleLabel(kind, initialItem?.secretState)}
+        </label>
+      )}
+
+      {secretEditorVisible && (
         <div className={styles.field}>
-          <label className={styles.label} htmlFor="f-origin">网址（可选）</label>
-          <input
-            id="f-origin"
-            name="item-url"
-            className={styles.input}
-            {...bindIntentionalField(loginUrl)}
-            autoComplete="off"
-            placeholder="https://portal.example.test"
-            maxLength={LOGIN_URL_MAX_LENGTH}
-          />
+          <label className={styles.label} htmlFor="f-secret">
+            {presentation.secretLabel}{mode === 'new' ? (kind === 'login' ? '（可选）' : ' *') : ''}
+          </label>
+          {isNote ? (
+            <textarea
+              id="f-secret"
+              name="item-sensitive-content"
+              className={styles.textarea}
+              {...bindIntentionalField(secret)}
+              rows={5}
+              readOnly={!secret.activated}
+              autoComplete="off"
+            />
+          ) : (
+            <div className={styles.secretInputWrap}>
+              <input
+                id="f-secret"
+                name="item-new-secret"
+                className={styles.input}
+                {...bindIntentionalField(secret)}
+                type="password"
+                readOnly={!secret.activated}
+                autoComplete="new-password"
+                spellCheck={false}
+              />
+              {kind === 'login' && (
+                <button
+                  type="button"
+                  className={[styles.generatorToggle, generatorOpen ? styles.generatorToggleActive : ''].join(' ')}
+                  aria-label="生成密码"
+                  aria-expanded={generatorOpen}
+                  title="生成密码"
+                  onClick={() => setGeneratorOpen((open) => !open)}
+                >
+                  <WandSparkles size={16} aria-hidden />
+                </button>
+              )}
+            </div>
+          )}
+          {kind === 'login' && generatorOpen && (
+            <PasswordGenerator onUse={(value) => {
+              secret.setFromUserAction(value);
+              setGeneratorOpen(false);
+            }} />
+          )}
         </div>
       )}
 
-      {kind === 'api_token' && (
+      {kind === 'login' && (
+        <div className={styles.urlSection} aria-label="网址">
+          {urlEntries.map((entry, index) => (
+            <UrlFieldRow
+              key={entry.id}
+              entry={entry}
+              index={index}
+              count={urlEntries.length}
+              onValueChange={updateUrlEntry}
+              onMove={moveUrlEntry}
+              onRemove={removeUrlEntry}
+            />
+          ))}
+          {urlEntries.length < LOGIN_URLS_MAX_COUNT && (
+            <button type="button" className={styles.addUrl} onClick={addUrlEntry}>
+              <Plus size={14} aria-hidden />
+              添加网址
+            </button>
+          )}
+        </div>
+      )}
+
+      {visibleOptionalFields.has('linkedLogin') && kind === 'api_token' && (
         <div className={styles.field}>
           <label className={styles.label} htmlFor="f-linked-login">关联账号密码（可选）</label>
           <select
@@ -398,15 +510,13 @@ export function ItemForm({
           >
             <option value="">不关联</option>
             {loginOptions.map((login) => (
-              <option key={login.id} value={login.id}>
-                {login.title}{login.username ? ` · ${login.username}` : ''}
-              </option>
+              <option key={login.id} value={login.id}>{login.title}{login.username ? ` · ${login.username}` : ''}</option>
             ))}
           </select>
         </div>
       )}
 
-      {kind !== 'secure_note' && (
+      {visibleOptionalFields.has('description') && kind !== 'secure_note' && (
         <div className={styles.field}>
           <label className={styles.label} htmlFor="f-description">说明（可选）</label>
           <textarea
@@ -424,94 +534,70 @@ export function ItemForm({
         </div>
       )}
 
-      {mode === 'edit' && (
-        <label className={styles.secretToggle}>
-          <input
-            type="checkbox"
-            checked={replaceSecret}
-            onChange={(event) => handleReplaceSecret(event.target.checked)}
-          />
-          {secretToggleLabel(kind, initialItem?.secretState)}
-        </label>
-      )}
-
-      {secretEditorVisible && (
+      {visibleOptionalFields.has('tags') && (
         <div className={styles.field}>
-          <label className={styles.label} htmlFor="f-secret">
-            {presentation.secretLabel}{mode === 'new' ? (kind === 'login' ? '（可选）' : ' *') : ''}
-          </label>
-          {isNote ? (
-            <textarea
-              id="f-secret"
-              name="item-sensitive-content"
-              className={styles.textarea}
-              {...bindIntentionalField(secret)}
-              rows={6}
-              readOnly={!secret.activated}
-              autoComplete="off"
-            />
-          ) : (
-            <input
-              id="f-secret"
-              name="item-new-secret"
-              className={styles.input}
-              {...bindIntentionalField(secret)}
-              type="password"
-              readOnly={!secret.activated}
-              autoComplete="new-password"
-              spellCheck={false}
-              style={{ fontFamily: 'var(--font-mono)' }}
-            />
-          )}
-          {kind === 'login' && <PasswordGenerator onUse={secret.setFromUserAction} />}
+          <label className={styles.label} htmlFor="f-tags">标签（逗号分隔）</label>
+          <input id="f-tags" name="item-tags" className={styles.input} {...bindIntentionalField(tags)} autoComplete="off" />
         </div>
       )}
 
-      <div className={styles.field}>
-        <label className={styles.label} htmlFor="f-tags">标签（逗号分隔）</label>
-        <input
-          id="f-tags"
-          name="item-tags"
-          className={styles.input}
-          {...bindIntentionalField(tags)}
-          autoComplete="off"
-        />
-      </div>
+      {(visibleOptionalFields.has('favorite') || visibleOptionalFields.has('sensitivity')) && (
+        <div className={styles.rowFields}>
+          {visibleOptionalFields.has('sensitivity') && (
+            <label className={styles.checkbox}>
+              <input
+                type="checkbox"
+                checked={highSensitivity}
+                onChange={(event) => {
+                  setHighSensitivity(event.target.checked);
+                  setSensitivityTouched(true);
+                }}
+              />
+              标记为高敏
+            </label>
+          )}
+          {visibleOptionalFields.has('favorite') && (
+            <label className={styles.checkbox}>
+              <input
+                type="checkbox"
+                checked={favorite}
+                onChange={(event) => {
+                  setFavorite(event.target.checked);
+                  setFavoriteTouched(true);
+                }}
+              />
+              收藏
+            </label>
+          )}
+        </div>
+      )}
 
-      <div className={styles.rowFields}>
-        <label className={styles.checkbox}>
-          <input
-            type="checkbox"
-            checked={highSensitivity}
-            onChange={(event) => {
-              setHighSensitivity(event.target.checked);
-              setSensitivityTouched(true);
-            }}
-          />
-          标记为高敏
-        </label>
-        <label className={styles.checkbox}>
-          <input
-            type="checkbox"
-            checked={favorite}
-            onChange={(event) => {
-              setFavorite(event.target.checked);
-              setFavoriteTouched(true);
-            }}
-          />
-          收藏
-        </label>
+      <div className={styles.optionalFields}>
+        <button
+          type="button"
+          className={styles.addField}
+          aria-expanded={optionalPickerOpen}
+          onClick={() => setOptionalPickerOpen((open) => !open)}
+        >
+          <Plus size={14} aria-hidden />
+          添加字段
+        </button>
+        {optionalPickerOpen && (
+          <div className={styles.optionalPicker} role="group" aria-label="可添加字段">
+            {optionalFields.filter((field) => !visibleOptionalFields.has(field)).map((field) => (
+              <button key={field} type="button" onClick={() => addOptionalField(field)}>
+                {optionalFieldLabel(field)}{optionalFieldHasValue(field, initialItem) ? '（已填写）' : ''}
+              </button>
+            ))}
+            {optionalFields.every((field) => visibleOptionalFields.has(field)) && <span>已显示全部字段</span>}
+          </div>
+        )}
       </div>
 
       {error && !formBlocked && <div className={styles.error} role="alert">{error}</div>}
 
       <div className={styles.footer}>
-        <ActionButton
-          label="取消"
-          variant="secondary"
-          onClick={onClose}
-          disabled={busy}
-        />
+        <ActionButton label="取消" variant="secondary" onClick={onClose} disabled={busy} />
         <ActionButton
           type="submit"
           label={busy ? '保存中…' : '保存'}
@@ -521,6 +607,54 @@ export function ItemForm({
         />
       </div>
     </form>
+  );
+}
+
+function UrlFieldRow({
+  entry,
+  index,
+  count,
+  onValueChange,
+  onMove,
+  onRemove,
+}: {
+  entry: UrlEntry;
+  index: number;
+  count: number;
+  onValueChange: (id: string, value: string) => void;
+  onMove: (index: number, delta: -1 | 1) => void;
+  onRemove: (id: string) => void;
+}) {
+  const field = useIntentionalTextField(entry.value, (value) => onValueChange(entry.id, value));
+  const label = index === 0 ? '网址（主网址，可选）' : `备用网址 ${index + 1}`;
+  return (
+    <div className={styles.urlField}>
+      <label className={styles.label} htmlFor={`f-url-${entry.id}`}>{label}</label>
+      <div className={styles.urlInputRow}>
+        <input
+          id={`f-url-${entry.id}`}
+          name={`item-url-${index + 1}`}
+          className={styles.input}
+          {...bindIntentionalField(field)}
+          autoComplete="off"
+          placeholder="https://portal.example.test"
+          maxLength={LOGIN_URL_MAX_LENGTH}
+        />
+        {count > 1 && (
+          <>
+            <IconButton label="上移网址" onClick={() => onMove(index, -1)} disabled={index === 0}>
+              <ArrowUp size={14} />
+            </IconButton>
+            <IconButton label="下移网址" onClick={() => onMove(index, 1)} disabled={index === count - 1}>
+              <ArrowDown size={14} />
+            </IconButton>
+            <IconButton label="删除网址" onClick={() => onRemove(entry.id)} danger>
+              <Trash2 size={14} />
+            </IconButton>
+          </>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -541,12 +675,53 @@ function bindIntentionalField(field: IntentionalField) {
   };
 }
 
+function createUrlEntry(value: string): UrlEntry {
+  urlEntrySequence += 1;
+  return { id: `url-${urlEntrySequence}`, value };
+}
+
+function initialUrlEntries(item?: DecryptedItemMeta): UrlEntry[] {
+  const urls = item ? getInitialLoginUrls(item) : [];
+  return (urls.length > 0 ? urls : ['']).map(createUrlEntry);
+}
+
+function getInitialLoginUrls(item: DecryptedItemMeta): string[] {
+  const raw = item.loginUrls?.length
+    ? item.loginUrls
+    : [item.loginUrl ?? item.origin].filter((url): url is string => Boolean(url));
+  return normalizeLoginUrls(raw) ?? [];
+}
+
+function directoryOptionLabel(path: string): string {
+  const segments = path.split('/');
+  return `${'\u00a0'.repeat(Math.max(0, segments.length - 1) * 4)}${segments.at(-1)}`;
+}
+
+function optionalFieldsFor(kind: ItemKind): OptionalField[] {
+  if (kind === 'api_token') return ['linkedLogin', 'description', 'tags', 'favorite', 'sensitivity'];
+  if (kind === 'secure_note') return ['tags', 'favorite', 'sensitivity'];
+  return ['description', 'tags', 'favorite', 'sensitivity'];
+}
+
+function optionalFieldLabel(field: OptionalField): string {
+  if (field === 'description') return '说明';
+  if (field === 'linkedLogin') return '关联账号密码';
+  if (field === 'tags') return '标签';
+  if (field === 'favorite') return '收藏';
+  return '高敏标记';
+}
+
+function optionalFieldHasValue(field: OptionalField, item?: DecryptedItemMeta): boolean {
+  if (!item) return false;
+  if (field === 'description') return Boolean(item.description?.trim());
+  if (field === 'linkedLogin') return Boolean(item.linkedLoginItemId);
+  if (field === 'tags') return item.tags.length > 0;
+  if (field === 'favorite') return item.favorite;
+  return item.sensitivity === 'high';
+}
+
 function parseTags(value: string): string[] {
-  return value
-    .split(/[,，]/)
-    .map((tag) => tag.trim())
-    .filter(Boolean)
-    .slice(0, 20);
+  return value.split(/[,，]/).map((tag) => tag.trim()).filter(Boolean).slice(0, 20);
 }
 
 function sameStrings(left: readonly string[], right: readonly string[]): boolean {

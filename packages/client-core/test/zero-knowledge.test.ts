@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { ITEM_METADATA_FORMAT_VERSION } from '@mima/contracts';
 import type {
   CryptoDevice,
   EncryptedBootstrapResponse,
@@ -878,7 +879,7 @@ describe('zero-knowledge client key lifecycle', () => {
         ...itemPayload(item),
         title: 'Internal portal renamed',
       });
-      expect(metadataUpdate.metadataFormatVersion).toBe(4);
+      expect(metadataUpdate.metadataFormatVersion).toBe(ITEM_METADATA_FORMAT_VERSION);
       const updated = await keyring.decryptMetadataRecord({
         itemId: item.id,
         vaultId,
@@ -896,7 +897,7 @@ describe('zero-knowledge client key lifecycle', () => {
       expect(updated.description).toBe('Engineering owner account');
 
       const rotation = await keyring.encryptRotation(accountId, updated, 'rotated-password');
-      expect(rotation.metadataFormatVersion).toBe(4);
+      expect(rotation.metadataFormatVersion).toBe(ITEM_METADATA_FORMAT_VERSION);
       const rotated = await keyring.decryptMetadataRecord({
         itemId: item.id,
         vaultId,
@@ -1007,7 +1008,7 @@ describe('zero-knowledge client key lifecycle', () => {
       })).resolves.toBe('');
 
       const rotation = await keyring.encryptRotation(accountId, decrypted, 'personal-password');
-      expect(rotation.metadataFormatVersion).toBe(4);
+      expect(rotation.metadataFormatVersion).toBe(ITEM_METADATA_FORMAT_VERSION);
       const withPassword = await keyring.decryptMetadataRecord({
         ...metadata,
         version: 2,
@@ -1381,7 +1382,7 @@ describe('zero-knowledge client key lifecycle', () => {
         }],
         recoveryKey,
       });
-      expect(request.metadataFormatVersion).toBe(4);
+      expect(request.metadataFormatVersion).toBe(ITEM_METADATA_FORMAT_VERSION);
       expect(request.header.keyEpoch).toBe(2);
       expect(request.reencryptedMetadata).toHaveLength(1);
       expect(request.rewrappedSecrets).toHaveLength(1);
@@ -1791,6 +1792,7 @@ describe('encrypted persistent outbox', () => {
     'username',
     'origin',
     'loginUrl',
+    'loginUrls',
     'folderPath',
     'tags',
     'note',

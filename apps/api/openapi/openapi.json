@@ -12090,6 +12090,12 @@
                         "enum": [
                           4
                         ]
+                      },
+                      {
+                        "type": "number",
+                        "enum": [
+                          5
+                        ]
                       }
                     ]
                   },
@@ -12589,6 +12595,12 @@
                         "type": "number",
                         "enum": [
                           4
+                        ]
+                      },
+                      {
+                        "type": "number",
+                        "enum": [
+                          5
                         ]
                       }
                     ]
@@ -13812,6 +13824,12 @@
                         "type": "number",
                         "enum": [
                           4
+                        ]
+                      },
+                      {
+                        "type": "number",
+                        "enum": [
+                          5
                         ]
                       }
                     ]

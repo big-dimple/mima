@@ -526,6 +526,7 @@ export class ZeroKnowledgeClient {
         username: input.username,
         origin: input.origin,
         loginUrl: input.loginUrl,
+        loginUrls: input.loginUrls ?? [],
         folderPath: input.folderPath ?? null,
         description: input.kind === 'secure_note' ? null : (input.description ?? null),
         linkedLoginItemId: input.kind === 'api_token' ? (input.linkedLoginItemId ?? null) : null,

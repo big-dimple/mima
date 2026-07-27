@@ -117,7 +117,7 @@ async function createLoginItem(page: Page): Promise<void> {
   await page.getByRole('button', { name: '新建', exact: true }).click();
   await enterIntentionalText(page.getByLabel('标题 *'), item.title);
   await enterIntentionalText(page.getByLabel('账号'), item.username);
-  await enterIntentionalText(page.getByLabel('网址（可选）'), item.loginUrl);
+  await enterIntentionalText(page.getByLabel('网址（主网址，可选）'), item.loginUrl);
   await enterIntentionalText(page.getByLabel('密码（可选）'), item.password);
   await page.getByRole('button', { name: '保存', exact: true }).click();
   await page.getByRole('option', { name: new RegExp(item.title) })

@@ -17,6 +17,18 @@
   --danger-weak: #fdecec;
   --warn: #b45309;
   --warn-weak: #fdf3e3;
+  --item-all-text: #52616b;
+  --item-all-bg: #f2f5f6;
+  --item-all-border: #dce3e6;
+  --item-login-text: #08766d;
+  --item-login-bg: #e6f6f3;
+  --item-login-border: #bde8e0;
+  --item-api-text: #2867b2;
+  --item-api-bg: #edf5ff;
+  --item-api-border: #c9def7;
+  --item-note-text: #8a5d00;
+  --item-note-bg: #fff7dd;
+  --item-note-border: #eadcae;
   --warning: var(--warn);
   --warning-border: #d97706;
   --warning-text: #92400e;

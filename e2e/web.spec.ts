@@ -55,6 +55,7 @@ test.describe.serial('严格零知识工作台', () => {
     const directoryPath = `工作/云服务-${testInfo.retry}/示例云`;
     const renamedParentPath = `工作/云平台-${testInfo.retry}`;
     const renamedDirectoryPath = `${renamedParentPath}/示例云`;
+    const backupUrl = `https://backup-${testInfo.retry}.example.test/console`;
     await loginAndUnlock(page, 'bob');
     await ensureLoginItem(page, loginItem);
     await ensureDirectoryPath(page, directoryPath);
@@ -102,7 +103,7 @@ test.describe.serial('严格零知识工作台', () => {
     await search.fill('');
 
     await page.getByRole('button', { name: '编辑', exact: true }).click();
-    await expect(page.getByLabel('网址（可选）')).toHaveValue(loginItem.origin);
+    await expect(page.getByLabel('网址（主网址，可选）')).toHaveValue(loginItem.origin);
     const title = page.getByLabel('标题 *');
     await enterIntentionalText(title, '不应保存的标题', true);
     await page.getByRole('button', { name: '取消' }).click();
@@ -124,9 +125,16 @@ test.describe.serial('严格零知识工作台', () => {
     await expect(page.getByText(loginItem.password, { exact: true })).toBeVisible();
 
     await page.getByRole('button', { name: '编辑', exact: true }).click();
+    await page.getByRole('button', { name: '添加网址' }).click();
+    await enterIntentionalText(page.getByLabel('备用网址 2'), backupUrl);
     await page.getByRole('checkbox', { name: '同时更换密码' }).click();
     await enterIntentionalText(page.getByLabel('密码', { exact: true }), 'e2e-sub-account-secret-updated-009');
     await page.getByRole('button', { name: '保存', exact: true }).click();
+    await expect(page.getByText(backupUrl, { exact: true })).toBeVisible();
+    await expect(page.getByRole('link', { name: '打开备用网址 2' })).toHaveAttribute('href', backupUrl);
+    await search.fill(`backup-${testInfo.retry}.example.test`);
+    await expect(row).toBeVisible();
+    await search.fill('');
     await expect(page.getByRole('button', { name: `目录：${directoryPath}`, exact: true })).toBeVisible();
     await page.getByRole('button', { name: '目录：工作', exact: true }).click();
     await expect(row).toBeVisible();
@@ -161,6 +169,8 @@ test.describe.serial('严格零知识工作台', () => {
     await expect(page.getByLabel('关联账号密码（可选）')).toHaveValue(/.+/);
     await enterIntentionalText(page.getByLabel('标题 *'), credentialTitle);
     await enterIntentionalText(page.getByLabel('凭证标识'), 'AKID-e2e-sub-account');
+    await page.getByRole('button', { name: '添加字段' }).click();
+    await page.getByRole('button', { name: '说明' }).click();
     await enterIntentionalText(page.getByLabel('说明（可选）'), 'E2E 自动化发布凭证说明');
     await enterIntentionalText(page.getByLabel('密钥 / Token *'), 'e2e-api-secret-010');
     await page.getByRole('button', { name: '保存', exact: true }).click();

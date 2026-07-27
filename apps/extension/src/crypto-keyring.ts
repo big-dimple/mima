@@ -45,7 +45,7 @@ import {
   type SigningKeyPair,
   type VaultKeys,
 } from '@mima/e2ee';
-import { ITEM_DESCRIPTION_MAX_LENGTH, normalizeLoginUrl } from '@mima/domain';
+import { ITEM_DESCRIPTION_MAX_LENGTH, normalizeLoginUrls, normalizeOrigin } from '@mima/domain';
 import { DeviceRevokedError } from './crypto-errors.ts';
 import { assertServerDeviceMatches, verifyApprovedDevice } from './device-verification.ts';
 import type {
@@ -854,6 +854,7 @@ function parseItemMetadata(
   const username = value.username;
   const origin = value.origin;
   const loginUrl = value.loginUrl;
+  const loginUrls = value.loginUrls;
   const description = value.description;
   const linkedLoginItemId = value.linkedLoginItemId;
   const tags = value.tags;
@@ -866,6 +867,7 @@ function parseItemMetadata(
     !(username === null || typeof username === 'string') ||
     !(origin === null || typeof origin === 'string') ||
     !(loginUrl === undefined || loginUrl === null || typeof loginUrl === 'string') ||
+    !(loginUrls === undefined || (Array.isArray(loginUrls) && loginUrls.every((entry) => typeof entry === 'string'))) ||
     !(
       description === undefined ||
       description === null ||
@@ -885,22 +887,23 @@ function parseItemMetadata(
   ) {
     throw new Error('条目信息校验失败，已拒绝显示');
   }
-  const normalizedLoginUrl = typeof loginUrl === 'string'
-    ? normalizeLoginUrl(loginUrl)
-    : typeof origin === 'string'
-      ? normalizeLoginUrl(origin)
-      : null;
-  if (typeof loginUrl === 'string' && normalizedLoginUrl === null) {
+  const legacyLoginUrl = typeof loginUrl === 'string' ? loginUrl : typeof origin === 'string' ? origin : null;
+  const normalizedLoginUrls = loginUrls === undefined
+    ? normalizeLoginUrls(legacyLoginUrl ? [legacyLoginUrl] : [])
+    : normalizeLoginUrls(loginUrls as string[]);
+  if (normalizedLoginUrls === null || (kind !== 'login' && normalizedLoginUrls.length > 0)) {
     throw new Error('条目网址校验失败，已拒绝打开');
   }
+  const normalizedLoginUrl = normalizedLoginUrls[0] ?? null;
   return {
     id: encrypted.itemId,
     vaultId: encrypted.vaultId,
     kind: kind as DecryptedExtensionItem['kind'],
     title,
     username,
-    origin,
+    origin: normalizedLoginUrl ? normalizeOrigin(normalizedLoginUrl) : null,
     loginUrl: normalizedLoginUrl,
+    loginUrls: normalizedLoginUrls,
     description: kind === 'secure_note' ? null : (description ?? null),
     linkedLoginItemId: kind === 'api_token' ? (linkedLoginItemId ?? null) : null,
     tags,

@@ -26,6 +26,42 @@ describe('encrypted item metadata secret state', () => {
   });
 });
 
+describe('encrypted item metadata login URLs', () => {
+  it('upgrades the legacy primary URL into an ordered URL list', () => {
+    expect(parseItemMetadataPayload({
+      ...metadata,
+      loginUrl: 'https://example.test/login',
+    })).toMatchObject({
+      origin: 'https://example.test',
+      loginUrl: 'https://example.test/login',
+      loginUrls: ['https://example.test/login'],
+    });
+  });
+
+  it('normalizes and deduplicates the ordered URL list', () => {
+    expect(parseItemMetadataPayload({
+      ...metadata,
+      loginUrls: [
+        'https://example.test/first',
+        'https://second.example.test',
+        'https://example.test/first',
+      ],
+    }).loginUrls).toEqual([
+      'https://example.test/first',
+      'https://second.example.test/',
+    ]);
+  });
+
+  it('rejects invalid and over-limit URL lists', () => {
+    expect(() => parseItemMetadataPayload({ ...metadata, loginUrls: ['javascript:alert(1)'] }))
+      .toThrow('网址格式不正确');
+    expect(() => parseItemMetadataPayload({
+      ...metadata,
+      loginUrls: Array.from({ length: 11 }, (_, index) => `https://${index}.example.test`),
+    })).toThrow('网址格式不正确');
+  });
+});
+
 describe('encrypted vault header payload', () => {
   it('keeps legacy headers compatible by treating a missing group as ungrouped', () => {
     expect(parseVaultHeaderPayload({ name: '运维库', directories: [] })).toEqual({

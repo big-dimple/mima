@@ -3,6 +3,7 @@
  * 不做子域名、相似域名或 http→https 放宽。
  */
 export const LOGIN_URL_MAX_LENGTH = 2048;
+export const LOGIN_URLS_MAX_COUNT = 10;
 
 export function normalizeLoginUrl(input: string): string | null {
   if (input.length === 0 || input.length > LOGIN_URL_MAX_LENGTH) return null;
@@ -14,6 +15,20 @@ export function normalizeLoginUrl(input: string): string | null {
   } catch {
     return null;
   }
+}
+
+export function normalizeLoginUrls(inputs: readonly string[]): string[] | null {
+  if (inputs.length > LOGIN_URLS_MAX_COUNT) return null;
+  const normalized: string[] = [];
+  const seen = new Set<string>();
+  for (const input of inputs) {
+    const url = normalizeLoginUrl(input.trim());
+    if (url === null) return null;
+    if (seen.has(url)) continue;
+    seen.add(url);
+    normalized.push(url);
+  }
+  return normalized;
 }
 
 export function normalizeOrigin(input: string): string | null {

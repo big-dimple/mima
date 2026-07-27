@@ -7,6 +7,7 @@ import {
   canManageVault,
   normalizeOrigin,
   normalizeLoginUrl,
+  normalizeLoginUrls,
   originsMatchExactly,
   generatePassword,
   normalizeFolderPath,
@@ -100,6 +101,18 @@ describe('origin 精确匹配', () => {
       'https://a.example.test/login?tenant=one#account',
     );
     expect(normalizeLoginUrl('https://a.example.test')).toBe('https://a.example.test/');
+  });
+  it('规范化、去重并保留多网址顺序', () => {
+    expect(normalizeLoginUrls([
+      ' https://a.example.test/login ',
+      'https://b.example.test',
+      'https://a.example.test/login',
+    ])).toEqual([
+      'https://a.example.test/login',
+      'https://b.example.test/',
+    ]);
+    expect(normalizeLoginUrls(Array.from({ length: 11 }, (_, index) => `https://${index}.example.test`))).toBeNull();
+    expect(normalizeLoginUrls(['ftp://a.example.test'])).toBeNull();
   });
   it('规范化默认端口', () => {
     expect(normalizeOrigin('https://a.example.test:443/path')).toBe('https://a.example.test');

@@ -1062,7 +1062,9 @@ function extensionUpgradeRequired(reply: FastifyReply) {
 }
 
 function supportsCurrentItemMetadata(value: string | string[] | undefined): boolean {
-  return value === String(ITEM_METADATA_FORMAT_VERSION);
+  if (Array.isArray(value)) return false;
+  const version = Number(value);
+  return Number.isInteger(version) && version >= 4 && version <= ITEM_METADATA_FORMAT_VERSION;
 }
 
 function locked(reply: FastifyReply) {

@@ -1134,7 +1134,7 @@ export const CreateEncryptedItemRequestSchema = z.object({
 });
 export type CreateEncryptedItemRequest = z.infer<typeof CreateEncryptedItemRequestSchema>;
 
-const ItemMetadataFormatVersionSchema = z.union([z.literal(2), z.literal(3), z.literal(4)]);
+const ItemMetadataFormatVersionSchema = z.union([z.literal(2), z.literal(3), z.literal(4), z.literal(5)]);
 
 export const UpdateEncryptedItemRequestSchema = z.object({
   idempotencyKey: z.string().min(8).max(80),
@@ -1586,7 +1586,7 @@ export const CLIPBOARD_CLEAR_MS = 30_000;
 export const PAIRING_CODE_TTL_MS = 120_000;
 export const EXTENSION_SESSION_TTL_MS = 100 * 365 * 24 * 60 * 60 * 1000;
 export const CSRF_HEADER = 'x-mima-csrf';
-export const ITEM_METADATA_FORMAT_VERSION = 4 as const;
+export const ITEM_METADATA_FORMAT_VERSION = 5 as const;
 export const ITEM_METADATA_FORMAT_HEADER = 'x-mima-item-metadata-format';
 export const WEB_ORIGIN = 'http://localhost:4173';
 export const API_PORT = 4174;

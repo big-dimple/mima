@@ -90,7 +90,7 @@
 .row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   width: 100%;
   min-height: 58px;
   padding: 8px 12px;
@@ -117,6 +117,7 @@
   justify-content: center;
   color: var(--faint);
   opacity: 0.35;
+  margin-right: 6px;
 }
 
 .rowDraggable {
@@ -136,7 +137,7 @@
 }
 
 .rowIcon {
-  color: var(--muted);
+  display: inline-flex;
   flex-shrink: 0;
 }
 

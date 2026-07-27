@@ -13,6 +13,10 @@ const item: DecryptedExtensionItem = {
   username: 'bob',
   origin: 'https://internal.example.test',
   loginUrl: 'https://internal.example.test/login/subAccount/example-b?type=subAccount',
+  loginUrls: [
+    'https://internal.example.test/login/subAccount/example-b?type=subAccount',
+    'https://secondary.example.test/login',
+  ],
   tags: [],
   favorite: false,
   sensitivity: 'medium',

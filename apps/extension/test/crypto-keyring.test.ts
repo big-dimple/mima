@@ -138,6 +138,10 @@ describe('ExtensionKeyring local device protection', () => {
             username: 'bob',
             origin: 'https://internal.example.test',
             loginUrl: 'https://internal.example.test/login?tenant=team',
+            loginUrls: [
+              'https://internal.example.test/login?tenant=team',
+              'https://secondary.example.test/login',
+            ],
             description: 'Only visible after local decryption',
             tags: ['team'],
             favorite: true,
@@ -233,6 +237,10 @@ describe('ExtensionKeyring local device protection', () => {
         username: 'bob',
         origin: 'https://internal.example.test',
         loginUrl: 'https://internal.example.test/login?tenant=team',
+        loginUrls: [
+          'https://internal.example.test/login?tenant=team',
+          'https://secondary.example.test/login',
+        ],
         description: 'Only visible after local decryption',
       });
       const response: EncryptedContentResponse = {

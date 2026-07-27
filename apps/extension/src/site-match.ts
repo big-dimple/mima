@@ -1,4 +1,4 @@
-import { normalizeLoginUrl, originsMatchExactly } from '@mima/domain';
+import { normalizeLoginUrl, normalizeLoginUrls, originsMatchExactly } from '@mima/domain';
 import type { DecryptedExtensionItem } from './protocol.ts';
 
 export interface ActiveSiteAddress {
@@ -10,13 +10,18 @@ export function extensionItemMatchScore(
   item: DecryptedExtensionItem,
   site: ActiveSiteAddress,
 ): 0 | 1 | 2 {
-  const itemAddress = item.origin ?? item.loginUrl ?? null;
   const activeAddress = site.url ?? site.origin;
-  if (!originsMatchExactly(itemAddress, activeAddress)) return 0;
-
-  const itemLoginUrl = item.loginUrl ? normalizeLoginUrl(item.loginUrl) : null;
+  const itemLoginUrls = extensionItemLoginUrls(item);
   const activeLoginUrl = site.url ? normalizeLoginUrl(site.url) : null;
-  return itemLoginUrl && activeLoginUrl && itemLoginUrl === activeLoginUrl ? 2 : 1;
+  if (activeLoginUrl && itemLoginUrls.includes(activeLoginUrl)) return 2;
+  return itemLoginUrls.some((url) => originsMatchExactly(url, activeAddress)) ? 1 : 0;
+}
+
+export function extensionItemLoginUrls(item: DecryptedExtensionItem): string[] {
+  const raw = item.loginUrls?.length
+    ? item.loginUrls
+    : [item.loginUrl ?? item.origin].filter((url): url is string => Boolean(url));
+  return normalizeLoginUrls(raw) ?? [];
 }
 
 export function extensionItemMatchesSite(

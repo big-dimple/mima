@@ -1,0 +1,67 @@
+.mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  flex: 0 0 26px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+}
+
+.compact {
+  width: 22px;
+  height: 22px;
+  flex-basis: 22px;
+}
+
+.all {
+  color: var(--item-all-text);
+  background: var(--item-all-bg);
+  border-color: var(--item-all-border);
+}
+
+.login {
+  color: var(--item-login-text);
+  background: var(--item-login-bg);
+  border-color: var(--item-login-border);
+}
+
+.api_token {
+  color: var(--item-api-text);
+  background: var(--item-api-bg);
+  border-color: var(--item-api-border);
+}
+
+.secure_note {
+  color: var(--item-note-text);
+  background: var(--item-note-bg);
+  border-color: var(--item-note-border);
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 26px;
+  padding: 1px 8px 1px 2px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.loginBadge {
+  color: var(--item-login-text);
+  border-color: var(--item-login-border);
+}
+
+.api_tokenBadge {
+  color: var(--item-api-text);
+  border-color: var(--item-api-border);
+}
+
+.secure_noteBadge {
+  color: var(--item-note-text);
+  border-color: var(--item-note-border);
+}

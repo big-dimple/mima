@@ -124,6 +124,30 @@ describe('PanelView', () => {
     expect(root.querySelector('.originBar code')?.textContent).toBe(model.state.tabUrl);
   });
 
+  it('searches secondary login URLs without changing the displayed primary URL', () => {
+    const root = document.createElement('div');
+    const model = new PanelModel();
+    model.state.session = extSession();
+    model.setReady([extensionItem({
+      id: 'multi-url',
+      title: '多入口平台',
+      origin: 'https://primary.example.test',
+      loginUrl: 'https://primary.example.test/login',
+      loginUrls: [
+        'https://primary.example.test/login',
+        'https://secondary.example.test/console',
+      ],
+    })]);
+
+    new PanelView(root, model, actions(), vi.fn()).render();
+    const search = root.querySelector<HTMLInputElement>('[aria-label="搜索已解锁条目"]')!;
+    search.value = 'secondary.example.test';
+    search.dispatchEvent(new Event('input'));
+
+    expect(root.querySelector('.results')?.textContent).toContain('多入口平台');
+    expect(root.querySelector('.itemSub')?.textContent).toContain('primary.example.test/login');
+  });
+
   it('keeps URL-only entries searchable but never suggests or copies a password', async () => {
     const root = document.createElement('div');
     const model = new PanelModel();

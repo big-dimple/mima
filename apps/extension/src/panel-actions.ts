@@ -4,7 +4,6 @@ import type {
   AccountBundle,
   ExtensionTrustedUnlockRequest,
 } from '@mima/e2ee';
-import { normalizeLoginUrl } from '@mima/domain';
 import type { ActiveTabContext } from './active-tab.ts';
 import { DeviceRevokedError } from './crypto-errors.ts';
 import type { ExtensionKeyringPort } from './crypto-worker-protocol.ts';
@@ -20,7 +19,7 @@ import type {
   PairingApproval,
   WorkbenchTrustedUnlockResult,
 } from './protocol.ts';
-import { extensionItemMatchesSite } from './site-match.ts';
+import { extensionItemLoginUrls, extensionItemMatchesSite } from './site-match.ts';
 
 export interface PanelBrowserAdapter {
   ensureApiAccess(): Promise<boolean>;
@@ -445,7 +444,7 @@ export class PanelActions {
   }
 
   async open(item: DecryptedExtensionItem): Promise<string> {
-    const url = item.kind === 'login' ? normalizeLoginUrl(item.loginUrl ?? item.origin ?? '') : null;
+    const url = item.kind === 'login' ? extensionItemLoginUrls(item)[0] ?? null : null;
     if (!url) throw new Error('该条目没有可打开的网址');
     await this.browser.openUrl(url);
     return '已打开网址';

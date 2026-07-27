@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createMetaStore, type DecryptedItemMeta } from '@mima/client-core';
+import * as Tooltip from '@radix-ui/react-tooltip';
 import { ItemForm } from '../src/components/ItemForm.tsx';
 import { AppContext, type AppServices } from '../src/state/app-context.ts';
 import { useUi } from '../src/state/ui-store.ts';
@@ -34,10 +35,10 @@ describe('ItemForm', () => {
 
     await userEvent.type(screen.getByLabelText('标题 *'), '示例云子账号');
     await userEvent.type(screen.getByLabelText('账号'), 'sub-account-user');
-    await userEvent.type(screen.getByLabelText('网址（可选）'), loginUrl);
+    await userEvent.type(screen.getByLabelText('网址（主网址，可选）'), loginUrl);
     await userEvent.selectOptions(screen.getByLabelText('目录（可选）'), '工作/云服务/示例云');
     await userEvent.type(screen.getByLabelText(/^密码/), 'new-password-value');
-    expect(screen.getByRole('checkbox', { name: '标记为高敏' })).not.toBeChecked();
+    expect(screen.queryByRole('checkbox', { name: '标记为高敏' })).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: '保存', exact: true }));
 
     await waitFor(() => expect(createItem).toHaveBeenCalledWith(vaultId, expect.objectContaining({
@@ -45,6 +46,7 @@ describe('ItemForm', () => {
       username: 'sub-account-user',
       origin: 'https://accounts.example.test',
       loginUrl,
+      loginUrls: [loginUrl],
       folderPath: '工作/云服务/示例云',
       sensitivity: 'medium',
       secretValue: 'new-password-value',
@@ -58,6 +60,9 @@ describe('ItemForm', () => {
 
     expect(screen.getByRole('button', { name: '账号密码' })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByLabelText('账号')).toHaveAttribute('placeholder', '用户名 / 登录账号（可选）');
+    expect(screen.queryByLabelText('说明（可选）')).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: '添加字段' }));
+    await userEvent.click(screen.getByRole('button', { name: '说明' }));
     expect(screen.getByLabelText('说明（可选）')).toHaveAttribute(
       'placeholder',
       '主机/IP、端口、实例/库名、环境、用途、归属等；不要填写密码或密钥',
@@ -74,6 +79,7 @@ describe('ItemForm', () => {
       username: 'default',
       origin: null,
       loginUrl: null,
+      loginUrls: [],
       description: '10.0.0.8:6379 · 生产缓存',
       secretValue: 'redis-password-value',
     })));
@@ -84,7 +90,7 @@ describe('ItemForm', () => {
     renderForm({ actions: { createItem } }, <ItemForm mode="new" onClose={vi.fn()} />);
 
     await userEvent.type(screen.getByLabelText('标题 *'), '示例云统一入口');
-    await userEvent.type(screen.getByLabelText('网址（可选）'), loginUrl);
+    await userEvent.type(screen.getByLabelText('网址（主网址，可选）'), loginUrl);
     const password = screen.getByLabelText('密码（可选）');
     fireEvent.input(password, {
       target: { value: 'browser-injected-main-password' },
@@ -97,6 +103,7 @@ describe('ItemForm', () => {
       kind: 'login',
       origin: 'https://accounts.example.test',
       loginUrl,
+      loginUrls: [loginUrl],
       secretValue: null,
     })));
   });
@@ -121,8 +128,56 @@ describe('ItemForm', () => {
     );
 
     expect(screen.getByLabelText('目录（可选）')).toHaveValue('工作/云服务');
-    expect(screen.getByRole('option', { name: '工作/云服务/示例云' })).toBeVisible();
+    expect(screen.getByRole('option', { name: '示例云' })).toHaveAttribute('title', '工作/云服务/示例云');
     expect(screen.queryByRole('option', { name: '工作//云服务' })).not.toBeInTheDocument();
+  });
+
+  it('keeps the primary workflow compact and opens the password generator only on request', async () => {
+    renderForm({ actions: { createItem: vi.fn() } }, <ItemForm mode="new" onClose={vi.fn()} />);
+
+    const title = screen.getByLabelText('标题 *');
+    const directory = screen.getByLabelText('目录（可选）');
+    const account = screen.getByLabelText('账号');
+    const password = screen.getByLabelText('密码（可选）');
+    const url = screen.getByLabelText('网址（主网址，可选）');
+
+    expect(title.compareDocumentPosition(directory) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(directory.compareDocumentPosition(account) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(account.compareDocumentPosition(password) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(password.compareDocumentPosition(url) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.queryByText(/pg-preview/)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('说明（可选）')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('标签（逗号分隔）')).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: '生成密码' }));
+    expect(document.querySelector('#pg-preview')).toBeInTheDocument();
+  });
+
+  it('stores ordered login URLs, promotes a reordered URL, and rejects injected URL text', async () => {
+    const createItem = vi.fn().mockResolvedValue('multi-url-item');
+    renderForm({ actions: { createItem } }, <ItemForm mode="new" onClose={vi.fn()} />);
+
+    await userEvent.type(screen.getByLabelText('标题 *'), '多入口云平台');
+    await userEvent.type(screen.getByLabelText('网址（主网址，可选）'), 'https://primary.example.test/login');
+    await userEvent.click(screen.getByRole('button', { name: '添加网址' }));
+    const backup = screen.getByLabelText('备用网址 2');
+    fireEvent.input(backup, {
+      target: { value: 'https://browser-injected.example.test' },
+      inputType: 'insertReplacementText',
+    });
+    expect(backup).toHaveValue('');
+    await userEvent.type(backup, 'https://backup.example.test/sign-in');
+    await userEvent.click(screen.getAllByRole('button', { name: '上移网址' }).at(-1)!);
+    await userEvent.click(screen.getByRole('button', { name: '保存', exact: true }));
+
+    await waitFor(() => expect(createItem).toHaveBeenCalledWith(vaultId, expect.objectContaining({
+      origin: 'https://backup.example.test',
+      loginUrl: 'https://backup.example.test/sign-in',
+      loginUrls: [
+        'https://backup.example.test/sign-in',
+        'https://primary.example.test/login',
+      ],
+    })));
   });
 
   it('keeps legacy low sensitivity and an unchanged full URL out of unrelated patches', async () => {
@@ -149,6 +204,8 @@ describe('ItemForm', () => {
       <ItemForm mode="edit" item={item} onClose={onClose} />
     ), [item]);
 
+    await userEvent.click(screen.getByRole('button', { name: '添加字段' }));
+    await userEvent.click(screen.getByRole('button', { name: '高敏标记（已填写）' }));
     await userEvent.click(screen.getByRole('checkbox', { name: '标记为高敏' }));
     await userEvent.click(screen.getByRole('button', { name: '保存', exact: true }));
     expect(updateItemMeta).toHaveBeenCalledWith(item.id, { sensitivity: 'medium' }, item.version);
@@ -169,11 +226,11 @@ describe('ItemForm', () => {
       <ItemForm mode="edit" item={item} onClose={vi.fn()} />
     ), [item]);
 
-    await replaceText(screen.getByLabelText('网址（可选）'), '');
+    await replaceText(screen.getByLabelText('网址（主网址，可选）'), '');
     await userEvent.click(screen.getByRole('button', { name: '保存', exact: true }));
     expect(updateItemMeta).toHaveBeenCalledWith(
       item.id,
-      { origin: null, loginUrl: null },
+      { origin: null, loginUrl: null, loginUrls: [] },
       item.version,
     );
   });
@@ -202,6 +259,8 @@ describe('ItemForm', () => {
       [login],
     );
     expect(screen.getByLabelText('关联账号密码（可选）')).toHaveValue(login.id);
+    await userEvent.click(screen.getAllByRole('button', { name: '添加字段' }).at(-1)!);
+    await userEvent.click(screen.getAllByRole('button', { name: '说明' }).at(-1)!);
     await userEvent.type(screen.getAllByLabelText('标题 *').at(-1)!, '示例云子账号 API');
     await userEvent.type(screen.getAllByLabelText('凭证标识').at(-1)!, 'AKID-example');
     await userEvent.type(screen.getAllByLabelText('说明（可选）').at(-1)!, '用于发布流水线\n由平台组申请');
@@ -326,7 +385,7 @@ describe('ItemForm', () => {
     renderForm({ actions: { createItem: vi.fn() } }, <ItemForm mode="new" onClose={vi.fn()} />);
 
     await userEvent.type(screen.getByLabelText('账号'), 'draft-user');
-    await userEvent.type(screen.getByLabelText('网址（可选）'), 'https://draft.example.test');
+    await userEvent.type(screen.getByLabelText('网址（主网址，可选）'), 'https://draft.example.test');
     await userEvent.type(screen.getByLabelText('密码（可选）'), 'draft-password');
     await userEvent.click(screen.getByRole('button', { name: 'API 凭证' }));
 
@@ -409,7 +468,14 @@ function renderForm(
     },
   });
   const services = { store, actions: overrides.actions } as unknown as AppServices;
-  return { ...render(<AppContext.Provider value={services}>{element}</AppContext.Provider>), store };
+  return {
+    ...render(
+      <Tooltip.Provider>
+        <AppContext.Provider value={services}>{element}</AppContext.Provider>
+      </Tooltip.Provider>,
+    ),
+    store,
+  };
 }
 
 async function replaceText(element: HTMLElement, value: string) {

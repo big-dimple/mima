@@ -10,13 +10,15 @@ import type {
 
 type TextControl = HTMLInputElement | HTMLTextAreaElement;
 
-export function useIntentionalTextField(initialValue: string) {
+export function useIntentionalTextField(initialValue: string, onUserValue?: (value: string) => void) {
   const [value, setValueState] = useState(initialValue);
   const [touched, setTouched] = useState(false);
   const [activated, setActivated] = useState(false);
   const valueRef = useRef(initialValue);
   const acceptNextInputRef = useRef(false);
   const composingRef = useRef(false);
+  const onUserValueRef = useRef(onUserValue);
+  onUserValueRef.current = onUserValue;
 
   const armInput = useCallback((control: TextControl) => {
     acceptNextInputRef.current = true;
@@ -39,6 +41,7 @@ export function useIntentionalTextField(initialValue: string) {
     setValueState(nextValue);
     setTouched(true);
     setActivated(true);
+    onUserValueRef.current?.(nextValue);
   }, []);
 
   const replaceSelection = useCallback((control: TextControl, insertedValue: string) => {
@@ -93,6 +96,7 @@ export function useIntentionalTextField(initialValue: string) {
     valueRef.current = event.currentTarget.value;
     setValueState(event.currentTarget.value);
     setTouched(true);
+    onUserValueRef.current?.(event.currentTarget.value);
   }, []);
 
   const setFromUserAction = useCallback((nextValue: string) => {

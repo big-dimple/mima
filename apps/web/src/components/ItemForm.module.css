@@ -1,9 +1,9 @@
 .form {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 10px;
   width: 100%;
-  max-width: 560px;
+  max-width: 620px;
 }
 
 .head {
@@ -34,6 +34,10 @@
   padding: 7px 10px;
   font-size: 13px;
   background: var(--panel);
+}
+
+.input {
+  min-height: var(--control-standard);
 }
 
 .textarea {
@@ -83,7 +87,7 @@
   align-items: center;
   align-self: flex-start;
   gap: 7px;
-  min-height: 44px;
+  min-height: 34px;
   color: var(--text);
   font-size: 13px;
   font-weight: 600;
@@ -95,13 +99,119 @@
   gap: 18px;
 }
 
+.secretInputWrap {
+  position: relative;
+}
+
+.secretInputWrap .input {
+  width: 100%;
+  padding-right: 44px;
+  font-family: var(--font-mono);
+}
+
+.generatorToggle {
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  color: var(--muted);
+  border-radius: var(--radius-sm);
+  transform: translateY(-50%);
+}
+
+.generatorToggle:hover,
+.generatorToggleActive {
+  color: var(--accent);
+  background: var(--accent-weak);
+}
+
+.urlSection {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.urlField {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.urlInputRow {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.urlInputRow .input {
+  flex: 1;
+  min-width: 0;
+}
+
+.urlInputRow > button {
+  flex: 0 0 auto;
+}
+
+.addUrl,
+.addField {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  gap: 5px;
+  min-height: var(--control-compact);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.addUrl:hover,
+.addField:hover {
+  text-decoration: underline;
+}
+
+.optionalFields {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.optionalPicker {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  color: var(--faint);
+  font-size: 12px;
+}
+
+.optionalPicker button {
+  min-height: var(--control-compact);
+  padding: 0 10px;
+  color: var(--muted);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+  font-size: 12px;
+}
+
+.optionalPicker button:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-weak);
+}
+
 .checkbox {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   font-size: 13px;
   color: var(--muted);
-  min-height: 44px;
+  min-height: 34px;
 }
 
 .error {
@@ -116,6 +226,7 @@
   display: flex;
   justify-content: flex-end;
   gap: 8px;
+  padding-top: 2px;
 }
 
 @media (max-width: 520px) {
@@ -123,6 +234,10 @@
     align-items: flex-start;
     flex-direction: column;
     gap: 0;
+  }
+
+  .urlInputRow {
+    align-items: stretch;
   }
 
   .footer > button {

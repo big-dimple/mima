@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef } from 'react';
-import { CircleUserRound, KeySquare, StickyNote, Plus, Search, Star, AlertTriangle, Clock, GripVertical } from 'lucide-react';
+import { Plus, Search, Star, AlertTriangle, Clock, GripVertical } from 'lucide-react';
 import type { DecryptedItemMeta } from '@mima/client-core';
 import type { ItemKind } from '@mima/contracts';
 import {
@@ -15,13 +15,8 @@ import { useDrag, ITEM_DRAG_MIME, ITEM_DRAG_TOKEN } from '../state/drag-store.ts
 import { useDragEnvironment } from '../hooks/useDragEnvironment.ts';
 import { ActionButton } from './ActionButton.tsx';
 import { SegmentedControl } from './SegmentedControl.tsx';
+import { ItemKindMark } from './ItemKindMark.tsx';
 import styles from './ItemList.module.css';
-
-const KIND_ICON: Record<ItemKind, React.ReactNode> = {
-  login: <CircleUserRound size={15} aria-hidden />,
-  api_token: <KeySquare size={15} aria-hidden />,
-  secure_note: <StickyNote size={15} aria-hidden />,
-};
 
 const KIND_LABEL: Record<ItemKind | 'all', string> = {
   all: '全部',
@@ -33,6 +28,7 @@ const KIND_LABEL: Record<ItemKind | 'all', string> = {
 const FILTER_OPTIONS = (['all', 'login', 'api_token', 'secure_note'] as const).map((value) => ({
   value,
   label: KIND_LABEL[value],
+  icon: <ItemKindMark kind={value} compact />,
 }));
 
 export function ItemList() {
@@ -74,7 +70,7 @@ export function ItemList() {
         return [
           item.title,
           getVisibleItemAuxiliary(item.kind, item.username) ?? '',
-          item.kind === 'login' ? item.loginUrl ?? item.origin ?? '' : '',
+          item.kind === 'login' ? (item.loginUrls ?? [item.loginUrl ?? item.origin ?? '']).join(' ') : '',
           item.description ?? '',
           validLinkedLogin?.title ?? '',
           item.folderPath ?? '',
@@ -184,6 +180,7 @@ export function ItemList() {
           value={ui.kindFilter}
           options={FILTER_OPTIONS}
           onChange={ui.setKindFilter}
+          layout="filter"
         />
       </div>
       {ui.tagFilter && (
@@ -286,7 +283,7 @@ function ItemRow({
           <GripVertical size={14} />
         </span>
       )}
-      <span className={styles.rowIcon}>{KIND_ICON[item.kind]}</span>
+      <span className={styles.rowIcon}><ItemKindMark kind={item.kind} /></span>
       <span className={styles.rowBody}>
         <span className={styles.rowTitle}>
           <span className={styles.rowTitleText}>{item.title}</span>

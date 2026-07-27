@@ -19,6 +19,8 @@ import {
   ITEM_DESCRIPTION_MAX_LENGTH,
   normalizeFolderPath,
   normalizeLoginUrl,
+  normalizeLoginUrls,
+  normalizeOrigin,
   normalizeVaultGroupName,
   normalizeVaultDirectories,
   type VaultDirectoryEntry,
@@ -45,6 +47,7 @@ export interface ItemMetadataPayload {
   username: string | null;
   origin: string | null;
   loginUrl?: string | null;
+  loginUrls?: string[];
   folderPath?: string | null;
   description?: string | null;
   linkedLoginItemId?: string | null;
@@ -56,12 +59,14 @@ export interface ItemMetadataPayload {
 export type DecryptedItemMeta = ItemMeta & {
   secretState: SecretState;
   loginUrl?: string | null;
+  loginUrls?: string[];
   folderPath?: string | null;
   description?: string | null;
   linkedLoginItemId?: string | null;
 };
 export type DecryptedItemMetaPatch = ItemMetaPatch & {
   loginUrl?: string | null;
+  loginUrls?: string[];
   folderPath?: string | null;
   description?: string | null;
   linkedLoginItemId?: string | null;
@@ -112,13 +117,16 @@ export interface PreparedEncryptedSession {
 }
 
 export function itemPayload(item: ItemMetadataPayload): ItemMetadataPayload {
+  const loginUrls = normalizeItemLoginUrls(item);
+  const primaryLoginUrl = loginUrls[0] ?? null;
   return {
     kind: item.kind,
     secretState: item.kind === 'login' ? item.secretState : 'present',
     title: item.title,
     username: item.username,
-    origin: item.origin,
-    ...(item.loginUrl !== undefined ? { loginUrl: item.loginUrl } : {}),
+    origin: primaryLoginUrl === null ? null : normalizeOrigin(primaryLoginUrl),
+    loginUrl: primaryLoginUrl,
+    loginUrls,
     folderPath: normalizeFolderPath(item.folderPath),
     description: item.kind === 'secure_note' ? null : (item.description ?? null),
     linkedLoginItemId: item.kind === 'api_token' ? (item.linkedLoginItemId ?? null) : null,
@@ -160,6 +168,21 @@ export function parseItemMetadataPayload(value: unknown): ItemMetadataPayload {
   ) {
     throw new Error('网址格式不正确');
   }
+  const loginUrls = value.loginUrls;
+  if (
+    loginUrls !== undefined &&
+    (!Array.isArray(loginUrls) || loginUrls.some((url) => typeof url !== 'string'))
+  ) {
+    throw new Error('网址格式不正确');
+  }
+  const normalizedLoginUrls = loginUrls === undefined
+    ? normalizeLegacyLoginUrls(normalizedLoginUrl as string | null | undefined, value.origin as string | null)
+    : normalizeLoginUrls(loginUrls as string[]);
+  if (normalizedLoginUrls === null) throw new Error('网址格式不正确');
+  if (kind !== 'login' && normalizedLoginUrls.length > 0) {
+    throw new Error('只有账号密码可以保存网址');
+  }
+  const primaryLoginUrl = normalizedLoginUrls[0] ?? null;
   const folderPath = value.folderPath;
   const normalizedFolderPath = typeof folderPath === 'string' ? normalizeFolderPath(folderPath) : folderPath;
   if (
@@ -190,8 +213,9 @@ export function parseItemMetadataPayload(value: unknown): ItemMetadataPayload {
     secretState,
     title: value.title,
     username: value.username as string | null,
-    origin: value.origin as string | null,
-    ...(loginUrl !== undefined ? { loginUrl: normalizedLoginUrl as string | null } : {}),
+    origin: primaryLoginUrl === null ? null : normalizeOrigin(primaryLoginUrl),
+    loginUrl: primaryLoginUrl,
+    loginUrls: normalizedLoginUrls,
     folderPath: (normalizedFolderPath as string | null | undefined) ?? null,
     description: kind === 'secure_note' ? null : ((description as string | null | undefined) ?? null),
     linkedLoginItemId: kind === 'api_token'
@@ -201,6 +225,20 @@ export function parseItemMetadataPayload(value: unknown): ItemMetadataPayload {
     favorite: value.favorite,
     sensitivity,
   };
+}
+
+function normalizeItemLoginUrls(item: ItemMetadataPayload): string[] {
+  if (item.kind !== 'login') return [];
+  const normalized = item.loginUrls === undefined
+    ? normalizeLegacyLoginUrls(item.loginUrl, item.origin)
+    : normalizeLoginUrls(item.loginUrls);
+  if (normalized === null) throw new Error('网址格式不正确');
+  return normalized;
+}
+
+function normalizeLegacyLoginUrls(loginUrl: string | null | undefined, origin: string | null): string[] | null {
+  const legacyUrl = loginUrl ?? origin;
+  return legacyUrl ? normalizeLoginUrls([legacyUrl]) : [];
 }
 
 export function parseVaultHeaderPayload(value: unknown): VaultHeaderPayload {

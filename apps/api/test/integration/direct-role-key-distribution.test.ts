@@ -151,6 +151,16 @@ describe('direct membership key capability override', () => {
       },
     });
     expect(content.statusCode, content.body).toBe(426);
+
+    const compatibleBootstrap = await app.inject({
+      method: 'GET',
+      url: '/api/v2/extension/bootstrap',
+      headers: {
+        authorization: `Bearer ${extensionToken}`,
+        [ITEM_METADATA_FORMAT_HEADER]: '4',
+      },
+    });
+    expect(compatibleBootstrap.statusCode, compatibleBootstrap.body).toBe(200);
   });
 
   it('keeps directory and custom-group grants below a direct auditor role in tasks and bootstraps', async () => {

@@ -166,6 +166,42 @@ test.describe.serial('桌面、平板和手机布局', () => {
     }
   });
 
+  test('基础新建表单在标准桌面首屏完整可用', async ({ page }) => {
+    await loginAndUnlock(page, 'bob');
+    const personalVault = page
+      .getByRole('navigation', { name: '库导航' })
+      .locator('button[title$="个人密码库"]')
+      .first();
+    await expect(personalVault).toBeVisible();
+    await personalVault.click();
+    await expect(personalVault).toHaveAttribute('aria-current', 'page');
+
+    for (const viewport of [
+      { width: 1920, height: 1080 },
+      { width: 1440, height: 900 },
+    ]) {
+      await page.setViewportSize(viewport);
+      await page.getByRole('button', { name: '新建', exact: true }).click();
+      const formPane = page.getByRole('main', { name: '新建条目' });
+      await expect(formPane.getByRole('button', { name: '保存', exact: true })).toBeVisible();
+      expect(await formPane.evaluate((element) => element.scrollHeight - element.clientHeight)).toBeLessThanOrEqual(0);
+
+      const kindButtons = formPane.getByRole('group', { name: '条目类型' }).getByRole('button');
+      const widths = await kindButtons.evaluateAll((buttons) => buttons.map((button) => button.getBoundingClientRect().width));
+      expect(Math.max(...widths) - Math.min(...widths)).toBeLessThanOrEqual(1);
+      await expect(kindButtons).toHaveCount(3);
+      await expect(formPane.locator('[data-kind="login"]')).toBeVisible();
+      await expect(formPane.locator('[data-kind="api_token"]')).toBeVisible();
+      await expect(formPane.locator('[data-kind="secure_note"]')).toBeVisible();
+      await expectNoHorizontalOverflow(page);
+      await page.screenshot({
+        path: join(SCREENSHOT_DIR, `item-create-${viewport.width}x${viewport.height}.png`),
+        animations: 'disabled',
+      });
+      await formPane.getByRole('button', { name: '取消' }).click();
+    }
+  });
+
   test('新建团队密码库弹窗在桌面、平板和手机均无溢出', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await loginAndUnlock(page, 'bob');

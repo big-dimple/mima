@@ -15,7 +15,7 @@ import { getItemPresentation, getVisibleItemAuxiliary } from '@mima/domain';
 import { PanelActions } from './panel-actions.ts';
 import { PanelModel } from './panel-model.ts';
 import type { DecryptedExtensionItem, LocalDeviceRecord } from './protocol.ts';
-import { extensionItemMatchScore } from './site-match.ts';
+import { extensionItemLoginUrls, extensionItemMatchScore } from './site-match.ts';
 
 export class PanelView {
   constructor(
@@ -476,7 +476,7 @@ export class PanelView {
         matchScore === 2 ? '精确地址' : '同站点',
       ));
     }
-    itemSub.append([auxiliary, item.kind === 'login' ? item.loginUrl ?? item.origin : null]
+    itemSub.append([auxiliary, item.kind === 'login' ? extensionItemLoginUrls(item)[0] : null]
       .filter(Boolean)
       .join(' · ') || presentation.kindLabel);
     body.appendChild(itemSub);
@@ -485,7 +485,7 @@ export class PanelView {
     const itemActions = element('div', 'itemActions');
 
     if (item.secretState === 'absent') {
-      if (item.kind === 'login' && (item.loginUrl || item.origin)) {
+      if (item.kind === 'login' && extensionItemLoginUrls(item).length > 0) {
         const open = button('打开网址', 'btn btnPrimary');
         open.prepend(createIconElement(ExternalLink));
         open.addEventListener('click', () => {
@@ -633,7 +633,7 @@ function searchableItemText(
   return [
     item.title,
     getVisibleItemAuxiliary(item.kind, item.username) ?? '',
-    item.kind === 'login' ? item.loginUrl ?? item.origin ?? '' : '',
+    item.kind === 'login' ? extensionItemLoginUrls(item).join(' ') : '',
     item.description ?? '',
     linkedLogin?.kind === 'login' && linkedLogin.vaultId === item.vaultId ? linkedLogin.title : '',
     item.tags.join(' '),

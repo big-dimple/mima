@@ -102,6 +102,32 @@ describe('ItemList encrypted metadata search', () => {
     expect(screen.getByRole('option', { name: /生产 Redis/ })).toBeVisible();
   });
 
+  it('searches every saved login URL while keeping the primary URL compatible', () => {
+    const store = directoryStore();
+    const itemId = '00000000-0000-4000-8000-000000000001';
+    store.setState((state) => ({
+      items: {
+        ...state.items,
+        [itemId]: {
+          ...state.items[itemId]!,
+          loginUrls: [
+            'https://primary.example.test/login',
+            'https://secondary.example.test/console',
+          ],
+        },
+      },
+    }));
+    useUi.setState({ search: 'secondary.example.test', selectedVaultId: 'all' });
+
+    render(
+      <AppContext.Provider value={{ store } as unknown as AppServices}>
+        <ItemList />
+      </AppContext.Provider>,
+    );
+
+    expect(screen.getByRole('option', { name: /示例云子账号/ })).toBeVisible();
+  });
+
   it('searches encrypted descriptions and linked login titles', () => {
     const store = directoryStore();
     const loginId = '00000000-0000-4000-8000-000000000001';

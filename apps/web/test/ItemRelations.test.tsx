@@ -85,6 +85,34 @@ describe('ItemDetail credential relations', () => {
     expect(useUi.getState().toasts.at(-1)?.text).toBe('网址已复制');
   });
 
+  it('shows every saved URL in order with independent copy and open actions', async () => {
+    const services = relationServices();
+    services.store.setState((state) => ({
+      items: {
+        ...state.items,
+        [loginId]: {
+          ...state.items[loginId]!,
+          loginUrls: [
+            'https://accounts.example.test/login',
+            'https://console.example.test/account',
+          ],
+        },
+      },
+    }));
+    renderDetail(services);
+
+    expect(screen.getAllByTestId('website-url-value').map((node) => node.textContent)).toEqual([
+      'https://accounts.example.test/login',
+      'https://console.example.test/account',
+    ]);
+    expect(screen.getByRole('link', { name: '打开备用网址 2' })).toHaveAttribute(
+      'href',
+      'https://console.example.test/account',
+    );
+    await userEvent.click(screen.getByRole('button', { name: '复制备用网址 2' }));
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith('https://console.example.test/account');
+  });
+
   it('never creates an external link for a non-HTTP legacy value', () => {
     const services = relationServices();
     services.store.setState((state) => ({

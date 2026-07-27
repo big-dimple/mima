@@ -120,6 +120,7 @@ export interface DecryptedExtensionItem {
   username: string | null;
   origin: string | null;
   loginUrl?: string | null;
+  loginUrls?: string[];
   description?: string | null;
   linkedLoginItemId?: string | null;
   tags: string[];

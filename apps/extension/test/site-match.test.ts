@@ -10,6 +10,10 @@ const item = {
   username: 'alice',
   origin: 'https://accounts.example.test',
   loginUrl: 'https://accounts.example.test/login/tenant/example-b',
+  loginUrls: [
+    'https://accounts.example.test/login/tenant/example-b',
+    'https://console.example.test/sign-in',
+  ],
   tags: [],
   favorite: false,
   sensitivity: 'medium',
@@ -30,8 +34,19 @@ describe('extension site matching', () => {
     expect(extensionItemMatchScore(item, site)).toBe(1);
   });
 
+  it('matches an exact secondary URL and its same-origin redirects', () => {
+    expect(extensionItemMatchScore(item, {
+      origin: 'https://console.example.test',
+      url: 'https://console.example.test/sign-in',
+    })).toBe(2);
+    expect(extensionItemMatchScore(item, {
+      origin: 'https://console.example.test',
+      url: 'https://console.example.test/redirected',
+    })).toBe(1);
+  });
+
   it('normalizes legacy full URLs stored in origin', () => {
-    const legacy = { ...item, origin: item.loginUrl, loginUrl: null };
+    const legacy = { ...item, origin: item.loginUrl, loginUrl: null, loginUrls: undefined };
     const site = { origin: item.origin, url: item.loginUrl };
     expect(extensionItemMatchesSite(legacy, site)).toBe(true);
   });

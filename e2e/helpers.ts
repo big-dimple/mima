@@ -140,7 +140,7 @@ export async function ensureLoginItem(
   await createButton.click();
   await enterIntentionalText(page.getByLabel('标题 *'), input.title);
   if (input.username) await enterIntentionalText(page.getByLabel('账号'), input.username);
-  if (input.origin) await enterIntentionalText(page.getByLabel('网址（可选）'), input.origin);
+  if (input.origin) await enterIntentionalText(page.getByLabel('网址（主网址，可选）'), input.origin);
   await enterIntentionalText(page.getByLabel('密码（可选）'), input.password);
   await page.getByRole('button', { name: '保存', exact: true }).click();
   await expect(existing).toBeVisible();

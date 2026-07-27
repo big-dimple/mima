@@ -24,6 +24,7 @@ import { SecretField } from './SecretField.tsx';
 import { ItemForm } from './ItemForm.tsx';
 import { MoveToFolderDialog } from './MoveToFolderDialog.tsx';
 import { ErrorState, LoadingState } from './AsyncState.tsx';
+import { ItemKindBadge } from './ItemKindMark.tsx';
 import styles from './ItemDetail.module.css';
 
 export function ItemDetail() {
@@ -74,8 +75,9 @@ function ItemView({ item }: { item: DecryptedItemMeta }) {
   const presentation = getItemPresentation(item.kind);
   const hasSecret = item.secretState === 'present';
   const auxiliary = getVisibleItemAuxiliary(item.kind, item.username);
-  const websiteUrl = item.kind === 'login' ? (item.loginUrl ?? item.origin) : null;
-  const externalWebsiteUrl = websiteUrl ? normalizeLoginUrl(websiteUrl) : null;
+  const websiteUrls = item.kind === 'login'
+    ? (item.loginUrls?.length ? item.loginUrls : [item.loginUrl ?? item.origin].filter((url): url is string => Boolean(url)))
+    : [];
   const linkedLogin = useMemo(() => {
     if (item.kind !== 'api_token' || !item.linkedLoginItemId) return null;
     const candidate = items[item.linkedLoginItemId];
@@ -125,8 +127,7 @@ function ItemView({ item }: { item: DecryptedItemMeta }) {
     toast('info', `${presentation.auxiliaryLabel}已复制`);
   };
 
-  const copyWebsiteUrl = async () => {
-    if (!websiteUrl) return;
+  const copyWebsiteUrl = async (websiteUrl: string) => {
     await copyWithTimedClear(websiteUrl);
     toast('info', '网址已复制');
   };
@@ -175,7 +176,7 @@ function ItemView({ item }: { item: DecryptedItemMeta }) {
       <div className={styles.header}>
         <div className={styles.titleRow}>
           <h2 className={styles.title}>{item.title}</h2>
-          <span className={styles.kindBadge}>{presentation.kindLabel}</span>
+          <ItemKindBadge kind={item.kind} />
           {pending && <span className={styles.pendingBadge}>待同步</span>}
         </div>
         <div className={styles.headerActions}>
@@ -295,24 +296,27 @@ function ItemView({ item }: { item: DecryptedItemMeta }) {
             </dd>
           </div>
         )}
-        {websiteUrl && (
-          <div className={[styles.fieldRow, styles.fieldRowMultiline].join(' ')}>
-            <dt>网址</dt>
-            <dd className={styles.websiteValue}>
-              <span className={styles.mono} data-testid="website-url-value">{websiteUrl}</span>
-              <span className={styles.websiteActions}>
-                <IconButton label="复制网址" onClick={() => void copyWebsiteUrl()}>
-                  <Copy size={13} />
-                </IconButton>
-                {externalWebsiteUrl && (
-                  <IconLink label="打开网址" href={externalWebsiteUrl}>
-                    <ExternalLink size={13} />
-                  </IconLink>
-                )}
-              </span>
-            </dd>
-          </div>
-        )}
+        {websiteUrls.map((websiteUrl, index) => {
+          const externalWebsiteUrl = normalizeLoginUrl(websiteUrl);
+          return (
+            <div className={[styles.fieldRow, styles.fieldRowMultiline].join(' ')} key={`${index}:${websiteUrl}`}>
+              <dt>{index === 0 ? '网址' : '备用网址'}</dt>
+              <dd className={styles.websiteValue}>
+                <span className={styles.mono} data-testid="website-url-value">{websiteUrl}</span>
+                <span className={styles.websiteActions}>
+                  <IconButton label={`复制${index === 0 ? '网址' : `备用网址 ${index + 1}`}`} onClick={() => void copyWebsiteUrl(websiteUrl)}>
+                    <Copy size={13} />
+                  </IconButton>
+                  {externalWebsiteUrl && (
+                    <IconLink label={`打开${index === 0 ? '网址' : `备用网址 ${index + 1}`}`} href={externalWebsiteUrl}>
+                      <ExternalLink size={13} />
+                    </IconLink>
+                  )}
+                </span>
+              </dd>
+            </div>
+          );
+        })}
         {item.kind === 'api_token' && (
           <div className={styles.fieldRow}>
             <dt>关联账号密码</dt>

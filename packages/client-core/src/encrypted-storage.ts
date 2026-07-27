@@ -279,6 +279,7 @@ export function assertCiphertextOnly(value: unknown): void {
     'username',
     'origin',
     'loginurl',
+    'loginurls',
     'folderpath',
     'tags',
     'note',
