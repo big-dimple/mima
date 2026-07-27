@@ -17,7 +17,7 @@
     "lucide": "^0.525.0"
   },
   "devDependencies": {
-    "@types/chrome": "^0.0.326",
+    "@types/chrome": "^0.2.2",
     "typescript": "^5.8.3",
     "vite": "^6.3.0"
   }
