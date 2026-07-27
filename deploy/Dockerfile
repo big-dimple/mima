@@ -148,7 +148,7 @@ RUN node /tmp/verify-strict-runtime.mjs \
 USER node
 ENTRYPOINT ["node", "apps/api/dist-migration-worker/legacy-migration-worker.js"]
 
-FROM nginx:alpine@sha256:5616878291a2eed594aee8db4dade5878cf7edcb475e59193904b198d9b830de AS gateway
+FROM nginx:alpine@sha256:4a73073bd557c65b759505da037898b61f1be6cbcc3c2c3aeac22d2a470c1752 AS gateway
 ARG MIMA_SOURCE_SNAPSHOT_SHA256
 LABEL org.opencontainers.image.version="0.2.0" \
   mima.e2ee-protocol="lm-e2ee-v1" \
