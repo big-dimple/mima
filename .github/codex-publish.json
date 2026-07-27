@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "remote": "origin",
+  "branch": "main",
+  "runtime": {
+    "nodeMajor": 24
+  },
+  "gates": [
+    {
+      "name": "Mima public release gate",
+      "argv": ["node", "scripts/github-publish-gate.mjs"]
+    }
+  ]
+}

@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# Start (or reuse) the dedicated PostgreSQL container for mima on 127.0.0.1:55432.
+# Start or reuse the dedicated PostgreSQL container for Mima tests.
 set -euo pipefail
 
-NAME=mima-postgres
+NAME=${MIMA_POSTGRES_CONTAINER:-mima-postgres}
+PORT=${MIMA_POSTGRES_PORT:-55432}
 IMAGE=postgres:18-trixie
 
 if docker ps --format '{{.Names}}' | grep -qx "$NAME"; then
@@ -14,7 +15,7 @@ else
     -e POSTGRES_USER=mima \
     -e POSTGRES_PASSWORD=mima_dev_pw \
     -e POSTGRES_DB=mima \
-    -p 127.0.0.1:55432:5432 \
+    -p "127.0.0.1:${PORT}:5432" \
     "$IMAGE"
 fi
 
