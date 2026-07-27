@@ -31,7 +31,7 @@
     "e2e:server": "tsx src/scripts/e2e-server.ts"
   },
   "dependencies": {
-    "@fastify/cookie": "^11.0.0",
+    "@fastify/cookie": "^11.1.2",
     "@fastify/cors": "^11.0.0",
     "@fastify/swagger": "^9.5.0",
     "@mima/contracts": "workspace:*",
@@ -41,7 +41,7 @@
     "drizzle-orm": "^0.45.2",
     "fastify": "^5.4.0",
     "fastify-type-provider-zod": "^4.0.2",
-    "jose": "^6.2.3",
+    "jose": "^6.2.4",
     "ldapts": "^9.0.0",
     "openid-client": "^6.8.4",
     "pg": "^8.16.0",
