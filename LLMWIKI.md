@@ -44,6 +44,13 @@ Fastify API ---- PostgreSQL
 
 常驻生产容器只有 `gateway`、`api`、`postgres`。migration worker 和 recovery tool 是隔离、按需运行的任务。
 
+### 技术路线
+
+- 当前仓库没有 Backstage Catalog、TechDocs 或 `@backstage/*` 运行依赖；身份、目录和部署接口均可独立使用。
+- React + Vite 负责浏览器工作台并保持 Crypto Worker 边界；Fastify + Zod + Drizzle 负责轻量、可审计的 API 与数据库契约；PostgreSQL 承担事务、锁、约束和并发一致性。这些选择与自托管 E2EE 场景匹配，不因项目早期接入过 Backstage 而重写。
+- 不为“通用化”引入新的应用框架、插件系统或数据库抽象层。只有出现可复现的外部接入需求时，才在现有认证与目录接口后增加 Provider，并用兼容测试固定行为。
+- 框架或存储路线调整必须由实际维护成本、兼容需求或性能证据驱动，并先完成加密协议、迁移和回滚影响评审。
+
 ## 代码地图
 
 ### 应用

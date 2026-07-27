@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { oidcUserId, parseGroupMap } from '../../src/auth/directory.ts';
 import { toSessionUser } from '../../src/auth/contracts.ts';
 import { assertFreshReauthentication } from '../../src/auth/oidc.ts';
+import { userFromRow } from '../../src/plugins/auth.ts';
 
 describe('OIDC identity and directory boundaries', () => {
   it('keys users only by issuer and immutable subject', () => {
@@ -36,8 +37,12 @@ describe('OIDC identity and directory boundaries', () => {
       active: true,
     };
 
-    expect(toSessionUser(user).isPlatformAdmin).toBe(false);
-    expect(toSessionUser(user, true).isPlatformAdmin).toBe(true);
+    for (const sessionUser of [toSessionUser(user), userFromRow(user)]) {
+      expect(sessionUser).toMatchObject({ isPlatformAdmin: false, isLocalPlatformAdmin: false });
+    }
+    for (const sessionUser of [toSessionUser(user, true), userFromRow(user, true)]) {
+      expect(sessionUser).toMatchObject({ isPlatformAdmin: true, isLocalPlatformAdmin: true });
+    }
   });
 
   it('rejects an old authentication event during unlock', () => {

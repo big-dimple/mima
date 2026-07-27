@@ -10,7 +10,7 @@ beforeEach(() => {
 });
 
 describe('enterprise recovery administrator visibility', () => {
-  it('does not show recovery management to a directory-group-only platform admin', async () => {
+  it('does not show recovery management to a directory-group-only member', async () => {
     const store = createMetaStore();
     store.getState().setUser({
       id: 'group-admin',
@@ -18,7 +18,7 @@ describe('enterprise recovery administrator visibility', () => {
       displayName: 'Group Admin',
       email: 'group-admin@example.test',
       groups: ['group:default/platform'],
-      isPlatformAdmin: true,
+      isPlatformAdmin: false,
       isLocalPlatformAdmin: false,
     });
     const api = {

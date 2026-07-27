@@ -5,6 +5,7 @@ import type { SessionUser } from '@mima/contracts';
 import { CSRF_HEADER } from '@mima/contracts';
 import { sessions, extensionSessions, userDevices, users } from '../db/schema.ts';
 import type { AppContext } from '../context.ts';
+import { toSessionUser, type AuthUserRecord } from '../auth/contracts.ts';
 import { hasLocalPlatformAdminRole } from '../services/system-roles.ts';
 
 declare module 'fastify' {
@@ -32,18 +33,10 @@ export function newToken(): string {
 }
 
 export function userFromRow(
-  row: typeof users.$inferSelect,
+  row: AuthUserRecord,
   isLocalPlatformAdmin = false,
 ): SessionUser {
-  return {
-    id: row.id,
-    username: row.username,
-    displayName: row.displayName,
-    email: row.email,
-    groups: row.groups,
-    isPlatformAdmin: isLocalPlatformAdmin,
-    isLocalPlatformAdmin,
-  };
+  return toSessionUser(row, isLocalPlatformAdmin);
 }
 
 export function registerAuthHooks(app: FastifyInstance): void {
