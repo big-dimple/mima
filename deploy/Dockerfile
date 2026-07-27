@@ -1,4 +1,4 @@
-FROM node:24-trixie-slim@sha256:366fdef91728b1b7fa18c84fba63b6e79ed77b7e10cc206878e9705da4d7b169 AS workspace
+FROM node:24-trixie-slim@sha256:ae91dcc111a68c9d2d81ff2a17bda61be126426176fde6fe7d08ab13b7f50573 AS workspace
 WORKDIR /app
 RUN corepack enable && corepack prepare pnpm@10.33.2 --activate
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
@@ -59,7 +59,7 @@ FROM workspace AS migration-worker-build
 ENV NODE_ENV=production
 RUN pnpm --filter @mima/api build:migration-worker
 
-FROM node:24-trixie-slim@sha256:366fdef91728b1b7fa18c84fba63b6e79ed77b7e10cc206878e9705da4d7b169 AS runtime-deps
+FROM node:24-trixie-slim@sha256:ae91dcc111a68c9d2d81ff2a17bda61be126426176fde6fe7d08ab13b7f50573 AS runtime-deps
 WORKDIR /app
 RUN corepack enable && corepack prepare pnpm@10.33.2 --activate
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
@@ -85,7 +85,7 @@ RUN --mount=type=cache,id=mima-pnpm-store,target=/pnpm/store,sharing=locked \
   && pnpm install --store-dir /pnpm/store --prod --offline --frozen-lockfile --filter @mima/migration-worker-runtime-deps \
   && rm -rf /app/node_modules/.pnpm/node_modules/@mima
 
-FROM node:24-trixie-slim@sha256:366fdef91728b1b7fa18c84fba63b6e79ed77b7e10cc206878e9705da4d7b169 AS api
+FROM node:24-trixie-slim@sha256:ae91dcc111a68c9d2d81ff2a17bda61be126426176fde6fe7d08ab13b7f50573 AS api
 ARG MIMA_SOURCE_SNAPSHOT_SHA256
 LABEL org.opencontainers.image.version="0.2.0" \
   mima.e2ee-protocol="lm-e2ee-v1" \
@@ -108,7 +108,7 @@ USER node
 EXPOSE 4174
 CMD ["node", "apps/api/dist/server.js"]
 
-FROM node:24-trixie-slim@sha256:366fdef91728b1b7fa18c84fba63b6e79ed77b7e10cc206878e9705da4d7b169 AS recovery-tool
+FROM node:24-trixie-slim@sha256:ae91dcc111a68c9d2d81ff2a17bda61be126426176fde6fe7d08ab13b7f50573 AS recovery-tool
 ARG MIMA_SOURCE_SNAPSHOT_SHA256
 LABEL org.opencontainers.image.version="0.2.0" \
   mima.e2ee-protocol="lm-e2ee-v1" \
@@ -125,7 +125,7 @@ RUN node /tmp/verify-strict-runtime.mjs --recovery-tool-file /app/cli.mjs \
 USER node
 ENTRYPOINT ["node", "/app/cli.mjs"]
 
-FROM node:24-trixie-slim@sha256:366fdef91728b1b7fa18c84fba63b6e79ed77b7e10cc206878e9705da4d7b169 AS migration-worker
+FROM node:24-trixie-slim@sha256:ae91dcc111a68c9d2d81ff2a17bda61be126426176fde6fe7d08ab13b7f50573 AS migration-worker
 ARG MIMA_SOURCE_SNAPSHOT_SHA256
 LABEL org.opencontainers.image.version="0.2.0" \
   mima.e2ee-protocol="lm-e2ee-v1" \
@@ -148,7 +148,7 @@ RUN node /tmp/verify-strict-runtime.mjs \
 USER node
 ENTRYPOINT ["node", "apps/api/dist-migration-worker/legacy-migration-worker.js"]
 
-FROM nginx:alpine@sha256:5616878291a2eed594aee8db4dade5878cf7edcb475e59193904b198d9b830de AS gateway
+FROM nginx:alpine@sha256:4a73073bd557c65b759505da037898b61f1be6cbcc3c2c3aeac22d2a470c1752 AS gateway
 ARG MIMA_SOURCE_SNAPSHOT_SHA256
 LABEL org.opencontainers.image.version="0.2.0" \
   mima.e2ee-protocol="lm-e2ee-v1" \
