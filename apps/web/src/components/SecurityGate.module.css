@@ -80,6 +80,37 @@
   color: var(--warning-text);
 }
 
+.notice strong,
+.notice span {
+  display: block;
+}
+
+.notice strong {
+  margin-bottom: 3px;
+  color: var(--text);
+}
+
+.noticeAction {
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 6px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+  color: var(--text);
+  font-weight: 600;
+}
+
+.noticeAction:hover,
+.noticeAction:focus-visible {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 .boundary {
   color: var(--muted);
 }

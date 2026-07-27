@@ -1,11 +1,18 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { ArchiveX, KeyRound, Lock, LogOut, PlugZap, Wifi, WifiOff, Loader2, BookOpen, UsersRound, ShieldAlert, MonitorSmartphone, MoreHorizontal } from 'lucide-react';
+import { ArchiveX, HardDrive, KeyRound, Lock, LogOut, PlugZap, Wifi, WifiOff, Loader2, BookOpen, UsersRound, ShieldAlert, MonitorSmartphone, MoreHorizontal } from 'lucide-react';
 import { useApp, useMeta } from '../state/app-context.ts';
+import type { LocalAccessReason } from '../state/local-access.ts';
 import { useUi } from '../state/ui-store.ts';
 import { IconButton } from './IconButton.tsx';
 import styles from './Header.module.css';
 
-export function Header({ onLoggedOut }: { onLoggedOut: () => void }) {
+export function Header({
+  localAccessReason = null,
+  onLoggedOut,
+}: {
+  localAccessReason?: LocalAccessReason;
+  onLoggedOut: () => void;
+}) {
   const { actions, outbox } = useApp();
   const user = useMeta((s) => s.user);
   const connection = useMeta((s) => s.connection);
@@ -69,7 +76,12 @@ export function Header({ onLoggedOut }: { onLoggedOut: () => void }) {
             <Loader2 size={14} className={styles.spin} aria-hidden /> 连接中
           </span>
         )}
-        {connection === 'offline' && (
+        {connection === 'offline' && localAccessReason === 'session-expired' && (
+          <span className={styles.local} title="账号登录已过期，当前只使用本机加密数据">
+            <HardDrive size={14} aria-hidden /> 本机模式
+          </span>
+        )}
+        {connection === 'offline' && localAccessReason !== 'session-expired' && (
           <span className={styles.offline}>
             <WifiOff size={14} aria-hidden /> 离线
           </span>

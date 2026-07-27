@@ -46,7 +46,7 @@ test.describe.serial('零知识安全边界', () => {
     await page.getByRole('button', { name: '立即遮罩' }).click();
 
     await context.setOffline(true);
-    await expect(page.getByText(/当前离线/)).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText(/网络暂时不可用/)).toBeVisible({ timeout: 10_000 });
     await page.getByRole('button', { name: '锁定工作台' }).click();
     await page.locator('#main-password').fill(MAIN_PASSWORDS.bob);
     await page.getByRole('button', { name: '解锁密码库', exact: true }).click();
@@ -54,7 +54,7 @@ test.describe.serial('零知识安全边界', () => {
     const unlockError = page.getByRole('region', { name: '通知' }).getByRole('alert').last();
     await expect(navigation.or(unlockError)).toBeVisible({ timeout: 15_000 });
     if (await unlockError.isVisible()) throw new Error(await unlockError.innerText());
-    await expect(page.getByText(/当前离线/)).toBeVisible();
+    await expect(page.getByText(/网络暂时不可用/)).toBeVisible();
     await page.getByRole('option', { name: new RegExp(ITEM.title) }).click();
     await page.getByRole('button', { name: '查看密码' }).click();
     await expect(page.getByText(ITEM.password, { exact: true })).toBeVisible();

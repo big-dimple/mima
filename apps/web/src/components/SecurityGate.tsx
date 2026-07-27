@@ -22,6 +22,7 @@ import type {
   VaultCryptoState,
 } from '@mima/contracts';
 import { useApp, useMeta } from '../state/app-context.ts';
+import type { LocalAccessReason } from '../state/local-access.ts';
 import { useUi } from '../state/ui-store.ts';
 import { LoadingState } from './AsyncState.tsx';
 import { EnterpriseRecoveryRequestPanel } from './EnterpriseRecoveryRequestPanel.tsx';
@@ -31,10 +32,14 @@ import styles from './SecurityGate.module.css';
 export function SecurityGate({
   phase,
   user,
+  localAccessReason = null,
+  onReauthenticate,
   onLoggedOut,
 }: {
   phase: Exclude<SecurityPhase, 'unauthenticated' | 'unlocked-online' | 'unlocked-offline'>;
   user: SessionUser | null;
+  localAccessReason?: LocalAccessReason;
+  onReauthenticate?: () => void;
   onLoggedOut: () => void;
 }) {
   if (phase === 'unlocking') {
@@ -47,7 +52,14 @@ export function SecurityGate({
   if (phase === 'account-reset') return <AccountResetPanel user={user} onLoggedOut={onLoggedOut} />;
   if (phase === 'migration-required') return <MigrationPanel user={user} onLoggedOut={onLoggedOut} />;
   if (phase === 'rekey-blocked') return <RekeyPanel onLoggedOut={onLoggedOut} />;
-  return <UnlockPanel user={user} onLoggedOut={onLoggedOut} />;
+  return (
+    <UnlockPanel
+      user={user}
+      localAccessReason={localAccessReason}
+      onReauthenticate={onReauthenticate}
+      onLoggedOut={onLoggedOut}
+    />
+  );
 }
 
 function SetupPanel({ user, onLoggedOut }: { user: SessionUser | null; onLoggedOut: () => void }) {
@@ -124,7 +136,17 @@ function SetupPanel({ user, onLoggedOut }: { user: SessionUser | null; onLoggedO
   );
 }
 
-function UnlockPanel({ user, onLoggedOut }: { user: SessionUser | null; onLoggedOut: () => void }) {
+function UnlockPanel({
+  user,
+  localAccessReason,
+  onReauthenticate,
+  onLoggedOut,
+}: {
+  user: SessionUser | null;
+  localAccessReason: LocalAccessReason;
+  onReauthenticate?: () => void;
+  onLoggedOut: () => void;
+}) {
   const { zeroKnowledge } = useApp();
   const toast = useUi((state) => state.toast);
   const connection = useMeta((state) => state.connection);
@@ -151,13 +173,29 @@ function UnlockPanel({ user, onLoggedOut }: { user: SessionUser | null; onLogged
     <GateShell onLoggedOut={onLoggedOut}>
       <LockKeyhole size={24} className={styles.icon} aria-hidden />
       <h1>解锁你的密码库</h1>
-      <p>你已经完成账号登录。再输入主密码，是为了在这台设备解开加密的密码内容。</p>
+      <p>
+        {localAccessReason
+          ? '这台浏览器保存着你之前使用的加密数据。输入主密码只会在本机解开密码内容。'
+          : '你已经完成账号登录。再输入主密码，是为了在这台设备解开加密的密码内容。'}
+      </p>
       <ul className={styles.promiseList}>
         <li>账号登录确认你是谁，主密码负责解开密码库。</li>
         <li>主密码只在当前设备使用，不会发送给平台服务端或任何中间平台。</li>
         <li>输入一次后，工作台和浏览器扩展会一起解锁。</li>
       </ul>
-      {connection === 'offline' && <div className={styles.notice}>当前离线，将使用此浏览器保存的离线数据。</div>}
+      {connection === 'offline' && localAccessReason === 'session-expired' ? (
+        <div className={styles.notice}>
+          <strong>账号登录已过期，当前只使用这台设备保存的数据。</strong>
+          <span>同步和权限管理要在重新登录后恢复。</span>
+          {onReauthenticate && (
+            <button type="button" className={styles.noticeAction} onClick={onReauthenticate}>
+              <RefreshCw size={15} aria-hidden />重新登录
+            </button>
+          )}
+        </div>
+      ) : connection === 'offline' ? (
+        <div className={styles.notice}>网络暂时不可用，将使用这台设备保存的数据。</div>
+      ) : null}
       <form className={styles.form} autoComplete="on" onSubmit={submit}>
         {user && <BrowserCredentialAccount id="main-password-username" user={user} />}
         <label htmlFor="main-password">主密码（本机解密）</label>

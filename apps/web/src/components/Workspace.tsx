@@ -1,6 +1,7 @@
 import { Suspense, lazy, useEffect, useRef, useState } from 'react';
-import { ArrowLeft, GripVertical, PanelLeftOpen, X } from 'lucide-react';
+import { ArrowLeft, GripVertical, PanelLeftOpen, RefreshCw, X } from 'lucide-react';
 import { useMeta } from '../state/app-context.ts';
+import type { LocalAccessReason } from '../state/local-access.ts';
 import { useUi } from '../state/ui-store.ts';
 import { Header } from './Header.tsx';
 import { VaultNav } from './VaultNav.tsx';
@@ -38,7 +39,15 @@ const DEFAULT_LAYOUT = { navWidth: 384, listWidth: 420 };
 type WorkspaceLayout = typeof DEFAULT_LAYOUT;
 type ViewportMode = 'desktop' | 'tablet' | 'mobile';
 
-export function Workspace({ onLoggedOut }: { onLoggedOut: () => void }) {
+export function Workspace({
+  localAccessReason = null,
+  onReauthenticate,
+  onLoggedOut,
+}: {
+  localAccessReason?: LocalAccessReason;
+  onReauthenticate?: () => void;
+  onLoggedOut: () => void;
+}) {
   const connection = useMeta((s) => s.connection);
   const lastRevokedVaultId = useMeta((s) => s.lastRevokedVaultId);
   const selectedVaultId = useUi((s) => s.selectedVaultId);
@@ -88,10 +97,21 @@ export function Workspace({ onLoggedOut }: { onLoggedOut: () => void }) {
 
   return (
     <div className={styles.shell}>
-      <Header onLoggedOut={onLoggedOut} />
+      <Header localAccessReason={localAccessReason} onLoggedOut={onLoggedOut} />
       {connection !== 'online' && (
         <div className={styles.offlineBanner} role="status">
-          {connection === 'connecting' ? '正在重新连接…' : '当前离线：可使用此浏览器保存的数据；修改会先在本机保护好，恢复网络后自动同步。'}
+          <span>
+            {connection === 'connecting'
+              ? '正在重新连接…'
+              : localAccessReason === 'session-expired'
+                ? '当前只使用本机数据：账号登录已过期，重新登录后恢复同步和权限管理。'
+                : '网络暂时不可用：可以使用这台设备保存的数据；修改会先在本机保护好，恢复网络后自动同步。'}
+          </span>
+          {connection === 'offline' && localAccessReason === 'session-expired' && onReauthenticate && (
+            <button type="button" onClick={onReauthenticate}>
+              <RefreshCw size={14} aria-hidden />重新登录
+            </button>
+          )}
         </div>
       )}
       <LegacyKeyRetirementBanner />

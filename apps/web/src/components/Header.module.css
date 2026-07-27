@@ -27,6 +27,7 @@
 
 .online,
 .connecting,
+.local,
 .offline {
   display: inline-flex;
   align-items: center;
@@ -43,6 +44,10 @@
 
 .offline {
   color: var(--danger-strong);
+}
+
+.local {
+  color: var(--warn);
 }
 
 .pending {

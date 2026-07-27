@@ -8,6 +8,7 @@ import { SecurityGate } from './components/SecurityGate.tsx';
 import { Toaster } from './components/Toaster.tsx';
 import { ErrorState, LoadingState } from './components/AsyncState.tsx';
 import { useUi } from './state/ui-store.ts';
+import type { LocalAccessReason } from './state/local-access.ts';
 import './global.css';
 
 type StartupState = 'loading' | 'ready' | 'error';
@@ -25,6 +26,9 @@ export function App() {
   const user = useMeta((state) => state.user);
   const [startup, setStartup] = useState<StartupState>('loading');
   const [startupError, setStartupError] = useState<string | null>(null);
+  const [localAccessReason, setLocalAccessReason] = useState<LocalAccessReason>(null);
+  const [localDataAvailable, setLocalDataAvailable] = useState(false);
+  const [usingExpiredSessionCache, setUsingExpiredSessionCache] = useState(false);
   const initializationStarted = useRef(false);
 
   useEffect(
@@ -40,6 +44,9 @@ export function App() {
   const initialize = useCallback(async () => {
     setStartup('loading');
     setStartupError(null);
+    setLocalAccessReason(null);
+    setLocalDataAvailable(false);
+    setUsingExpiredSessionCache(false);
     try {
       const session = await api.session();
       await zeroKnowledge.prepare(session);
@@ -48,11 +55,17 @@ export function App() {
       if (error instanceof ApiRequestError && (error.status === 401 || error.status === 0)) {
         api.setCsrfToken(null);
         const offlineReady = await zeroKnowledge.prepareOffline().catch(() => false);
-        if (offlineReady) {
+        if (error.status === 401) {
+          if (offlineReady) {
+            setLocalAccessReason('session-expired');
+            setLocalDataAvailable(true);
+          }
           setStartup('ready');
           return;
         }
-        if (error.status === 401) {
+        if (offlineReady) {
+          setLocalAccessReason('network-unavailable');
+          setLocalDataAvailable(true);
           setStartup('ready');
           return;
         }
@@ -85,6 +98,9 @@ export function App() {
     setStartupError(null);
     try {
       await zeroKnowledge.prepare(session);
+      setLocalAccessReason(null);
+      setLocalDataAvailable(false);
+      setUsingExpiredSessionCache(false);
       setStartup('ready');
     } catch (error) {
       setStartupError(describeStartupFailure(error));
@@ -93,8 +109,20 @@ export function App() {
   }, [zeroKnowledge]);
 
   const handleLoggedOut = useCallback(() => {
+    setLocalAccessReason(null);
+    setLocalDataAvailable(false);
+    setUsingExpiredSessionCache(false);
     setStartup('ready');
   }, []);
+
+  const handleReauthenticate = useCallback(async () => {
+    await zeroKnowledge.lock(false);
+    setUsingExpiredSessionCache(false);
+  }, [zeroKnowledge]);
+
+  const sessionRefreshRequired = startup === 'ready'
+    && localAccessReason === 'session-expired'
+    && !usingExpiredSessionCache;
 
   return (
     <>
@@ -110,10 +138,19 @@ export function App() {
           onRetry={() => void initialize()}
         />
       )}
-      {startup === 'ready' && securityPhase === 'unauthenticated' && (
+      {sessionRefreshRequired && (
+        <LoginScreen
+          onLoggedIn={handleLoggedIn}
+          reason="session-expired"
+          onUseLocalData={localDataAvailable
+            ? () => setUsingExpiredSessionCache(true)
+            : undefined}
+        />
+      )}
+      {startup === 'ready' && !sessionRefreshRequired && securityPhase === 'unauthenticated' && (
         <LoginScreen onLoggedIn={handleLoggedIn} />
       )}
-      {startup === 'ready' && (
+      {startup === 'ready' && !sessionRefreshRequired && (
         securityPhase === 'authenticated-locked' ||
         securityPhase === 'setup-required' ||
         securityPhase === 'unlocking' ||
@@ -122,11 +159,23 @@ export function App() {
         securityPhase === 'migration-required' ||
         securityPhase === 'rekey-blocked'
       ) && (
-        <SecurityGate phase={securityPhase} user={user} onLoggedOut={handleLoggedOut} />
+        <SecurityGate
+          phase={securityPhase}
+          user={user}
+          localAccessReason={localAccessReason}
+          onReauthenticate={() => void handleReauthenticate()}
+          onLoggedOut={handleLoggedOut}
+        />
       )}
-      {startup === 'ready' && user && (
+      {startup === 'ready' && !sessionRefreshRequired && user && (
         securityPhase === 'unlocked-online' || securityPhase === 'unlocked-offline'
-      ) && <Workspace onLoggedOut={handleLoggedOut} />}
+      ) && (
+        <Workspace
+          localAccessReason={localAccessReason}
+          onReauthenticate={() => void handleReauthenticate()}
+          onLoggedOut={handleLoggedOut}
+        />
+      )}
       <Toaster />
     </>
   );

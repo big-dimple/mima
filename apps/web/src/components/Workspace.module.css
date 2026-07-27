@@ -5,11 +5,34 @@
 }
 
 .offlineBanner {
+  min-height: 36px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
   background: var(--warn-weak);
   color: var(--warn);
   border-bottom: 1px solid var(--border);
   font-size: 13px;
   padding: 6px 16px;
+}
+
+.offlineBanner button {
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: 0 0 auto;
+  padding: 3px 8px;
+  border: 1px solid currentColor;
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+}
+
+.offlineBanner button:hover,
+.offlineBanner button:focus-visible {
+  background: var(--panel);
 }
 
 .panes {
