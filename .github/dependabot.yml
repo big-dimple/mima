@@ -8,14 +8,19 @@ updates:
       day: monday
       time: "02:00"
       timezone: Asia/Shanghai
-    open-pull-requests-limit: 10
+    open-pull-requests-limit: 4
     groups:
       production-dependencies:
+        applies-to: version-updates
         dependency-type: production
         update-types: [minor, patch]
       development-dependencies:
+        applies-to: version-updates
         dependency-type: development
         update-types: [minor, patch]
+    ignore:
+      - dependency-name: "*"
+        update-types: [version-update:semver-major]
 
   - package-ecosystem: github-actions
     directory: /
@@ -24,7 +29,10 @@ updates:
       day: monday
       time: "02:30"
       timezone: Asia/Shanghai
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 2
+    groups:
+      github-actions:
+        patterns: ["*"]
 
   - package-ecosystem: docker
     directory: /deploy
@@ -33,4 +41,10 @@ updates:
       day: monday
       time: "03:00"
       timezone: Asia/Shanghai
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 2
+    groups:
+      docker-images:
+        patterns: ["*"]
+    ignore:
+      - dependency-name: "*"
+        update-types: [version-update:semver-major]

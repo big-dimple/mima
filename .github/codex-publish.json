@@ -5,6 +5,11 @@
   "runtime": {
     "nodeMajor": 24
   },
+  "remoteHygiene": {
+    "maxOpenBotPullRequests": 5,
+    "maxUnassociatedBranches": 0,
+    "inspectBotChecks": true
+  },
   "gates": [
     {
       "name": "Mima public release gate",
