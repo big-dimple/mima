@@ -93,6 +93,7 @@ function testEnvironment(baseEnvironment) {
   process.stdout.write('[gate] WSL-stable PostgreSQL and IPv6 loopback test networking enabled\n');
   return {
     ...baseEnvironment,
+    MIMA_INTEGRATION_API_HOST: process.env.MIMA_INTEGRATION_API_HOST ?? '::1',
     MIMA_E2E_API_HOST: process.env.MIMA_E2E_API_HOST ?? '::1',
     MIMA_INTEGRATION_DATABASE_URL: process.env.MIMA_INTEGRATION_DATABASE_URL
       ?? `postgres://mima:mima_dev_pw@${containerAddress}:5432/mima`,

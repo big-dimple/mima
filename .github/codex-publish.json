@@ -6,7 +6,7 @@
     "nodeMajor": 24
   },
   "remoteHygiene": {
-    "maxOpenBotPullRequests": 5,
+    "maxOpenBotPullRequests": 0,
     "maxUnassociatedBranches": 0,
     "inspectBotChecks": true
   },
