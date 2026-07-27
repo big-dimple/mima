@@ -14,7 +14,7 @@
     "@mima/domain": "workspace:*",
     "@mima/e2ee": "workspace:*",
     "@mima/ui-tokens": "workspace:*",
-    "lucide": "^0.525.0"
+    "lucide": "^0.577.0"
   },
   "devDependencies": {
     "@types/chrome": "^0.0.326",
