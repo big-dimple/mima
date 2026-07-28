@@ -18,6 +18,26 @@ export async function loginAndUnlock(
   username: keyof typeof MAIN_PASSWORDS,
   options: { skipGuide?: boolean; expectWorkspace?: boolean } = {},
 ): Promise<void> {
+  const apiEvidence: string[] = [];
+  const recordResponse = (response: import('@playwright/test').Response) => {
+    const url = new URL(response.url());
+    if (!url.pathname.startsWith('/api/')) return;
+    const retryAfter = response.headers()['retry-after'];
+    apiEvidence.push(
+      `${response.request().method()} ${url.pathname} -> ${response.status()}${retryAfter ? ` retry-after=${retryAfter}` : ''}`,
+    );
+  };
+  const recordFailure = (request: import('@playwright/test').Request) => {
+    const url = new URL(request.url());
+    if (!url.pathname.startsWith('/api/')) return;
+    apiEvidence.push(`${request.method()} ${url.pathname} -> ${request.failure()?.errorText ?? 'request failed'}`);
+  };
+  const recordPageError = (error: Error) => {
+    apiEvidence.push(`PAGEERROR ${error.name}: ${error.message}`);
+  };
+  page.on('response', recordResponse);
+  page.on('requestfailed', recordFailure);
+  page.on('pageerror', recordPageError);
   if (options.skipGuide !== false) {
     await page.addInitScript(() => {
       localStorage.setItem(
@@ -48,18 +68,18 @@ export async function loginAndUnlock(
     await loginInput.fill(username);
     await page.getByLabel('开发密码').fill('dev');
     await page.getByRole('button', { name: '登录', exact: true }).click();
-    await waitForVisibleState([workspace, setupHeading, lockedHeading], errorAlert, 30_000);
+    await waitForVisibleState([workspace, setupHeading, lockedHeading], errorAlert, 30_000, apiEvidence);
   }
 
   if (await setupHeading.isVisible()) {
     await page.locator('#new-main-password').fill(MAIN_PASSWORDS[username]);
     await page.locator('#confirm-main-password').fill(MAIN_PASSWORDS[username]);
     await page.getByRole('button', { name: '创建主密码并继续' }).click();
-    await waitForVisibleState([workspace, prepareHeading, rekeyHeading], errorAlert, 30_000);
+    await waitForVisibleState([workspace, prepareHeading, rekeyHeading], errorAlert, 30_000, apiEvidence);
   } else if (await lockedHeading.isVisible()) {
     await page.locator('#main-password').fill(MAIN_PASSWORDS[username]);
     await page.getByRole('button', { name: '解锁密码库', exact: true }).click();
-    await waitForVisibleState([workspace, prepareHeading, rekeyHeading], errorAlert, 30_000);
+    await waitForVisibleState([workspace, prepareHeading, rekeyHeading], errorAlert, 30_000, apiEvidence);
   }
 
   if (options.expectWorkspace !== false) {
@@ -67,6 +87,9 @@ export async function loginAndUnlock(
     await expect(workspace).toBeVisible({ timeout: 30_000 });
     await expect(page.getByText('在线', { exact: true })).toBeVisible({ timeout: 15_000 });
   }
+  page.off('response', recordResponse);
+  page.off('requestfailed', recordFailure);
+  page.off('pageerror', recordPageError);
 }
 
 async function waitForAnyVisible(locators: Locator[], timeout: number): Promise<void> {
@@ -78,13 +101,28 @@ async function waitForAnyVisible(locators: Locator[], timeout: number): Promise<
   }, { timeout }).toBe(true);
 }
 
-async function waitForVisibleState(success: Locator[], errorAlert: Locator, timeout: number): Promise<void> {
+async function waitForVisibleState(
+  success: Locator[],
+  errorAlert: Locator,
+  timeout: number,
+  apiEvidence: string[],
+): Promise<void> {
   try {
     await waitForAnyVisible(success, timeout);
   } catch (error) {
-    await throwVisibleError(errorAlert, success);
-    throw error;
+    try {
+      await throwVisibleError(errorAlert, success);
+    } catch (visibleError) {
+      throw withApiEvidence(visibleError, apiEvidence);
+    }
+    throw withApiEvidence(error, apiEvidence);
   }
+}
+
+function withApiEvidence(error: unknown, apiEvidence: string[]): Error {
+  const message = error instanceof Error ? error.message : String(error);
+  const recent = apiEvidence.slice(-30).join('\n') || '没有捕获到 API 请求';
+  return new Error(`${message}\n最近 API 证据：\n${recent}`, { cause: error });
 }
 
 async function throwVisibleError(errorAlert: Locator, success: Locator[]): Promise<void> {

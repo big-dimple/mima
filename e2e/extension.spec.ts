@@ -36,6 +36,7 @@ let panel: Page;
 let web: Page;
 let standbyWeb: Page;
 let staleWeb: Page;
+let extensionSigningKeyPrefix: string;
 
 test.beforeAll(async () => {
   userDataDir = mkdtempSync(join(tmpdir(), 'mima-extension-e2e-'));
@@ -153,6 +154,13 @@ test.describe.serial('浏览器扩展零知识链路', () => {
       message: '扩展应由已解锁工作台完成本机解锁；收到 error 时会在断言中保留页面原因',
       timeout: 20_000,
     }).toBe('ready');
+    extensionSigningKeyPrefix = await panel.evaluate(async () => {
+      const stored = await chrome.storage.local.get('lmE2eeDevice') as {
+        lmE2eeDevice?: { signingPublicKey?: string };
+      };
+      return stored.lmE2eeDevice?.signingPublicKey?.slice(0, 12) ?? '';
+    });
+    expect(extensionSigningKeyPrefix).toHaveLength(12);
     await panel.getByLabel('搜索已解锁条目').fill(EXTENSION_ITEM.title);
     await expect(panel.getByText(EXTENSION_ITEM.title, { exact: true })).toBeVisible();
     await expectNoHorizontalOverflow(panel);
@@ -475,7 +483,7 @@ test.describe.serial('浏览器扩展零知识链路', () => {
     await expect(panel.getByText('Bob Li（Ops）', { exact: true })).toBeVisible({ timeout: 15_000 });
     await web.getByRole('button', { name: '已授权设备' }).click();
     const deviceDialog = web.getByRole('dialog', { name: '已授权设备' });
-    const extensionDevice = deviceDialog.getByText('浏览器扩展（独立授权）', { exact: true })
+    const extensionDevice = deviceDialog.getByText(`${extensionSigningKeyPrefix}…`, { exact: true })
       .locator('..')
       .locator('..');
     await extensionDevice.getByRole('button', { name: '撤销浏览器扩展' }).click();
