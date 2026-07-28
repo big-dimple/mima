@@ -1,12 +1,14 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { CheckCircle2, ShieldCheck, UsersRound, XCircle } from 'lucide-react';
 import type {
   EnterpriseRecoveryCoverage,
   EnterpriseRecoveryKey,
   EnterpriseRecoveryReadiness,
+  EnterpriseRecoveryWorkspace,
 } from '@mima/contracts';
 import { useApp } from '../state/app-context.ts';
 import styles from './RecoveryDialog.module.css';
+import { useOptionalRecoveryWorkspace } from './RecoveryWorkspaceContext.tsx';
 
 interface SummaryState {
   status: 'not-ready' | 'incomplete' | 'ready';
@@ -19,9 +21,11 @@ interface SummaryState {
 
 export function RecoveryExecutiveSummary() {
   const { api } = useApp();
-  const [state, setState] = useState<SummaryState | null>(null);
+  const recoveryWorkspace = useOptionalRecoveryWorkspace();
+  const [standaloneState, setStandaloneState] = useState<SummaryState | null>(null);
 
   const load = useCallback(async () => {
+    if (recoveryWorkspace) return;
     try {
       const [keys, readiness] = await Promise.all([
         api.recoveryKeys(),
@@ -34,7 +38,7 @@ export function RecoveryExecutiveSummary() {
         ? await api.recoveryCoverage(key.id)
         : null;
       if (key?.status === 'active' && readiness.ready && coverage?.complete === true) {
-        setState({
+        setStandaloneState({
           status: 'ready',
           label: '可以恢复',
           nextAction: '当前已具备联合恢复能力。每次实际恢复仍需两位管理员确认和两份离线材料。',
@@ -56,10 +60,10 @@ export function RecoveryExecutiveSummary() {
                 : key.status === 'staged'
                   ? '全部准备已经完成，可以正式启用企业恢复。'
                   : '当前恢复材料已启用；请重新核对管理员和密码库覆盖状态。';
-        setState({ status: 'incomplete', label: '待完善', nextAction, key, readiness, coverage });
+        setStandaloneState({ status: 'incomplete', label: '待完善', nextAction, key, readiness, coverage });
         return;
       }
-      setState({
+      setStandaloneState({
         status: 'not-ready',
         label: '未准备',
         nextAction: '日常密码库不受影响。需要企业兜底时，从准备三位管理员开始。',
@@ -68,11 +72,12 @@ export function RecoveryExecutiveSummary() {
         coverage,
       });
     } catch {
-      setState(null);
+      setStandaloneState(null);
     }
-  }, [api]);
+  }, [api, recoveryWorkspace]);
 
   useEffect(() => {
+    if (recoveryWorkspace) return undefined;
     void load();
     const refresh = () => void load();
     window.addEventListener('mima:recovery-key-updated', refresh);
@@ -81,10 +86,16 @@ export function RecoveryExecutiveSummary() {
       window.removeEventListener('mima:recovery-key-updated', refresh);
       window.removeEventListener('mima:recovery-coverage-updated', refresh);
     };
-  }, [load]);
+  }, [load, recoveryWorkspace]);
+
+  const state = useMemo(() => (
+    recoveryWorkspace?.workspace
+      ? summaryFromWorkspace(recoveryWorkspace.workspace)
+      : standaloneState
+  ), [recoveryWorkspace?.workspace, standaloneState]);
 
   return (
-    <section className={styles.executiveSummary} data-state={state?.status ?? 'not-ready'} data-recovery-tour="recovery-overview">
+    <section className={styles.executiveSummary} data-state={state?.status ?? 'not-ready'}>
       <div className={styles.summaryHeading}>
         <div>
           <span className={styles.summaryEyebrow}>企业恢复保障状态</span>
@@ -122,4 +133,45 @@ export function RecoveryExecutiveSummary() {
       </div>
     </section>
   );
+}
+
+function summaryFromWorkspace(workspace: EnterpriseRecoveryWorkspace): SummaryState | null {
+  const readiness = workspace.readiness;
+  if (!readiness) return null;
+  const key = workspace.keys.find((entry) => entry.status === 'active')
+    ?? workspace.keys.find((entry) => entry.status === 'staged' || entry.status === 'pending')
+    ?? null;
+  const coverage = workspace.coverage;
+  if (key?.status === 'active' && readiness.ready && coverage?.complete === true) {
+    return {
+      status: 'ready',
+      label: '可以恢复',
+      nextAction: '当前已具备联合恢复能力。每次实际恢复仍需两位管理员确认和两份离线材料。',
+      key,
+      readiness,
+      coverage,
+    };
+  }
+  if (key || readiness.readyAdministratorCount > 0) {
+    const nextAction = !readiness.ready
+      ? `先补齐三位管理员，目前已准备 ${readiness.readyAdministratorCount}/${readiness.requiredAdministratorCount}。`
+      : !key
+        ? '下一步是在隔离设备生成三份恢复材料，并登记公开清单。'
+        : key.status === 'pending'
+          ? '下一步由第二位管理员核对并确认同一份公开清单。'
+          : coverage?.complete !== true
+            ? '下一步由密码库所有者为尚未覆盖的密码库添加恢复保护。'
+            : key.status === 'staged'
+              ? '全部准备已经完成，可以正式启用企业恢复。'
+              : '当前恢复材料已启用；请重新核对管理员和密码库覆盖状态。';
+    return { status: 'incomplete', label: '待完善', nextAction, key, readiness, coverage };
+  }
+  return {
+    status: 'not-ready',
+    label: '未准备',
+    nextAction: '日常密码库不受影响。需要企业兜底时，从准备三位管理员开始。',
+    key,
+    readiness,
+    coverage,
+  };
 }

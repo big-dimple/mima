@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type {
@@ -33,14 +33,23 @@ describe('enterprise recovery key manager', () => {
 
     expect(await screen.findByText(/企业可选的兜底能力/)).toBeVisible();
     expect(screen.getByText(/三份恢复材料不得上传、截图/)).toHaveTextContent('同一保管位置');
-    const textarea = screen.getByLabelText('公开清单 manifest.json');
+    const input = screen.getByLabelText('公开清单 manifest.json');
 
-    fireEvent.change(textarea, { target: { value: 'share-1-private-canary.mimashare' } });
-    await userEvent.click(screen.getByRole('button', { name: '登记公开清单' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('不要粘贴 .mimashare');
+    await userEvent.upload(input, new File(
+      ['share-1-private-canary.mimashare'],
+      'not-a-manifest.json',
+      { type: 'application/json' },
+    ));
+    expect(await screen.findByRole('alert')).toHaveTextContent('不是有效 JSON');
+    expect(screen.getByRole('button', { name: '登记公开清单' })).toBeDisabled();
     expect(api.registerRecoveryKey).not.toHaveBeenCalled();
 
-    fireEvent.change(textarea, { target: { value: JSON.stringify(publicManifest()) } });
+    await userEvent.upload(input, new File(
+      [JSON.stringify(publicManifest())],
+      'manifest.json',
+      { type: 'application/json' },
+    ));
+    expect(await screen.findByText('manifest.json')).toBeVisible();
     await userEvent.click(screen.getByRole('button', { name: '登记公开清单' }));
     await waitFor(() => expect(api.registerRecoveryKey).toHaveBeenCalledWith({
       ceremonyId: pending.ceremonyId,
@@ -50,7 +59,7 @@ describe('enterprise recovery key manager', () => {
       shareCount: 3,
       ceremonyEvidenceDigest: pending.ceremonyEvidenceDigest,
     }));
-    expect(textarea).toHaveValue('');
+    expect(input).toHaveValue('');
     expect(await screen.findByText('1/2')).toBeVisible();
     expect(screen.getByText('恢复材料摘要')).toBeVisible();
   });

@@ -29,6 +29,8 @@ import type {
   ApproveAccountCryptoResetRequest,
   ApproveEnterpriseRecoveryKeyRequest,
   CancelAccountCryptoResetRequest,
+  CancelEnterpriseRecoveryKeyRequest,
+  CancelEnterpriseRecoveryRequest,
   CreateAccountCryptoResetRequest,
   DirectoryResponse,
   UserSearchResponse,
@@ -50,6 +52,7 @@ import type {
   EnterpriseRecoveryCoverage,
   EnterpriseRecoveryReadiness,
   EnterpriseRecoveryRequest,
+  EnterpriseRecoveryWorkspace,
   CreateEnterpriseRecoveryRequest,
   DistributeEnterpriseRecoveryEnvelopeRequest,
   DistributeEnterpriseRecoveryEnvelopeResponse,
@@ -340,6 +343,9 @@ export class ApiClient {
   recoveryRequests(): Promise<EnterpriseRecoveryRequest[]> {
     return this.request('GET', '/api/v2/recovery/requests');
   }
+  recoveryWorkspace(): Promise<EnterpriseRecoveryWorkspace> {
+    return this.request('GET', '/api/v2/recovery/workspace');
+  }
   recoveryKey(): Promise<EnterpriseRecoveryKey | null> {
     return this.request('GET', '/api/v2/recovery/key');
   }
@@ -367,6 +373,12 @@ export class ApiClient {
   ): Promise<EnterpriseRecoveryKey> {
     return this.request('POST', `/api/v2/recovery/keys/${keyId}/activate`, request);
   }
+  cancelRecoveryKey(
+    keyId: string,
+    request: CancelEnterpriseRecoveryKeyRequest,
+  ): Promise<EnterpriseRecoveryKey> {
+    return this.request('POST', `/api/v2/recovery/keys/${keyId}/cancel`, request);
+  }
   distributeRecoveryEnvelope(
     keyId: string,
     vaultId: string,
@@ -385,6 +397,12 @@ export class ApiClient {
     request: ApproveEnterpriseRecoveryRequest,
   ): Promise<EnterpriseRecoveryRequest> {
     return this.request('POST', `/api/v2/recovery/requests/${requestId}/approve`, request);
+  }
+  cancelRecoveryRequest(
+    requestId: string,
+    request: CancelEnterpriseRecoveryRequest,
+  ): Promise<EnterpriseRecoveryRequest> {
+    return this.request('POST', `/api/v2/recovery/requests/${requestId}/cancel`, request);
   }
   completeRecovery(
     requestId: string,

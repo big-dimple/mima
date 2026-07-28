@@ -469,5 +469,6 @@ async function stageRecoveryKey(publicKey: string): Promise<EnterpriseRecoveryKe
     approvalUserIds: [adminOne.userId, adminTwo.userId],
     createdAt: active.createdAt.toISOString(),
     retiredAt: null,
+    cancelledAt: null,
   };
 }

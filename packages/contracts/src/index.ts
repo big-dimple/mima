@@ -214,11 +214,12 @@ export const EnterpriseRecoveryKeySchema = z.object({
   publicEncryptionKey: Base64UrlSchema,
   threshold: z.literal(2),
   shareCount: z.literal(3),
-  status: z.enum(['pending', 'staged', 'active', 'retired', 'compromised']),
+  status: z.enum(['pending', 'staged', 'active', 'retired', 'compromised', 'cancelled']),
   ceremonyEvidenceDigest: Base64UrlSchema,
-  approvalUserIds: z.array(z.string()).max(3),
+  approvalUserIds: z.array(z.string()).max(2),
   createdAt: z.string(),
   retiredAt: z.string().nullable(),
+  cancelledAt: z.string().nullable().optional(),
 });
 export type EnterpriseRecoveryKey = z.infer<typeof EnterpriseRecoveryKeySchema>;
 
@@ -269,6 +270,7 @@ export const EnterpriseRecoveryRequestSchema = z.object({
   id: z.string().uuid(),
   vaultId: z.string().uuid(),
   recoveryKeyId: z.string().uuid(),
+  keyEpoch: z.number().int().positive(),
   targetUserId: z.string(),
   targetDeviceId: z.string().uuid(),
   targetEncryptionPublicKey: Base64UrlSchema,
@@ -276,11 +278,14 @@ export const EnterpriseRecoveryRequestSchema = z.object({
   targetCapability: z.enum(['metadata', 'full']),
   accountResetRequestId: z.string().uuid().nullable(),
   requestDigest: Base64UrlSchema,
-  status: z.enum(['pending', 'approved', 'completed', 'cancelled', 'failed']),
-  approvalUserIds: z.array(z.string()).max(3),
+  status: z.enum(['pending', 'approved', 'completed', 'cancelled', 'expired', 'failed']),
+  approvalUserIds: z.array(z.string()).max(2),
   createdAt: z.string(),
   expiresAt: z.string(),
   completedAt: z.string().nullable(),
+  cancelledAt: z.string().nullable().optional(),
+  expiredAt: z.string().nullable().optional(),
+  lastErrorCode: z.string().nullable().optional(),
 });
 export type EnterpriseRecoveryRequest = z.infer<typeof EnterpriseRecoveryRequestSchema>;
 
@@ -296,6 +301,16 @@ export const EnterpriseRecoveryCandidateSchema = z.object({
   reason: z.literal('personal_owner_missing_current_full_envelope'),
 });
 export type EnterpriseRecoveryCandidate = z.infer<typeof EnterpriseRecoveryCandidateSchema>;
+
+export const EnterpriseRecoveryWorkspaceSchema = z.object({
+  refreshedAt: z.string(),
+  keys: z.array(EnterpriseRecoveryKeySchema),
+  readiness: EnterpriseRecoveryReadinessSchema.nullable(),
+  coverage: EnterpriseRecoveryCoverageSchema.nullable(),
+  requests: z.array(EnterpriseRecoveryRequestSchema),
+  candidates: z.array(EnterpriseRecoveryCandidateSchema),
+});
+export type EnterpriseRecoveryWorkspace = z.infer<typeof EnterpriseRecoveryWorkspaceSchema>;
 
 export const VaultCryptoStateSchema = z.object({
   vaultId: z.string().uuid(),
@@ -777,6 +792,7 @@ export const AccountCryptoResetStatusSchema = z.enum([
   'approved',
   'activated',
   'cancelled',
+  'expired',
   'failed',
 ]);
 export type AccountCryptoResetStatus = z.infer<typeof AccountCryptoResetStatusSchema>;
@@ -808,13 +824,15 @@ export const AccountCryptoResetRequestSchema = z.object({
   candidateDevice: AccountCryptoResetCandidateDeviceSchema,
   requestDigest: Base64UrlSchema,
   status: AccountCryptoResetStatusSchema,
-  approvalUserIds: z.array(z.string()).max(3),
+  approvalUserIds: z.array(z.string()).max(2),
   affectedVaultIds: z.array(z.string().uuid()),
   createdAt: z.string(),
   expiresAt: z.string(),
   approvedAt: z.string().nullable(),
   activatedAt: z.string().nullable(),
   cancelledAt: z.string().nullable(),
+  expiredAt: z.string().nullable().optional(),
+  lastErrorCode: z.string().nullable().optional(),
 });
 export type AccountCryptoResetRequest = z.infer<typeof AccountCryptoResetRequestSchema>;
 
@@ -1034,6 +1052,14 @@ export type ActivateEnterpriseRecoveryKeyRequest = z.infer<
   typeof ActivateEnterpriseRecoveryKeyRequestSchema
 >;
 
+export const CancelEnterpriseRecoveryKeyRequestSchema = z.object({
+  idempotencyKey: z.string().min(8).max(80),
+  ceremonyEvidenceDigest: Base64UrlSchema,
+});
+export type CancelEnterpriseRecoveryKeyRequest = z.infer<
+  typeof CancelEnterpriseRecoveryKeyRequestSchema
+>;
+
 export const CreateEnterpriseRecoveryRequestSchema = z.object({
   idempotencyKey: z.string().min(8).max(80),
   vaultId: z.string().uuid(),
@@ -1061,6 +1087,14 @@ export const ApproveEnterpriseRecoveryRequestSchema = z.object({
 });
 export type ApproveEnterpriseRecoveryRequest = z.infer<
   typeof ApproveEnterpriseRecoveryRequestSchema
+>;
+
+export const CancelEnterpriseRecoveryRequestSchema = z.object({
+  idempotencyKey: z.string().min(8).max(80),
+  requestDigest: Base64UrlSchema,
+});
+export type CancelEnterpriseRecoveryRequest = z.infer<
+  typeof CancelEnterpriseRecoveryRequestSchema
 >;
 
 export const CompleteEnterpriseRecoveryRequestSchema = z.object({

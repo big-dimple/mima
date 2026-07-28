@@ -28,10 +28,7 @@ ARG MIMA_EXTENSION_ID
 ENV NODE_ENV=production
 COPY --from=recovery-tool-build /app/apps/recovery-tool/dist/cli.js /tmp/recovery-tool/mima-recovery-tool.mjs
 COPY apps/recovery-tool/OFFLINE-USAGE.txt /tmp/recovery-tool/OFFLINE-USAGE.txt
-RUN apt-get update \
-  && apt-get install -y --no-install-recommends zip \
-  && rm -rf /var/lib/apt/lists/* \
-  && test -n "$MIMA_EXTENSION_PUBLIC_KEY" \
+RUN test -n "$MIMA_EXTENSION_PUBLIC_KEY" \
   && test -n "$MIMA_EXTENSION_ID" \
   && VITE_MIMA_EXTENSION_ID="$MIMA_EXTENSION_ID" pnpm --filter @mima/web build \
   && VITE_MIMA_API_BASE="$MIMA_EXTENSION_API_BASE" \
@@ -41,15 +38,13 @@ RUN apt-get update \
     --web-dir apps/web/dist \
     --extension-dir apps/extension/dist \
     --extension-api-base "$MIMA_EXTENSION_API_BASE" \
-  && mkdir -p apps/web/dist/downloads \
-  && cd apps/extension/dist \
-  && zip -q -r ../../web/dist/downloads/mima-extension-0.2.0.zip . \
-  && cd /tmp/recovery-tool \
-  && zip -q /app/apps/web/dist/downloads/mima-recovery-tool-0.2.0.zip \
-    mima-recovery-tool.mjs OFFLINE-USAGE.txt \
-  && cd /app/apps/web/dist/downloads \
-  && sha256sum mima-recovery-tool-0.2.0.zip \
-    > mima-recovery-tool-0.2.0.zip.sha256
+  && node scripts/package-release-downloads.mjs \
+    --prefix mima \
+    --version 0.2.0 \
+    --extension-dir apps/extension/dist \
+    --recovery-tool-file /tmp/recovery-tool/mima-recovery-tool.mjs \
+    --offline-usage-file /tmp/recovery-tool/OFFLINE-USAGE.txt \
+    --output-dir apps/web/dist/downloads
 
 FROM workspace AS api-build
 ENV NODE_ENV=production
@@ -91,7 +86,7 @@ LABEL org.opencontainers.image.version="0.2.0" \
   mima.e2ee-protocol="lm-e2ee-v1" \
   mima.component="api" \
   mima.runtime="strict-api" \
-  mima.schema-head="0021_team_vault_projects" \
+  mima.schema-head="0023_enterprise_recovery_integrity" \
   mima.source-snapshot-sha256="${MIMA_SOURCE_SNAPSHOT_SHA256}"
 ENV NODE_ENV=production
 WORKDIR /app
@@ -131,7 +126,7 @@ LABEL org.opencontainers.image.version="0.2.0" \
   mima.e2ee-protocol="lm-e2ee-v1" \
   mima.component="migration-worker" \
   mima.runtime="isolated-migration-worker" \
-  mima.schema-head="0021_team_vault_projects" \
+  mima.schema-head="0023_enterprise_recovery_integrity" \
   mima.source-snapshot-sha256="${MIMA_SOURCE_SNAPSHOT_SHA256}"
 ENV NODE_ENV=production
 WORKDIR /app

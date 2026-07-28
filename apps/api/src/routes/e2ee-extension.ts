@@ -52,10 +52,10 @@ import {
   decodeBase64Url,
   encodeBase64Url,
   encodeCipherBlob,
+  envelopeSignerProfiles,
   equalDigest,
   getActiveDevice,
   getCryptoProfile,
-  listPublicCryptoProfiles,
   parseDeviceCertificate,
   publicKeyFingerprint,
   sha256,
@@ -425,6 +425,9 @@ export function registerE2eeExtensionRoutes(app: FastifyInstance): void {
             ciphertext,
             ciphertextDigest: sha256(ciphertext),
             senderDeviceId: approver.id,
+            signerUserId: req.user.id,
+            signerKeyVersion: currentProfile.cryptoGeneration,
+            signerPublicKey: currentProfile.publicSigningKey,
             signature: decodeBase64Url(envelope.signature, { exact: 64 }),
             status: 'active',
             activatedAt: now,
@@ -818,7 +821,7 @@ async function buildExtensionBootstrap(
     const state = stateByVault.get(header.vaultId);
     return state?.activeEpoch === header.keyEpoch && state.activeHeaderVersion === header.headerVersion;
   });
-  const signerProfiles = await listPublicCryptoProfiles(db, ownEnvelopes.map(({ sender }) => sender.userId));
+  const signerProfiles = envelopeSignerProfiles(ownEnvelopes);
   const revealVaultIds = new Set(accesses.filter((access) => canReveal(access.role)).map((access) => access.vault.id));
   const contents = [];
   for (const { item } of currentItems) {
@@ -840,6 +843,7 @@ async function buildExtensionBootstrap(
       ceremonyEvidenceDigest: encodeBase64Url(recoveryRows[0].ceremonyEvidenceDigest),
       createdAt: recoveryRows[0].createdAt.toISOString(),
       retiredAt: recoveryRows[0].retiredAt?.toISOString() ?? null,
+      cancelledAt: recoveryRows[0].cancelledAt?.toISOString() ?? null,
     } : null,
     devices: devices.map(toCryptoDeviceDto),
     vaults: accesses.map(({ vault }) => {

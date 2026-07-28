@@ -4,11 +4,13 @@ import type {
   EnterpriseRecoveryCoverage,
   EnterpriseRecoveryKey,
   EnterpriseRecoveryVaultCoverage,
+  EnterpriseRecoveryWorkspace,
 } from '@mima/contracts';
 import { useApp, useMeta } from '../state/app-context.ts';
 import { useUi } from '../state/ui-store.ts';
 import { ErrorState, LoadingState } from './AsyncState.tsx';
 import styles from './RecoveryDialog.module.css';
+import { useOptionalRecoveryWorkspace } from './RecoveryWorkspaceContext.tsx';
 
 interface CoverageState {
   key: EnterpriseRecoveryKey;
@@ -20,18 +22,28 @@ interface VaultResult {
   message: string;
 }
 
-export function RecoveryCoverageTasks() {
+export function RecoveryCoverageTasks({ showEmpty = false }: { showEmpty?: boolean } = {}) {
   const { api, zeroKnowledge } = useApp();
   const vaults = useMeta((state) => state.vaults);
   const locked = useMeta((state) => state.locked);
   const selectedVaultId = useUi((state) => state.selectedVaultId);
-  const [state, setState] = useState<CoverageState | null | undefined>(undefined);
-  const [error, setError] = useState<string | null>(null);
+  const recoveryWorkspace = useOptionalRecoveryWorkspace();
+  const refreshWorkspace = recoveryWorkspace?.refresh;
+  const hasWorkspace = recoveryWorkspace !== null;
+  const [standaloneState, setStandaloneState] = useState<CoverageState | null | undefined>(undefined);
+  const [standaloneError, setStandaloneError] = useState<string | null>(null);
   const [busyVaultIds, setBusyVaultIds] = useState<Set<string>>(new Set());
   const [batchBusy, setBatchBusy] = useState(false);
   const [results, setResults] = useState<Record<string, VaultResult>>({});
   const controllers = useRef(new Set<AbortController>());
   const mounted = useRef(true);
+  const state = recoveryWorkspace
+    ? coverageStateFromWorkspace(recoveryWorkspace.workspace)
+    : standaloneState;
+  const error = recoveryWorkspace?.error ?? standaloneError;
+  const loading = recoveryWorkspace
+    ? recoveryWorkspace.loading && !recoveryWorkspace.workspace
+    : standaloneState === undefined;
 
   const abortTasks = useCallback(() => {
     controllers.current.forEach((controller) => controller.abort());
@@ -39,33 +51,37 @@ export function RecoveryCoverageTasks() {
   }, []);
 
   const load = useCallback(async (showLoading = true) => {
-    if (showLoading) setState(undefined);
-    setError(null);
+    if (refreshWorkspace) {
+      await refreshWorkspace({ showLoading });
+      return;
+    }
+    if (showLoading) setStandaloneState(undefined);
+    setStandaloneError(null);
     try {
       const keys = await api.recoveryKeys();
       const key = keys.find((entry) => entry.status === 'staged');
       if (!key) {
-        if (mounted.current) setState(null);
+        if (mounted.current) setStandaloneState(null);
         return;
       }
       const coverage = await api.recoveryCoverage(key.id);
-      if (mounted.current) setState({ key, coverage });
+      if (mounted.current) setStandaloneState({ key, coverage });
     } catch (caught) {
       if (mounted.current) {
-        setState(null);
-        setError(caught instanceof Error ? caught.message : '公司恢复保护任务加载失败');
+        setStandaloneState(null);
+        setStandaloneError(caught instanceof Error ? caught.message : '公司恢复保护任务加载失败');
       }
     }
-  }, [api]);
+  }, [api, refreshWorkspace]);
 
   useEffect(() => {
     mounted.current = true;
-    void load();
+    if (!hasWorkspace) void load();
     return () => {
       mounted.current = false;
       abortTasks();
     };
-  }, [abortTasks, load]);
+  }, [abortTasks, hasWorkspace, load]);
 
   useEffect(() => () => abortTasks(), [abortTasks, locked, selectedVaultId]);
 
@@ -140,14 +156,14 @@ export function RecoveryCoverageTasks() {
     }
   };
 
-  if (state === undefined) return <LoadingState label="正在检查你负责的密码库…" />;
+  if (loading) return <LoadingState label="正在检查你负责的密码库…" />;
   if (error) return <ErrorState message={error} onRetry={() => void load()} />;
-  if (!state) return null;
+  if (!state) return showEmpty ? <div className={styles.empty}>当前没有需要添加恢复保护的密码库。</div> : null;
   const pending = state.coverage.vaults.filter((vault) => vault.canManage && !vault.covered);
-  if (pending.length === 0) return null;
+  if (pending.length === 0) return showEmpty ? <div className={styles.empty}>你负责的密码库均已完成恢复保护，没有待办。</div> : null;
 
   return (
-    <section className={styles.coverageTasks} aria-labelledby="owner-coverage-heading" data-recovery-tour="recovery-coverage">
+    <section className={styles.coverageTasks} aria-labelledby="owner-coverage-heading">
       <div className={styles.sectionHeading}>
         <div>
           <h2 id="owner-coverage-heading"><ShieldPlus size={16} aria-hidden />添加公司恢复保护</h2>
@@ -190,4 +206,12 @@ export function RecoveryCoverageTasks() {
       </ul>
     </section>
   );
+}
+
+function coverageStateFromWorkspace(
+  workspace: EnterpriseRecoveryWorkspace | null,
+): CoverageState | null {
+  if (!workspace?.coverage) return null;
+  const key = workspace.keys.find((entry) => entry.id === workspace.coverage?.keyId);
+  return key ? { key, coverage: workspace.coverage } : null;
 }

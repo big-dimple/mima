@@ -273,7 +273,7 @@ describe('legacy migration security gate', () => {
     expect(await screen.findByRole('heading', { name: '部分密码库需要企业恢复' })).toBeInTheDocument();
     expect(screen.getByText(/系统不会返回对应条目/)).toBeInTheDocument();
     expect(screen.getByText(/仍需两名不同管理员审批/)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '刷新' })).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: '刷新状态' }).length).toBeGreaterThan(0);
     expect(screen.queryByRole('button', { name: '完成安全更新' })).not.toBeInTheDocument();
     expect(completeVaultRekey).not.toHaveBeenCalled();
   });

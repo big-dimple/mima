@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import pg from 'pg';
 import { afterAll, describe, expect, it } from 'vitest';
@@ -18,7 +18,7 @@ describe('versioned migration upgrade acceptance', () => {
     await resetDatabase(comparisonDatabaseName);
   });
 
-  it('preserves frozen 0001 data through 0021 and an idempotent replay', async () => {
+  it('preserves frozen 0001 data through 0023 and an idempotent replay', async () => {
     await resetDatabase();
     await createDatabase();
 
@@ -126,9 +126,25 @@ describe('versioned migration upgrade acceptance', () => {
         SELECT count(*)::int AS count, max(id) AS head FROM schema_migrations
       `);
       expect(migrations.rows[0]).toEqual({
-        count: 21,
-        head: '0021_team_vault_projects',
+        count: 23,
+        head: '0023_enterprise_recovery_integrity',
       });
+
+      await verification.query(`
+        UPDATE users
+        SET groups = '["group:default/platform"]'::jsonb
+        WHERE id = 'migration-user-1'
+      `);
+      expect((await verification.query<{ is_admin: boolean }>(`
+        SELECT mima_is_platform_admin('migration-user-1') AS is_admin
+      `)).rows[0]?.is_admin).toBe(false);
+      await verification.query(`
+        INSERT INTO system_role_assignments (user_id, role, assigned_by)
+        VALUES ('migration-user-1', 'platform-admin', 'migration-test')
+      `);
+      expect((await verification.query<{ is_admin: boolean }>(`
+        SELECT mima_is_platform_admin('migration-user-1') AS is_admin
+      `)).rows[0]?.is_admin).toBe(true);
     } finally {
       await verification.end();
     }
@@ -315,7 +331,263 @@ describe('versioned migration upgrade acceptance', () => {
       await client.end();
     }
   });
+
+  it('preserves the full logical digest when 0023 upgrades populated recovery state', async () => {
+    await resetDatabase();
+    await createDatabase();
+    const client = new pg.Client({ connectionString: databaseUrl });
+    await client.connect();
+    try {
+      await applyMigrationsThrough(client, '0022_explicit_platform_admin_only');
+      await seedRecoveryIntegrityUpgradeFixture(client);
+      const before = await logicalV4Digest(client, '0023_enterprise_recovery_integrity');
+
+      await runMigrations(databaseUrl);
+
+      expect(await logicalV4Digest(client, '0023_enterprise_recovery_integrity')).toBe(before);
+      expect((await client.query<{
+        status: string;
+        key_epoch: number;
+        cancelled_at: Date | null;
+        last_error_code: string | null;
+      }>(`
+        SELECT status, key_epoch, cancelled_at, last_error_code
+        FROM enterprise_recovery_requests
+        WHERE id = '50000000-0000-4000-8000-000000000001'
+      `)).rows[0]).toEqual({
+        status: 'cancelled',
+        key_epoch: 1,
+        cancelled_at: null,
+        last_error_code: 'upgrade_missing_key_epoch',
+      });
+      expect((await client.query<{ id: string; status: string; cancelled_at: Date | null }>(`
+        SELECT id::text, status, cancelled_at
+        FROM enterprise_recovery_keys
+        WHERE id IN (
+          '30000000-0000-4000-8000-000000000002',
+          '30000000-0000-4000-8000-000000000003'
+        )
+        ORDER BY id
+      `)).rows).toEqual([
+        { id: '30000000-0000-4000-8000-000000000002', status: 'cancelled', cancelled_at: null },
+        { id: '30000000-0000-4000-8000-000000000003', status: 'pending', cancelled_at: null },
+      ]);
+      expect((await client.query<{
+        command_name: string;
+        request_digest: Buffer | null;
+        signer_user_id: string | null;
+        expired_at: Date | null;
+      }>(`
+        SELECT
+          (SELECT command_name FROM command_dedup WHERE idempotency_key = 'upgrade-command') AS command_name,
+          (SELECT request_digest FROM command_dedup WHERE idempotency_key = 'upgrade-command') AS request_digest,
+          (SELECT signer_user_id FROM vault_key_envelopes WHERE id = '40000000-0000-4000-8000-000000000001') AS signer_user_id,
+          (SELECT expired_at FROM account_crypto_reset_requests WHERE id = '60000000-0000-4000-8000-000000000001') AS expired_at
+      `)).rows[0]).toEqual({
+        command_name: 'legacy',
+        request_digest: null,
+        signer_user_id: null,
+        expired_at: null,
+      });
+
+      await client.query(`
+        UPDATE command_dedup
+        SET request_digest = decode(repeat('ab', 32), 'hex')
+        WHERE idempotency_key = 'upgrade-command'
+      `);
+      expect(await logicalV4Digest(client, '0023_enterprise_recovery_integrity')).not.toBe(before);
+    } finally {
+      await client.end();
+    }
+  });
 });
+
+async function applyMigrationsThrough(client: pg.Client, head: string): Promise<void> {
+  const directory = resolve(import.meta.dirname, '../../src/db');
+  const migrations = [
+    { id: '0001_base_schema', path: resolve(directory, 'schema.sql') },
+    ...readdirSync(resolve(directory, 'migrations'))
+      .filter((name) => /^\d+_[a-z0-9_]+\.sql$/.test(name))
+      .sort()
+      .map((name) => ({ id: name.replace(/\.sql$/, ''), path: resolve(directory, 'migrations', name) })),
+  ];
+  await client.query(`
+    CREATE TABLE schema_migrations (
+      id text PRIMARY KEY,
+      checksum text NOT NULL,
+      applied_at timestamptz NOT NULL DEFAULT now()
+    )
+  `);
+  for (const migration of migrations) {
+    const source = readFileSync(migration.path, 'utf8');
+    const checksum = createHash('sha256').update(source).digest('hex');
+    await client.query('BEGIN');
+    try {
+      await client.query(source);
+      await client.query(
+        'INSERT INTO schema_migrations (id, checksum) VALUES ($1, $2)',
+        [migration.id, checksum],
+      );
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    }
+    if (migration.id === head) return;
+  }
+  throw new Error(`migration head not found: ${head}`);
+}
+
+async function seedRecoveryIntegrityUpgradeFixture(client: pg.Client): Promise<void> {
+  await client.query(`
+    INSERT INTO users (id, username, display_name, email, source, active) VALUES
+      ('upgrade-owner', 'upgrade-owner', 'Upgrade Owner', 'owner@example.test', 'oidc', true),
+      ('upgrade-target', 'upgrade-target', 'Upgrade Target', 'target@example.test', 'oidc', true),
+      ('upgrade-admin', 'upgrade-admin', 'Upgrade Admin', 'admin@example.test', 'oidc', true);
+
+    INSERT INTO system_role_assignments (user_id, role, assigned_by)
+    VALUES ('upgrade-admin', 'platform-admin', 'migration-test');
+
+    INSERT INTO user_crypto_profiles (
+      user_id, profile_version, crypto_generation, kdf_salt,
+      wrapped_account_key_ciphertext, wrapped_account_key_nonce,
+      public_encryption_key, public_signing_key, signing_key_fingerprint
+    ) VALUES
+      (
+        'upgrade-owner', 1, 1, decode(repeat('01', 16), 'hex'),
+        decode(repeat('02', 96), 'hex'), decode(repeat('03', 24), 'hex'),
+        decode(repeat('04', 32), 'hex'), decode(repeat('05', 32), 'hex'), 'upgrade-owner-profile'
+      ),
+      (
+        'upgrade-target', 1, 1, decode(repeat('11', 16), 'hex'),
+        decode(repeat('12', 96), 'hex'), decode(repeat('13', 24), 'hex'),
+        decode(repeat('14', 32), 'hex'), decode(repeat('15', 32), 'hex'), 'upgrade-target-profile'
+      );
+
+    INSERT INTO user_devices (
+      id, user_id, device_type, status, trust_method, device_generation,
+      key_fingerprint, public_encryption_key, public_signing_key,
+      certificate_payload, certificate_signature, activated_at
+    ) VALUES
+      (
+        '10000000-0000-4000-8000-000000000001', 'upgrade-owner', 'web', 'active',
+        'master_password', 1, 'upgrade-owner-device', decode(repeat('21', 32), 'hex'),
+        decode(repeat('22', 32), 'hex'), decode(repeat('23', 96), 'hex'),
+        decode(repeat('24', 64), 'hex'), '2026-01-01T00:00:00Z'
+      ),
+      (
+        '10000000-0000-4000-8000-000000000002', 'upgrade-target', 'web', 'active',
+        'master_password', 1, 'upgrade-target-device', decode(repeat('31', 32), 'hex'),
+        decode(repeat('32', 32), 'hex'), decode(repeat('33', 96), 'hex'),
+        decode(repeat('34', 64), 'hex'), '2026-01-01T00:00:00Z'
+      );
+
+    INSERT INTO vaults (id, kind, name, owner_user_id)
+    VALUES ('20000000-0000-4000-8000-000000000001', 'team', '', NULL);
+    INSERT INTO vault_memberships (vault_id, subject_kind, subject_id, role) VALUES
+      ('20000000-0000-4000-8000-000000000001', 'user', 'upgrade-owner', 'owner'),
+      ('20000000-0000-4000-8000-000000000001', 'user', 'upgrade-target', 'viewer');
+
+    INSERT INTO enterprise_recovery_keys (
+      id, ceremony_id, key_fingerprint, public_encryption_key, threshold, share_count,
+      status, ceremony_evidence_digest, created_by_user_id, created_at
+    ) VALUES
+      (
+        '30000000-0000-4000-8000-000000000001', 'upgrade-active', 'upgrade-active-key',
+        decode(repeat('41', 32), 'hex'), 2, 3, 'active', decode(repeat('42', 32), 'hex'),
+        'upgrade-admin', '2026-01-01T00:00:00Z'
+      ),
+      (
+        '30000000-0000-4000-8000-000000000002', 'upgrade-draft-old', 'upgrade-draft-old-key',
+        decode(repeat('43', 32), 'hex'), 2, 3, 'pending', decode(repeat('44', 32), 'hex'),
+        'upgrade-admin', '2026-01-02T00:00:00Z'
+      ),
+      (
+        '30000000-0000-4000-8000-000000000003', 'upgrade-draft-new', 'upgrade-draft-new-key',
+        decode(repeat('45', 32), 'hex'), 2, 3, 'pending', decode(repeat('46', 32), 'hex'),
+        'upgrade-admin', '2026-01-03T00:00:00Z'
+      );
+
+    INSERT INTO vault_key_epochs (
+      vault_id, epoch, previous_epoch, status, reason,
+      metadata_key_commitment, content_key_commitment, recipient_set_digest,
+      created_by_user_id, created_by_device_id, activated_at
+    ) VALUES (
+      '20000000-0000-4000-8000-000000000001', 1, NULL, 'active', 'initial',
+      decode(repeat('51', 32), 'hex'), decode(repeat('52', 32), 'hex'),
+      decode(repeat('53', 32), 'hex'), 'upgrade-owner',
+      '10000000-0000-4000-8000-000000000001', '2026-01-01T00:00:00Z'
+    );
+    INSERT INTO encrypted_vault_headers (
+      id, vault_id, header_version, key_epoch, schema_version,
+      ciphertext, nonce, ciphertext_digest, created_by_device_id, signature, created_at
+    ) VALUES (
+      '35000000-0000-4000-8000-000000000001',
+      '20000000-0000-4000-8000-000000000001', 1, 1, 3,
+      decode(repeat('54', 64), 'hex'), decode(repeat('55', 24), 'hex'),
+      decode(repeat('56', 32), 'hex'), '10000000-0000-4000-8000-000000000001',
+      decode(repeat('57', 64), 'hex'), '2026-01-01T00:00:00Z'
+    );
+    INSERT INTO vault_key_envelopes (
+      id, vault_id, key_epoch, recipient_kind, access_scope,
+      recipient_recovery_key_id, recipient_key_fingerprint,
+      authorization_kind, authorization_ref, envelope_version,
+      ciphertext, ciphertext_digest, sender_device_id, signature,
+      status, activated_at, created_at
+    ) VALUES (
+      '40000000-0000-4000-8000-000000000001',
+      '20000000-0000-4000-8000-000000000001', 1, 'enterprise_recovery', 'recovery',
+      '30000000-0000-4000-8000-000000000001', 'upgrade-active-key',
+      'recovery', 'upgrade-active', 1, decode(repeat('61', 96), 'hex'),
+      decode(repeat('62', 32), 'hex'), '10000000-0000-4000-8000-000000000001',
+      decode(repeat('63', 64), 'hex'), 'active', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z'
+    );
+    UPDATE vault_crypto_states
+    SET storage_mode = 'e2ee', active_epoch = 1, active_header_version = 1,
+        row_version = 2, cutover_at = '2026-01-01T00:00:00Z',
+        legacy_read_disabled_at = '2026-01-01T00:00:00Z'
+    WHERE vault_id = '20000000-0000-4000-8000-000000000001';
+
+    INSERT INTO enterprise_recovery_requests (
+      id, vault_id, recovery_key_id, target_user_id, target_device_id,
+      target_encryption_public_key, target_key_version, target_capability,
+      reason, request_digest, status, created_by_user_id, created_at, expires_at
+    ) VALUES (
+      '50000000-0000-4000-8000-000000000001',
+      '20000000-0000-4000-8000-000000000001',
+      '30000000-0000-4000-8000-000000000001', 'upgrade-target',
+      '10000000-0000-4000-8000-000000000002', decode(repeat('14', 32), 'hex'),
+      1, 'full', 'lost_all_devices', decode(repeat('71', 32), 'hex'), 'pending',
+      'upgrade-admin', '2026-01-04T00:00:00Z', '2126-01-04T00:00:00Z'
+    );
+
+    INSERT INTO account_crypto_reset_requests (
+      id, target_user_id, expected_profile_version, expected_crypto_generation,
+      new_crypto_generation, kdf_memory_kib, kdf_iterations, kdf_parallelism,
+      kdf_salt, wrapped_account_key_ciphertext, wrapped_account_key_nonce,
+      public_encryption_key, public_signing_key, signing_key_fingerprint,
+      candidate_device_id, candidate_device_type,
+      candidate_device_encryption_public_key, candidate_device_signing_public_key,
+      candidate_device_key_fingerprint, candidate_device_certificate_payload,
+      candidate_device_certificate_signature, candidate_user_proof,
+      request_digest, status, created_by_user_id, created_at, expires_at
+    ) VALUES (
+      '60000000-0000-4000-8000-000000000001', 'upgrade-target', 1, 1, 2,
+      65536, 3, 1, decode(repeat('81', 16), 'hex'), decode(repeat('82', 96), 'hex'),
+      decode(repeat('83', 24), 'hex'), decode(repeat('84', 32), 'hex'),
+      decode(repeat('85', 32), 'hex'), 'upgrade-reset-profile',
+      '70000000-0000-4000-8000-000000000001', 'web',
+      decode(repeat('86', 32), 'hex'), decode(repeat('87', 32), 'hex'),
+      'upgrade-reset-device', decode(repeat('88', 96), 'hex'),
+      decode(repeat('89', 64), 'hex'), decode(repeat('8a', 64), 'hex'),
+      decode(repeat('8b', 32), 'hex'), 'pending', 'upgrade-target',
+      '2026-01-04T00:00:00Z', '2126-01-04T00:00:00Z'
+    );
+
+    INSERT INTO command_dedup (idempotency_key, user_id, status_code, response, created_at)
+    VALUES ('upgrade-command', 'upgrade-owner', 200, '{"ok":true}'::jsonb, '2026-01-04T00:00:00Z');
+  `);
+}
 
 async function seedFrozenBaseline(client: pg.Client): Promise<void> {
   await client.query(`
@@ -497,7 +769,10 @@ async function resetDatabase(name = databaseName): Promise<void> {
   }
 }
 
-async function logicalV4Digest(client: pg.Client): Promise<string> {
+async function logicalV4Digest(
+  client: pg.Client,
+  excludedMigrationId = '0018_extension_session_unlock_challenges',
+): Promise<string> {
   const extensionSessionColumn = (await client.query<{ exists: boolean }>(`
     SELECT EXISTS (
       SELECT 1 FROM information_schema.columns
@@ -505,6 +780,15 @@ async function logicalV4Digest(client: pg.Client): Promise<string> {
         AND table_name = 'session_unlock_challenges'
         AND column_name = 'extension_session_id'
     ) AS exists
+  `)).rows[0]?.exists ?? false;
+  const recoveryIntegrityColumns = (await client.query<{ exists: boolean }>(`
+    SELECT
+      EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'command_dedup' AND column_name = 'command_name')
+      AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'vault_key_envelopes' AND column_name = 'signer_user_id')
+      AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'enterprise_recovery_keys' AND column_name = 'cancelled_at')
+      AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'enterprise_recovery_requests' AND column_name = 'key_epoch')
+      AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'account_crypto_reset_requests' AND column_name = 'expired_at')
+      AS exists
   `)).rows[0]?.exists ?? false;
   const tables = await client.query<{ qualified: string }>(`
     SELECT format('%I.%I', namespace.nspname, relation.relname) AS qualified
@@ -516,27 +800,107 @@ async function logicalV4Digest(client: pg.Client): Promise<string> {
   `);
   const outer = createHash('sha256');
   for (const { qualified } of tables.rows) {
-    const normalizedExpressions: Record<string, string> = {
-      'public.users': "to_jsonb(value) - 'directory_synced_at' - 'updated_at'",
-      'public.user_identities': "to_jsonb(value) - 'updated_at'",
-      'public.directory_groups': "to_jsonb(value) - 'synced_at'",
-      'public.directory_sync_state': "to_jsonb(value) - 'last_attempt_at' - 'last_success_at'",
-      'public.custom_groups': "to_jsonb(value) - 'updated_at'",
-      'public.schema_migrations': "to_jsonb(value) - 'applied_at'",
-      'public.vault_crypto_states': "to_jsonb(value) - 'created_at' - 'updated_at'",
-      ...(extensionSessionColumn ? {
-        'public.session_unlock_challenges': "CASE WHEN value.extension_session_id IS NULL THEN to_jsonb(value) - 'extension_session_id' ELSE to_jsonb(value) END",
-      } : {}),
-    };
-    const expression = normalizedExpressions[qualified] ?? 'to_jsonb(value)';
-    const rows = await client.query<{ value: string }>(`
-      SELECT (${expression})::text AS value
-      FROM ${qualified} value
-      ${qualified === 'public.schema_migrations'
-        ? "WHERE id <> '0018_extension_session_unlock_challenges'"
-        : ''}
-      ORDER BY ((${expression})::text) COLLATE "C"
-    `);
+    let query: string;
+    if (!recoveryIntegrityColumns && qualified === 'public.command_dedup') {
+      query = `
+        SELECT row_data::text AS value
+        FROM (
+          SELECT to_jsonb(value)
+            || jsonb_build_object('command_name', 'legacy', 'request_digest', NULL) AS row_data
+          FROM ${qualified} value
+        ) normalized
+        ORDER BY row_data::text COLLATE "C"
+      `;
+    } else if (!recoveryIntegrityColumns && qualified === 'public.vault_key_envelopes') {
+      query = `
+        SELECT row_data::text AS value
+        FROM (
+          SELECT to_jsonb(value) || jsonb_build_object(
+            'signer_user_id', NULL,
+            'signer_key_version', NULL,
+            'signer_public_key', NULL
+          ) AS row_data
+          FROM ${qualified} value
+        ) normalized
+        ORDER BY row_data::text COLLATE "C"
+      `;
+    } else if (!recoveryIntegrityColumns && qualified === 'public.enterprise_recovery_keys') {
+      query = `
+        WITH ranked AS (
+          SELECT value.*,
+            CASE WHEN status IN ('pending', 'staged') THEN row_number() OVER (
+              PARTITION BY (status IN ('pending', 'staged'))
+              ORDER BY CASE status WHEN 'staged' THEN 0 ELSE 1 END, created_at DESC, id DESC
+            ) END AS draft_rank
+          FROM ${qualified} value
+        )
+        SELECT row_data::text AS value
+        FROM (
+          SELECT (to_jsonb(ranked) - 'draft_rank') || jsonb_build_object(
+            'cancelled_at', NULL,
+            'status', CASE WHEN draft_rank > 1 THEN 'cancelled' ELSE status END
+          ) AS row_data
+          FROM ranked
+        ) normalized
+        ORDER BY row_data::text COLLATE "C"
+      `;
+    } else if (!recoveryIntegrityColumns && qualified === 'public.enterprise_recovery_requests') {
+      query = `
+        SELECT row_data::text AS value
+        FROM (
+          SELECT to_jsonb(request) || jsonb_build_object(
+            'key_epoch', COALESCE(
+              (SELECT envelope.key_epoch FROM vault_key_envelopes envelope
+               WHERE envelope.id = request.completed_envelope_id),
+              (SELECT crypto_state.active_epoch FROM vault_crypto_states crypto_state
+               WHERE crypto_state.vault_id = request.vault_id)
+            ),
+            'expired_at', NULL,
+            'status', CASE WHEN request.status IN ('pending', 'approved')
+              THEN 'cancelled' ELSE request.status END,
+            'cancelled_at', CASE WHEN request.status IN ('pending', 'approved')
+              THEN NULL ELSE request.cancelled_at END,
+            'last_error_code', CASE WHEN request.status IN ('pending', 'approved')
+              THEN 'upgrade_missing_key_epoch' ELSE request.last_error_code END
+          ) AS row_data
+          FROM ${qualified} request
+        ) normalized
+        ORDER BY row_data::text COLLATE "C"
+      `;
+    } else if (!recoveryIntegrityColumns && qualified === 'public.account_crypto_reset_requests') {
+      query = `
+        SELECT row_data::text AS value
+        FROM (
+          SELECT to_jsonb(value) || jsonb_build_object('expired_at', NULL) AS row_data
+          FROM ${qualified} value
+        ) normalized
+        ORDER BY row_data::text COLLATE "C"
+      `;
+    } else {
+      const normalizedExpressions: Record<string, string> = {
+        'public.users': "to_jsonb(value) - 'directory_synced_at' - 'updated_at'",
+        'public.user_identities': "to_jsonb(value) - 'updated_at'",
+        'public.directory_groups': "to_jsonb(value) - 'synced_at'",
+        'public.directory_sync_state': "to_jsonb(value) - 'last_attempt_at' - 'last_success_at'",
+        'public.custom_groups': "to_jsonb(value) - 'updated_at'",
+        'public.schema_migrations': "to_jsonb(value) - 'applied_at'",
+        'public.vault_crypto_states': "to_jsonb(value) - 'created_at' - 'updated_at'",
+        ...(extensionSessionColumn ? {
+          'public.session_unlock_challenges': "CASE WHEN value.extension_session_id IS NULL THEN to_jsonb(value) - 'extension_session_id' ELSE to_jsonb(value) END",
+        } : {}),
+      };
+      const expression = normalizedExpressions[qualified] ?? 'to_jsonb(value)';
+      query = `
+        SELECT (${expression})::text AS value
+        FROM ${qualified} value
+        ${qualified === 'public.schema_migrations' ? 'WHERE id <> $1' : ''}
+        ORDER BY ((${expression})::text) COLLATE "C"
+      `;
+    }
+    const rows = await client.query<{ value: string }>(
+      query,
+      qualified === 'public.schema_migrations' ? [excludedMigrationId] : [],
+    );
     const tableHash = createHash('sha256');
     for (const row of rows.rows) tableHash.update(`${row.value}\n`);
     outer.update(`${qualified}=${tableHash.digest('hex')}\n`);

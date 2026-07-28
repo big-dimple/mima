@@ -41,6 +41,7 @@ let downgradedDeviceId: string;
 let reactivatedDeviceId: string;
 let recoveryKeyId: string;
 let recoveryKeyFingerprint: string;
+let ownerProfile: ReturnType<typeof profile>;
 
 beforeAll(async () => {
   app = await freshTestApp(TEST_DB_NAME);
@@ -53,7 +54,9 @@ beforeAll(async () => {
   retainedDeviceId = randomUUID();
   downgradedDeviceId = randomUUID();
   reactivatedDeviceId = randomUUID();
+  ownerProfile = profile(owner.userId);
   await app.ctx.db.insert(userCryptoProfiles).values([
+    ownerProfile,
     profile(retainedUser.userId),
     profile(downgradedUser.userId),
     profile(reactivatedUser.userId),
@@ -473,14 +476,16 @@ async function completeEpochOneToTwo(client: pg.Client, vaultId: string): Promis
       recipient_user_id, recipient_device_id, recipient_recovery_key_id,
       recipient_key_fingerprint, authorization_kind, authorization_ref,
       algorithm, envelope_version, ciphertext, ciphertext_digest,
-      sender_device_id, signature, status, activated_at
+      sender_device_id, signer_user_id, signer_key_version, signer_public_key,
+      signature, status, activated_at
     )
     SELECT
       vault_id, 2, recipient_kind, access_scope,
       recipient_user_id, recipient_device_id, recipient_recovery_key_id,
       recipient_key_fingerprint, authorization_kind, authorization_ref,
       algorithm, envelope_version, ciphertext, ciphertext_digest,
-      sender_device_id, signature, status, now()
+      sender_device_id, signer_user_id, signer_key_version, signer_public_key,
+      signature, status, now()
     FROM vault_key_envelopes
     WHERE vault_id = $1 AND key_epoch = 1 AND status = 'active'
   `, [vaultId]);
@@ -522,6 +527,8 @@ async function createTeamVault(
 }
 
 async function activateE2eeVault(vaultId: string, userId: string, deviceId: string): Promise<void> {
+  const signerProfile = (await app.ctx.db.select().from(userCryptoProfiles)
+    .where(eq(userCryptoProfiles.userId, userId)).limit(1))[0]!;
   await app.ctx.db.update(vaults).set({ name: '' }).where(eq(vaults.id, vaultId));
   await app.ctx.db.insert(vaultKeyEpochs).values({
     vaultId,
@@ -560,6 +567,9 @@ async function activateE2eeVault(vaultId: string, userId: string, deviceId: stri
     ciphertext: recoveryCiphertext,
     ciphertextDigest: createHash('sha256').update(recoveryCiphertext).digest(),
     senderDeviceId: deviceId,
+    signerUserId: userId,
+    signerKeyVersion: signerProfile.cryptoGeneration,
+    signerPublicKey: signerProfile.publicSigningKey,
     signature: randomBytes(64),
     status: 'active',
     activatedAt: new Date(),
@@ -601,6 +611,9 @@ async function insertEnvelope(input: {
     ciphertext,
     ciphertextDigest: createHash('sha256').update(ciphertext).digest(),
     senderDeviceId: ownerDeviceId,
+    signerUserId: owner.userId,
+    signerKeyVersion: ownerProfile.cryptoGeneration,
+    signerPublicKey: ownerProfile.publicSigningKey,
     signature: randomBytes(64),
     status: 'active',
     activatedAt: new Date(),

@@ -26,6 +26,12 @@ export class AccessDeniedError extends Error {
   }
 }
 
+export class IdempotencyConflictError extends Error {
+  constructor() {
+    super('同一个操作标识已用于不同请求，请刷新页面后重试');
+  }
+}
+
 export interface CommandResult<T> {
   statusCode: number;
   response: T;
@@ -57,7 +63,7 @@ export async function recordSyncEvent(
 }
 
 /**
- * 幂等命令执行器：同 (idempotencyKey, userId) 的成功命令直接重放缓存响应。
+ * 幂等命令执行器：同 (idempotencyKey, userId, commandName) 的成功命令直接重放缓存响应。
  * fn 在事务中执行业务写入并返回 {statusCode, response}；
  * 事务内通过 collect() 汇集 sync 事件，提交后统一发布到 SSE 总线。
  */
@@ -68,16 +74,28 @@ export async function runCommand<T extends Record<string, unknown>>(
   userId: string,
   idempotencyKey: string,
   fn: (tx: DbOrTx, collect: (e: SyncEventRow) => void) => Promise<CommandResult<T>>,
+  identity: { commandName: string; requestDigest: Buffer | null } = {
+    commandName: 'legacy',
+    requestDigest: null,
+  },
 ): Promise<CommandResult<T>> {
   const pending: SyncEventRow[] = [];
   const execution = await db.transaction(async (tx) => {
-    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`${userId}:${idempotencyKey}`}))`);
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`${userId}:${identity.commandName}:${idempotencyKey}`}))`);
     const replay = await tx
       .select()
       .from(commandDedup)
-      .where(and(eq(commandDedup.idempotencyKey, idempotencyKey), eq(commandDedup.userId, userId)))
+      .where(and(
+        eq(commandDedup.idempotencyKey, idempotencyKey),
+        eq(commandDedup.userId, userId),
+        eq(commandDedup.commandName, identity.commandName),
+      ))
       .limit(1);
     if (replay[0]) {
+      if (identity.requestDigest
+        && (!replay[0].requestDigest || !Buffer.from(replay[0].requestDigest).equals(identity.requestDigest))) {
+        throw new IdempotencyConflictError();
+      }
       return {
         result: { statusCode: replay[0].statusCode, response: replay[0].response as T },
         replayed: true,
@@ -88,6 +106,8 @@ export async function runCommand<T extends Record<string, unknown>>(
       await tx.insert(commandDedup).values({
         idempotencyKey,
         userId,
+        commandName: identity.commandName,
+        requestDigest: identity.requestDigest,
         statusCode: r.statusCode,
         response: r.response,
       });

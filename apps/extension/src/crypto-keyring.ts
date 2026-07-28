@@ -445,14 +445,14 @@ export class ExtensionKeyring {
         ...((bootstrap as EncryptedBootstrapResponse & {
           signerProfiles?: Array<{ userId: string; keyVersion: number; signingPublicKey: string }>;
         }).signerProfiles ?? []),
-      ].map((profile) => [profile.userId, profile] as const),
+      ].map((profile) => [`${profile.userId}:${profile.keyVersion}`, profile] as const),
     );
     const nextKeys = new Map<string, VaultKeys>();
     try {
       for (const envelope of bootstrap.envelopes) {
         if (envelope.recipientKind !== 'device' || envelope.recipientId !== record.deviceId) continue;
-        const signer = signerProfiles.get(envelope.signerUserId);
-        if (!signer || envelope.signerKeyVersion !== signer.keyVersion) {
+        const signer = signerProfiles.get(`${envelope.signerUserId}:${envelope.signerKeyVersion}`);
+        if (!signer) {
           throw new Error('密码库安全信息校验失败，已拒绝解锁；请刷新后重试');
         }
         const opened = await openVaultKeyGrant(

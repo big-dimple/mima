@@ -18,6 +18,7 @@ import type {
   AccountCryptoResetRequest,
   EnterpriseRecoveryCandidate,
   EnterpriseRecoveryRequest,
+  EnterpriseRecoveryWorkspace,
   SessionUser,
   VaultCryptoState,
 } from '@mima/contracts';
@@ -349,7 +350,15 @@ function AccountResetPanel({ user, onLoggedOut }: { user: SessionUser | null; on
   );
 }
 
-export function AdminAccountResetApprovals() {
+export function AdminAccountResetApprovals({
+  showEmpty = false,
+  recoveryWorkspace = null,
+  onRecoveryChanged,
+}: {
+  showEmpty?: boolean;
+  recoveryWorkspace?: EnterpriseRecoveryWorkspace | null;
+  onRecoveryChanged?: () => void | Promise<void>;
+} = {}) {
   const { api, zeroKnowledge } = useApp();
   const currentUserId = useMeta((state) => state.user?.id ?? '');
   const toast = useUi((state) => state.toast);
@@ -357,13 +366,14 @@ export function AdminAccountResetApprovals() {
   const [recoveries, setRecoveries] = useState<EnterpriseRecoveryRequest[]>([]);
   const [candidates, setCandidates] = useState<EnterpriseRecoveryCandidate[]>([]);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
   const load = async () => {
+    setLoading(true);
     try {
-      const [values, recoveryValues, candidateValues] = await Promise.all([
-        zeroKnowledge.accountCryptoResetRequests(),
-        api.recoveryRequests(),
-        api.recoveryCandidates(),
-      ]);
+      const values = await zeroKnowledge.accountCryptoResetRequests();
+      const [recoveryValues, candidateValues] = recoveryWorkspace
+        ? [recoveryWorkspace.requests, recoveryWorkspace.candidates]
+        : await Promise.all([api.recoveryRequests(), api.recoveryCandidates()]);
       setRequests(values.filter((entry) =>
         entry.targetUserId !== currentUserId
         && ((entry.status === 'pending' || entry.status === 'approved')
@@ -374,15 +384,18 @@ export function AdminAccountResetApprovals() {
       setCandidates(candidateValues);
     } catch (error) {
       toast('error', error instanceof Error ? error.message : '待审批请求加载失败');
+    } finally {
+      setLoading(false);
     }
   };
-  useEffect(() => { void load(); }, [currentUserId]);
+  useEffect(() => { void load(); }, [currentUserId, recoveryWorkspace]);
   const approve = async (request: AccountCryptoResetRequest) => {
     setBusyId(request.id);
     try {
       await zeroKnowledge.approveAccountCryptoReset(request);
       toast('info', '审批已绑定到该请求摘要');
       await load();
+      await onRecoveryChanged?.();
     } catch (error) {
       toast('error', error instanceof Error ? error.message : '审批失败');
     } finally {
@@ -404,6 +417,7 @@ export function AdminAccountResetApprovals() {
       });
       toast('info', '该密码库的企业恢复请求已发起，仍需两名不同管理员审批');
       await load();
+      await onRecoveryChanged?.();
     } catch (error) {
       toast('error', error instanceof Error ? error.message : '企业恢复请求发起失败');
     } finally {
@@ -419,6 +433,7 @@ export function AdminAccountResetApprovals() {
       });
       toast('info', '企业恢复审批已绑定到请求摘要');
       await load();
+      await onRecoveryChanged?.();
     } catch (error) {
       toast('error', error instanceof Error ? error.message : '企业恢复审批失败');
     } finally {
@@ -439,15 +454,23 @@ export function AdminAccountResetApprovals() {
       });
       toast('info', '企业恢复请求已发起，仍需两名不同管理员审批和离线恢复材料');
       await load();
+      await onRecoveryChanged?.();
     } catch (error) {
       toast('error', error instanceof Error ? error.message : '企业恢复请求发起失败');
     } finally {
       setBusyId(null);
     }
   };
-  if (requests.length === 0 && candidates.length === 0) return null;
+  if (loading) return <LoadingState label="正在核对待审批请求…" />;
+  if (requests.length === 0 && candidates.length === 0) {
+    return showEmpty ? (
+      <section className={styles.adminSection} aria-label="恢复协助与密码库解锁重置审批">
+        <div className={styles.notice}>当前没有需要你审批或发起协助的恢复请求。</div>
+      </section>
+    ) : null;
+  }
   return (
-    <section className={styles.adminSection} aria-label="恢复协助与密码库解锁重置审批" data-recovery-tour="recovery-approvals">
+    <section className={styles.adminSection} aria-label="恢复协助与密码库解锁重置审批">
       <h2>待处理的恢复协助</h2>
       <p>管理员只能发起和审批流程，不能直接查看密码库内容。完整恢复仍需两名不同管理员审批，并由两名材料保管人在隔离设备联合处理。</p>
       {candidates.map((candidate) => {

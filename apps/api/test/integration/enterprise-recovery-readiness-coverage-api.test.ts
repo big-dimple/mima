@@ -1,6 +1,6 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import type {
   EnterpriseRecoveryCoverage,
@@ -17,6 +17,7 @@ import {
   userDevices,
   users,
   vaultCryptoStates,
+  vaultKeyEnvelopes,
   vaultRekeyJobs,
 } from '../../src/db/schema.ts';
 import { authed, freshStrictTestApp, key, login, type TestSession } from './helpers.ts';
@@ -246,6 +247,48 @@ describe('enterprise recovery readiness and initial coverage', () => {
     const visibleVaultIds = (administratorBootstrap.json() as { vaults: Array<{ id: string }> })
       .vaults.map((vault) => vault.id);
     expect(visibleVaultIds).not.toEqual(expect.arrayContaining(vaultIds));
+  });
+
+  it('lets an owner repair an active recovery envelope created before signer snapshots existed', async () => {
+    try {
+      await app.ctx.db.execute(sql.raw(
+        'ALTER TABLE vault_key_envelopes DISABLE TRIGGER vault_key_envelopes_signer_snapshot_guard',
+      ));
+      await app.ctx.db.update(vaultKeyEnvelopes).set({
+        signerUserId: null,
+        signerKeyVersion: null,
+        signerPublicKey: null,
+      }).where(and(
+        eq(vaultKeyEnvelopes.vaultId, vaultIds[0]!),
+        eq(vaultKeyEnvelopes.recipientRecoveryKeyId, stagedKey.id),
+      ));
+    } finally {
+      await app.ctx.db.execute(sql.raw(
+        'ALTER TABLE vault_key_envelopes ENABLE TRIGGER vault_key_envelopes_signer_snapshot_guard',
+      ));
+    }
+
+    expect(await recoveryCoverage(owner)).toMatchObject({
+      totalVaultCount: 2,
+      coveredVaultCount: 1,
+      complete: false,
+    });
+
+    const repairRequest = await ownerKeyring.prepareEnterpriseRecoveryEnvelope(
+      owner.userId,
+      ownerProfile,
+      stagedKey,
+      vaultIds[0]!,
+      1,
+    );
+    const repaired = await uploadEnvelope(vaultIds[0]!, repairRequest);
+    expect(repaired.statusCode, repaired.body).toBe(201);
+    expect(repaired.json()).toEqual({ ok: true, alreadyCovered: false });
+    expect(await recoveryCoverage(owner)).toMatchObject({
+      totalVaultCount: 2,
+      coveredVaultCount: 2,
+      complete: true,
+    });
   });
 });
 

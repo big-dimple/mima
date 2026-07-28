@@ -1,28 +1,290 @@
 .content {
-  width: min(94vw, 760px);
-  max-height: 86dvh;
-  overflow-x: hidden;
+  width: min(calc(100vw - 32px), 1180px);
+  height: min(92dvh, 900px);
+  max-height: 92dvh;
+  padding: 0;
+  overflow: hidden;
+}
+
+.workspaceShell {
+  height: 100%;
+  display: grid;
+  grid-template-rows: 70px minmax(0, 1fr);
+  min-width: 0;
+}
+
+.workspaceHeader {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 0 20px 0 24px;
+  border-bottom: 1px solid var(--border);
+}
+
+.workspaceHeader > div:first-child {
+  min-width: 0;
+}
+
+.workspaceHeader h2 {
+  margin: 0;
+  padding: 0;
+  font-size: 17px;
+}
+
+.workspaceHeader > div:first-child > span {
+  display: block;
+  margin-top: 4px;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.headerActions {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.refreshStatus {
+  margin-right: 2px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.refreshStatus[data-error='true'] {
+  color: var(--danger-strong);
+}
+
+.iconButton {
+  width: var(--control-standard);
+  height: var(--control-standard);
+  display: inline-grid;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+}
+
+.iconButton:hover:not(:disabled),
+.iconButton:focus-visible {
+  border-color: var(--border-strong);
+  background: var(--panel-2);
+  color: var(--accent);
+}
+
+.iconButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.workspaceBody {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr);
+}
+
+.workspaceNav {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 18px 12px;
+  border-right: 1px solid var(--border);
+  background: var(--panel-2);
+  overflow-y: auto;
+}
+
+.navItem {
+  width: 100%;
+  min-height: 42px;
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 0 11px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  text-align: left;
+}
+
+.navItem span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.navItem strong {
+  min-width: 20px;
+  height: 20px;
+  display: inline-grid;
+  place-items: center;
+  padding: 0 5px;
+  border-radius: 10px;
+  background: var(--warn-weak);
+  color: var(--warning-text);
+  font-size: 11px;
+}
+
+.navItem:hover,
+.navItem:focus-visible {
+  border-color: var(--border-strong);
+  background: var(--panel);
+  color: var(--text);
+}
+
+.navItem[data-active='true'] {
+  border-color: var(--item-login-border);
+  background: var(--accent-weak);
+  color: var(--accent);
+  font-weight: 650;
+}
+
+.navBoundary {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 8px;
+  margin-top: auto;
+  padding: 14px 10px 4px;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.navBoundary svg {
+  margin-top: 1px;
+  color: var(--warning-text);
+}
+
+.workspacePane {
+  min-width: 0;
+  min-height: 0;
+  padding: 24px 28px 36px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.inlineWarning,
+.warning,
+.empty,
+.keyBoundary,
+.actionError,
+.fieldError,
+.coverageGap,
+.requestStatus {
+  padding: 10px 11px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.inlineWarning,
+.warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 16px;
+  border-color: var(--warning-border);
+  color: var(--warning-text);
+}
+
+.inlineWarning svg,
+.warning svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
+.paneSection,
+.keyManager,
+.coverageTasks,
+.requestPanel,
+.executiveSummary {
+  min-width: 0;
+}
+
+.paneHeading {
+  margin-bottom: 22px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--border);
+}
+
+.paneHeading > span,
+.summaryEyebrow {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.paneHeading h2 {
+  margin: 0;
+  font-size: 19px;
+  letter-spacing: 0;
+}
+
+.paneHeading p {
+  max-width: 760px;
+  margin: 7px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.boundaryGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 28px;
+  border-top: 1px solid var(--border);
+}
+
+.boundaryGrid > div {
+  min-width: 0;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.boundaryGrid strong,
+.boundaryGrid span {
+  display: block;
+}
+
+.boundaryGrid strong {
+  font-size: 13px;
+}
+
+.boundaryGrid span {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.55;
 }
 
 .executiveSummary {
   display: grid;
-  gap: 12px;
-  margin: 10px 0 16px;
-  padding: 16px 0;
-  border-top: 1px solid var(--border);
-  border-bottom: 1px solid var(--border);
+  gap: 20px;
 }
 
 .summaryHeading {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  gap: 16px;
+  gap: 18px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--border);
 }
 
 .summaryHeading > div {
-  display: grid;
-  gap: 3px;
+  min-width: 0;
 }
 
 .summaryHeading > svg {
@@ -39,38 +301,39 @@
   color: var(--warning-text);
 }
 
-.summaryEyebrow {
-  color: var(--muted);
-  font-size: var(--font-xs);
-}
-
 .summaryHeading strong {
-  font-size: var(--font-lg);
+  display: block;
+  font-size: 22px;
 }
 
 .summaryNext {
-  margin: 0;
-  color: var(--text) !important;
-  font-size: var(--font-sm) !important;
+  max-width: 780px;
+  margin: -6px 0 0;
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.6;
 }
 
 .assuranceList {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px 18px;
+  gap: 0 28px;
   margin: 0;
   padding: 0;
+  border-top: 1px solid var(--border);
   list-style: none;
 }
 
 .assuranceList li {
-  display: grid;
-  grid-template-columns: 18px minmax(0, 1fr);
-  align-items: start;
-  gap: 8px;
   min-width: 0;
+  display: grid;
+  grid-template-columns: 19px minmax(0, 1fr);
+  align-items: start;
+  gap: 9px;
+  padding: 15px 0;
+  border-bottom: 1px solid var(--border);
   color: var(--muted);
-  font-size: var(--font-xs);
+  font-size: 12px;
   line-height: 1.55;
 }
 
@@ -81,30 +344,30 @@
 
 .assuranceList strong {
   display: block;
+  margin-bottom: 2px;
   color: var(--text);
-  font-size: var(--font-sm);
+  font-size: 13px;
 }
 
 .managementPrimer {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 18px;
-  padding-top: 4px;
+  gap: 32px;
 }
 
 .managementPrimer h3 {
-  margin: 0 0 7px;
-  font-size: var(--font-sm);
+  margin: 0 0 8px;
+  font-size: 14px;
 }
 
 .managementPrimer ul,
 .managementPrimer ol {
   display: grid;
-  gap: 6px;
+  gap: 7px;
   margin: 0;
   padding-left: 20px;
   color: var(--muted);
-  font-size: var(--font-xs);
+  font-size: 12px;
   line-height: 1.55;
 }
 
@@ -112,125 +375,14 @@
   color: var(--text);
 }
 
-.titleBar {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding-right: 44px;
-}
-
-.titleBar h2 {
-  padding-right: 0;
-}
-
-.tourButton {
-  min-height: var(--control-compact);
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 0 10px;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-sm);
-  color: var(--accent);
-  font-size: var(--font-xs);
-  white-space: nowrap;
-}
-
-.tourPrompt {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  margin: 8px 0 14px;
-  padding: 12px;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-sm);
-  background: var(--panel-2);
-}
-
-.tourPrompt strong,
-.tourPrompt span {
-  display: block;
-}
-
-.tourPrompt span {
-  margin-top: 3px;
-  color: var(--muted);
-  font-size: var(--font-xs);
-}
-
-.tourPromptActions {
-  display: flex;
-  gap: 8px;
-  flex: 0 0 auto;
-}
-
-.tourPromptActions button {
-  min-height: var(--control-standard);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 0 12px;
-  border-radius: var(--radius-sm);
-  background: var(--accent);
-  color: var(--accent-contrast);
-  font-size: var(--font-sm);
-  font-weight: 600;
-}
-
-.warning,
-.empty,
-.keyBoundary,
-.actionError,
-.coverageGap,
-.requestStatus {
-  padding: 10px 11px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  color: var(--muted);
-  font-size: 12px;
-  line-height: 1.55;
-}
-
-.warning {
-  display: flex;
-  gap: 9px;
-  margin: 8px 0 18px;
-  border-color: var(--warning-border);
-  color: var(--warning-text);
-  font-size: 13px;
-}
-
-.warning svg {
-  flex: 0 0 auto;
-  margin-top: 2px;
-}
-
-.empty {
-  margin-top: 10px;
-}
-
-.keyManager,
-.coverageTasks,
-.requestPanel {
-  min-width: 0;
-  margin: 0 0 20px;
-  padding-bottom: 20px;
-  border-bottom: 1px solid var(--border);
-}
-
-.requestPanel:last-child {
-  margin-bottom: 0;
-  padding-bottom: 0;
-  border-bottom: 0;
-}
-
 .sectionHeading {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 16px;
+  gap: 18px;
+  margin-bottom: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
 }
 
 .sectionHeading > div {
@@ -247,43 +399,50 @@
 }
 
 .sectionHeading h2 {
-  font-size: 14px;
+  font-size: 17px;
 }
 
 .sectionHeading p,
 .workflowStep p,
 .requestForm p {
-  margin: 4px 0 0;
+  margin: 5px 0 0;
   color: var(--muted);
   font-size: 12px;
   line-height: 1.55;
 }
 
-.actionError {
-  margin-top: 10px;
+.actionError,
+.fieldError {
   border-color: var(--danger);
   color: var(--danger-strong);
 }
 
+.actionError {
+  margin-bottom: 12px;
+}
+
 .workflowSteps {
-  margin: 14px 0 0;
+  margin: 0;
   padding: 0;
-  border-top: 1px solid var(--border);
   list-style: none;
 }
 
 .workflowStep {
-  display: grid;
-  grid-template-columns: 28px minmax(0, 1fr);
-  gap: 10px;
   min-width: 0;
-  padding: 14px 0;
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  gap: 12px;
+  padding: 18px 0;
   border-bottom: 1px solid var(--border);
 }
 
+.workflowStep:first-child {
+  padding-top: 2px;
+}
+
 .stepRail {
-  width: 24px;
-  height: 24px;
+  width: 26px;
+  height: 26px;
   display: grid;
   place-items: center;
   border: 1px solid var(--border-strong);
@@ -303,22 +462,22 @@
 }
 
 .stepTitle {
+  min-height: 26px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  min-height: 24px;
+  gap: 14px;
 }
 
 .stepTitle h3 {
   min-width: 0;
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .stepTitle > span {
   flex: 0 0 auto;
-  padding: 3px 7px;
-  border-radius: var(--radius-sm);
+  padding: 3px 8px;
+  border-radius: 10px;
   background: var(--panel-2);
   color: var(--muted);
   font-size: 11px;
@@ -331,49 +490,68 @@
 }
 
 .adminReadinessList,
-.coverageTaskList {
+.coverageTaskList,
+.maintenanceList {
   display: grid;
   gap: 0;
-  margin: 10px 0 0;
+  margin: 12px 0 0;
   padding: 0;
   border-top: 1px solid var(--border);
   list-style: none;
 }
 
 .adminReadinessList li,
-.coverageTaskList li {
+.coverageTaskList li,
+.maintenanceList li {
+  min-width: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  min-width: 0;
-  padding: 9px 0;
+  gap: 14px;
+  padding: 11px 0;
   border-bottom: 1px solid var(--border);
 }
 
 .adminReadinessList li > div,
-.coverageTaskList li > div {
+.coverageTaskList li > div,
+.maintenanceList li > div {
   min-width: 0;
 }
 
 .adminReadinessList strong,
 .adminReadinessList span,
 .coverageTaskList strong,
-.coverageTaskList span {
+.coverageTaskList span,
+.maintenanceList strong,
+.maintenanceList span,
+.maintenanceList code {
   display: block;
   overflow-wrap: anywhere;
 }
 
 .adminReadinessList strong,
-.coverageTaskList strong {
-  font-size: 12px;
+.coverageTaskList strong,
+.maintenanceList strong {
+  font-size: 13px;
 }
 
 .adminReadinessList li > div span,
-.coverageTaskList span {
-  margin-top: 2px;
+.coverageTaskList span,
+.maintenanceList span,
+.maintenanceList code {
+  margin-top: 3px;
   color: var(--muted);
   font-size: 11px;
+}
+
+.maintenanceList span {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.maintenanceList code {
+  font-family: var(--font-mono);
 }
 
 .adminReadinessList li > span {
@@ -386,24 +564,26 @@
   color: var(--success-text);
 }
 
-.downloadActions {
+.downloadActions,
+.requestActions {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin-top: 10px;
+  margin-top: 11px;
 }
 
 .downloadActions a,
 .toolLink,
 .workflowStep button,
 .coverageTasks button,
-.requestPanel button {
+.requestPanel button,
+.maintenanceList button {
   min-height: var(--control-standard);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 7px;
-  padding: 7px 10px;
+  padding: 7px 11px;
   border-radius: var(--radius-sm);
   background: var(--accent);
   color: var(--accent-contrast);
@@ -414,25 +594,28 @@
 
 .downloadActions a,
 .toolLink,
-.secondaryButton {
+.secondaryButton,
+.maintenanceList button,
+.requestPanel .cancelAction {
   border: 1px solid var(--border-strong);
   background: var(--panel);
   color: var(--text);
 }
 
 .workflowStep button {
-  margin-top: 10px;
+  margin-top: 11px;
 }
 
 .workflowStep button:disabled,
 .coverageTasks button:disabled,
-.requestPanel button:disabled {
+.requestPanel button:disabled,
+.maintenanceList button:disabled {
   cursor: not-allowed;
   opacity: 0.52;
 }
 
 .keyBoundary {
-  margin-top: 10px;
+  margin-top: 11px;
   border-color: var(--warning-border);
   color: var(--warning-text);
 }
@@ -446,8 +629,8 @@
 .manifestForm,
 .requestForm {
   display: grid;
-  gap: 7px;
-  margin-top: 10px;
+  gap: 9px;
+  margin-top: 12px;
 }
 
 .manifestForm label,
@@ -456,11 +639,11 @@
   font-weight: 600;
 }
 
-.manifestForm textarea,
-.requestForm select,
-.requestForm textarea {
+.fileInput,
+.requestForm select {
   width: 100%;
   min-width: 0;
+  min-height: var(--control-standard);
   padding: 8px 9px;
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
@@ -468,25 +651,47 @@
   color: var(--text);
 }
 
-.manifestForm textarea,
-.requestForm textarea {
-  resize: vertical;
-  font-family: var(--font-mono);
-  font-size: 11px;
+.fileInput::file-selector-button {
+  min-height: 30px;
+  margin-right: 10px;
+  padding: 5px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--panel-2);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.fileSummary {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: start;
+  gap: 8px;
+  padding: 10px 11px;
+  border: 1px solid var(--success-text);
+  border-radius: var(--radius-sm);
+  color: var(--success-text);
+  font-size: 12px;
   line-height: 1.5;
+}
+
+.fileSummary strong {
+  display: block;
+  overflow-wrap: anywhere;
+  color: var(--text);
 }
 
 .keyEvidence {
   display: grid;
-  gap: 6px;
-  margin: 9px 0 0;
+  gap: 7px;
+  margin: 10px 0 0;
 }
 
 .keyEvidence > div {
-  display: grid;
-  grid-template-columns: 92px minmax(0, 1fr);
-  gap: 8px;
   min-width: 0;
+  display: grid;
+  grid-template-columns: 104px minmax(0, 1fr);
+  gap: 10px;
   font-size: 11px;
   line-height: 1.5;
 }
@@ -516,21 +721,13 @@
 .coverageGap {
   display: grid;
   gap: 3px;
-  margin-top: 9px;
+  margin-top: 10px;
   border-color: var(--warning-border);
   color: var(--warning-text);
 }
 
 .coverageGap span {
   overflow-wrap: anywhere;
-}
-
-.coverageTasks .sectionHeading button {
-  flex: 0 0 auto;
-}
-
-.coverageTaskList li > button {
-  flex: 0 0 auto;
 }
 
 .coverageTaskList span[data-result='success'] {
@@ -560,12 +757,18 @@
   margin-top: 2px;
 }
 
-.requestForm .toolLink {
+.requestForm .toolLink,
+.requestForm > button {
   justify-self: start;
 }
 
-.requestForm > button {
-  justify-self: start;
+.requestPanel .cancelAction {
+  color: var(--danger-strong);
+}
+
+.empty {
+  margin-top: 10px;
+  background: var(--panel-2);
 }
 
 .spin {
@@ -576,68 +779,83 @@
   to { transform: rotate(360deg); }
 }
 
-@media (max-width: 620px) {
+@media (max-width: 840px) {
   .content {
     width: calc(100vw - 16px);
-    max-height: 92dvh;
-    padding: 18px 16px;
+    height: calc(100dvh - 16px);
+    max-height: calc(100dvh - 16px);
   }
 
+  .workspaceShell {
+    grid-template-rows: 68px auto minmax(0, 1fr);
+  }
+
+  .workspaceHeader {
+    padding: 0 12px 0 16px;
+  }
+
+  .workspaceHeader > div:first-child > span,
+  .refreshStatus {
+    display: none;
+  }
+
+  .workspaceBody {
+    display: contents;
+  }
+
+  .workspaceNav {
+    min-height: auto;
+    flex-direction: row;
+    gap: 4px;
+    padding: 8px;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+
+  .navItem {
+    width: auto;
+    min-width: max-content;
+    grid-template-columns: 18px auto auto;
+    min-height: 38px;
+  }
+
+  .navBoundary {
+    display: none;
+  }
+
+  .workspacePane {
+    padding: 20px 18px 30px;
+  }
+}
+
+@media (max-width: 620px) {
   .sectionHeading,
   .adminReadinessList li,
-  .coverageTaskList li {
+  .coverageTaskList li,
+  .maintenanceList li {
     align-items: stretch;
     flex-direction: column;
   }
 
   .sectionHeading > button,
   .coverageTaskList li > button,
+  .maintenanceList li > button,
   .requestForm > button,
   .requestForm .toolLink {
     width: 100%;
   }
 
-  .adminReadinessList li > span {
-    align-self: flex-start;
-  }
-
-  .downloadActions a {
-    flex: 1 1 180px;
-  }
-
-  .titleBar,
-  .tourPrompt {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .tourButton {
-    align-self: flex-start;
-    min-height: var(--control-standard);
-  }
-
-  .tourPromptActions > button {
-    flex: 1;
-  }
-
-  .assuranceList {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
+  .boundaryGrid,
+  .assuranceList,
   .managementPrimer {
     grid-template-columns: minmax(0, 1fr);
   }
-}
 
-@media (max-width: 420px) {
-  .workflowStep {
-    grid-template-columns: 24px minmax(0, 1fr);
-    gap: 8px;
-  }
-
-  .stepRail {
-    width: 22px;
-    height: 22px;
+  .downloadActions a,
+  .requestActions > * {
+    flex: 1 1 180px;
   }
 
   .stepTitle {

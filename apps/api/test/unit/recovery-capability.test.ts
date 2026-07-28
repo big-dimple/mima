@@ -17,6 +17,7 @@ describe('enterprise recovery capability boundary', () => {
       id: '10000000-0000-4000-8000-000000000001',
       vaultId: '20000000-0000-4000-8000-000000000001',
       recoveryKeyId: '30000000-0000-4000-8000-000000000001',
+      keyEpoch: 1,
       targetUserId: 'u-auditor',
       targetDeviceId: '40000000-0000-4000-8000-000000000001',
       targetEncryptionPublicKey: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',

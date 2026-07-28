@@ -21,6 +21,8 @@
     { "id": "0018_extension_session_unlock_challenges", "file": "migrations/0018_extension_session_unlock_challenges.sql", "sha256": "616de4fa2f0da541590edcc6e6a9598d69ec0b1c075bfa42342473bda812b0bf" },
     { "id": "0019_enterprise_recovery_coverage_serialization", "file": "migrations/0019_enterprise_recovery_coverage_serialization.sql", "sha256": "582ee400ec61157c63c5dafff5391bf74ce640bc243d40f64a071fe01970bbf2" },
     { "id": "0020_vault_header_format_nondowngrade", "file": "migrations/0020_vault_header_format_nondowngrade.sql", "sha256": "f9ba0db727eae0f2b37cfb4094a3f60986e66f05695bf978e99423f47cda6b66" },
-    { "id": "0021_team_vault_projects", "file": "migrations/0021_team_vault_projects.sql", "sha256": "527611a705819d0ed23e0169fde6d3cd1463a26e0527ba173928d8f9917a415e" }
+    { "id": "0021_team_vault_projects", "file": "migrations/0021_team_vault_projects.sql", "sha256": "527611a705819d0ed23e0169fde6d3cd1463a26e0527ba173928d8f9917a415e" },
+    { "id": "0022_explicit_platform_admin_only", "file": "migrations/0022_explicit_platform_admin_only.sql", "sha256": "c48fd7e59ea3bc4baaa9dd28d4752d48da1e1ffd2b6fcd87c46dc68294745a0f" },
+    { "id": "0023_enterprise_recovery_integrity", "file": "migrations/0023_enterprise_recovery_integrity.sql", "sha256": "e80563a0e57ee190854ad365299adfd5566a8cb6ed67b543b5a518a8d0d70b22" }
   ]
 }

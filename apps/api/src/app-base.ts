@@ -19,6 +19,7 @@ import { registerSessionRoutes } from './routes/session.ts';
 import { registerGroupRoutes } from './routes/groups.ts';
 import { registerMetaRoutes } from './routes/meta.ts';
 import { verifyAuditChain, type AuditContext } from './services/audit.ts';
+import { IdempotencyConflictError } from './services/commands.ts';
 
 export interface BuildBaseAppOptions {
   databaseUrl?: string;
@@ -73,9 +74,11 @@ export async function buildBaseApp(opts: BuildBaseAppOptions): Promise<FastifyIn
   });
   app.setErrorHandler((error, request, reply) => {
     const safeError = typeof error === 'object' && error !== null
-      ? error as { statusCode?: unknown; name?: unknown }
+      ? error as { statusCode?: unknown; name?: unknown; code?: unknown; message?: unknown }
       : {};
-    const statusCode = typeof safeError.statusCode === 'number'
+    const statusCode = error instanceof IdempotencyConflictError || safeError.code === 'P0001'
+      ? 409
+      : typeof safeError.statusCode === 'number'
       && safeError.statusCode >= 400
       && safeError.statusCode <= 599
       ? safeError.statusCode
@@ -91,7 +94,11 @@ export async function buildBaseApp(opts: BuildBaseAppOptions): Promise<FastifyIn
     return reply.code(statusCode).send({
       statusCode,
       error: safeHttpErrorName(statusCode),
-      message: safeHttpErrorMessage(statusCode),
+      message: error instanceof IdempotencyConflictError
+        ? error.message
+        : safeError.code === 'P0001'
+          ? '操作条件刚刚发生变化，请刷新页面确认最新状态后重试'
+          : safeHttpErrorMessage(statusCode),
     });
   });
   app.setNotFoundHandler((_request, reply) => reply

@@ -145,6 +145,9 @@ describe('enterprise recovery rekey boundary', () => {
       ciphertext: randomBytes(96),
       ciphertextDigest: randomBytes(32),
       senderDeviceId: recoveredRow.senderDeviceId,
+      signerUserId: recoveredRow.signerUserId,
+      signerKeyVersion: recoveredRow.signerKeyVersion,
+      signerPublicKey: recoveredRow.signerPublicKey,
       signature: randomBytes(64),
       status: 'active',
       activatedAt: new Date(),
@@ -192,6 +195,9 @@ describe('enterprise recovery rekey boundary', () => {
           ciphertext,
           ciphertextDigest: createHash('sha256').update(ciphertext).digest(),
           senderDeviceId: keyring.deviceId!,
+          signerUserId: target.userId,
+          signerKeyVersion: profile.keyVersion,
+          signerPublicKey: Buffer.from(profile.signingPublicKey, 'base64url'),
           signature: randomBytes(64),
           status: 'active',
           activatedAt: new Date(),
@@ -374,6 +380,7 @@ async function stageRecoveryKey(
     approvalUserIds: [adminOne.userId, adminTwo.userId],
     createdAt: result.createdAt.toISOString(),
     retiredAt: result.retiredAt?.toISOString() ?? null,
+    cancelledAt: result.cancelledAt?.toISOString() ?? null,
   };
 }
 

@@ -4698,6 +4698,7 @@
                 "approved",
                 "activated",
                 "cancelled",
+                "expired",
                 "failed"
               ]
             },
@@ -4953,6 +4954,7 @@
                           "approved",
                           "activated",
                           "cancelled",
+                          "expired",
                           "failed"
                         ]
                       },
@@ -4961,7 +4963,7 @@
                         "items": {
                           "type": "string"
                         },
-                        "maxItems": 3
+                        "maxItems": 2
                       },
                       "affectedVaultIds": {
                         "type": "array",
@@ -4985,6 +4987,14 @@
                         "nullable": true
                       },
                       "cancelledAt": {
+                        "type": "string",
+                        "nullable": true
+                      },
+                      "expiredAt": {
+                        "type": "string",
+                        "nullable": true
+                      },
+                      "lastErrorCode": {
                         "type": "string",
                         "nullable": true
                       }
@@ -5544,6 +5554,7 @@
                         "approved",
                         "activated",
                         "cancelled",
+                        "expired",
                         "failed"
                       ]
                     },
@@ -5552,7 +5563,7 @@
                       "items": {
                         "type": "string"
                       },
-                      "maxItems": 3
+                      "maxItems": 2
                     },
                     "affectedVaultIds": {
                       "type": "array",
@@ -5576,6 +5587,14 @@
                       "nullable": true
                     },
                     "cancelledAt": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "expiredAt": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "lastErrorCode": {
                       "type": "string",
                       "nullable": true
                     }
@@ -5907,6 +5926,7 @@
                         "approved",
                         "activated",
                         "cancelled",
+                        "expired",
                         "failed"
                       ]
                     },
@@ -5915,7 +5935,7 @@
                       "items": {
                         "type": "string"
                       },
-                      "maxItems": 3
+                      "maxItems": 2
                     },
                     "affectedVaultIds": {
                       "type": "array",
@@ -5939,6 +5959,14 @@
                       "nullable": true
                     },
                     "cancelledAt": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "expiredAt": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "lastErrorCode": {
                       "type": "string",
                       "nullable": true
                     }
@@ -6296,6 +6324,7 @@
                         "approved",
                         "activated",
                         "cancelled",
+                        "expired",
                         "failed"
                       ]
                     },
@@ -6304,7 +6333,7 @@
                       "items": {
                         "type": "string"
                       },
-                      "maxItems": 3
+                      "maxItems": 2
                     },
                     "affectedVaultIds": {
                       "type": "array",
@@ -6328,6 +6357,14 @@
                       "nullable": true
                     },
                     "cancelledAt": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "expiredAt": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "lastErrorCode": {
                       "type": "string",
                       "nullable": true
                     }
@@ -6685,6 +6722,7 @@
                         "approved",
                         "activated",
                         "cancelled",
+                        "expired",
                         "failed"
                       ]
                     },
@@ -6693,7 +6731,7 @@
                       "items": {
                         "type": "string"
                       },
-                      "maxItems": 3
+                      "maxItems": 2
                     },
                     "affectedVaultIds": {
                       "type": "array",
@@ -6717,6 +6755,14 @@
                       "nullable": true
                     },
                     "cancelledAt": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "expiredAt": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "lastErrorCode": {
                       "type": "string",
                       "nullable": true
                     }
@@ -7091,6 +7137,7 @@
                             "approved",
                             "activated",
                             "cancelled",
+                            "expired",
                             "failed"
                           ]
                         },
@@ -7099,7 +7146,7 @@
                           "items": {
                             "type": "string"
                           },
-                          "maxItems": 3
+                          "maxItems": 2
                         },
                         "affectedVaultIds": {
                           "type": "array",
@@ -7123,6 +7170,14 @@
                           "nullable": true
                         },
                         "cancelledAt": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "expiredAt": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "lastErrorCode": {
                           "type": "string",
                           "nullable": true
                         }
@@ -9865,7 +9920,8 @@
                             "staged",
                             "active",
                             "retired",
-                            "compromised"
+                            "compromised",
+                            "cancelled"
                           ]
                         },
                         "ceremonyEvidenceDigest": {
@@ -9879,12 +9935,16 @@
                           "items": {
                             "type": "string"
                           },
-                          "maxItems": 3
+                          "maxItems": 2
                         },
                         "createdAt": {
                           "type": "string"
                         },
                         "retiredAt": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "cancelledAt": {
                           "type": "string",
                           "nullable": true
                         }
@@ -13691,7 +13751,8 @@
                             "staged",
                             "active",
                             "retired",
-                            "compromised"
+                            "compromised",
+                            "cancelled"
                           ]
                         },
                         "ceremonyEvidenceDigest": {
@@ -13705,12 +13766,16 @@
                           "items": {
                             "type": "string"
                           },
-                          "maxItems": 3
+                          "maxItems": 2
                         },
                         "createdAt": {
                           "type": "string"
                         },
                         "retiredAt": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "cancelledAt": {
                           "type": "string",
                           "nullable": true
                         }
@@ -14638,7 +14703,8 @@
                                 "staged",
                                 "active",
                                 "retired",
-                                "compromised"
+                                "compromised",
+                                "cancelled"
                               ]
                             },
                             "ceremonyEvidenceDigest": {
@@ -14652,12 +14718,16 @@
                               "items": {
                                 "type": "string"
                               },
-                              "maxItems": 3
+                              "maxItems": 2
                             },
                             "createdAt": {
                               "type": "string"
                             },
                             "retiredAt": {
+                              "type": "string",
+                              "nullable": true
+                            },
+                            "cancelledAt": {
                               "type": "string",
                               "nullable": true
                             }
@@ -16096,7 +16166,8 @@
                         "staged",
                         "active",
                         "retired",
-                        "compromised"
+                        "compromised",
+                        "cancelled"
                       ]
                     },
                     "ceremonyEvidenceDigest": {
@@ -16110,12 +16181,16 @@
                       "items": {
                         "type": "string"
                       },
-                      "maxItems": 3
+                      "maxItems": 2
                     },
                     "createdAt": {
                       "type": "string"
                     },
                     "retiredAt": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "cancelledAt": {
                       "type": "string",
                       "nullable": true
                     }
@@ -16289,7 +16364,8 @@
                         "staged",
                         "active",
                         "retired",
-                        "compromised"
+                        "compromised",
+                        "cancelled"
                       ]
                     },
                     "ceremonyEvidenceDigest": {
@@ -16303,12 +16379,16 @@
                       "items": {
                         "type": "string"
                       },
-                      "maxItems": 3
+                      "maxItems": 2
                     },
                     "createdAt": {
                       "type": "string"
                     },
                     "retiredAt": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "cancelledAt": {
                       "type": "string",
                       "nullable": true
                     }
@@ -16434,7 +16514,8 @@
                           "staged",
                           "active",
                           "retired",
-                          "compromised"
+                          "compromised",
+                          "cancelled"
                         ]
                       },
                       "ceremonyEvidenceDigest": {
@@ -16448,12 +16529,16 @@
                         "items": {
                           "type": "string"
                         },
-                        "maxItems": 3
+                        "maxItems": 2
                       },
                       "createdAt": {
                         "type": "string"
                       },
                       "retiredAt": {
+                        "type": "string",
+                        "nullable": true
+                      },
+                      "cancelledAt": {
                         "type": "string",
                         "nullable": true
                       }
@@ -16649,6 +16734,497 @@
         },
         "operationId": "getRecoveryReadiness",
         "summary": "读取企业恢复管理员准备度",
+        "security": [
+          {
+            "webSession": []
+          }
+        ]
+      }
+    },
+    "/api/v2/recovery/workspace": {
+      "get": {
+        "tags": [
+          "企业恢复"
+        ],
+        "responses": {
+          "200": {
+            "description": "请求成功。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "refreshedAt": {
+                      "type": "string"
+                    },
+                    "keys": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "ceremonyId": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200
+                          },
+                          "keyFingerprint": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200000,
+                            "pattern": "^[A-Za-z0-9_-]+$"
+                          },
+                          "publicEncryptionKey": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200000,
+                            "pattern": "^[A-Za-z0-9_-]+$"
+                          },
+                          "threshold": {
+                            "type": "number",
+                            "enum": [
+                              2
+                            ]
+                          },
+                          "shareCount": {
+                            "type": "number",
+                            "enum": [
+                              3
+                            ]
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "pending",
+                              "staged",
+                              "active",
+                              "retired",
+                              "compromised",
+                              "cancelled"
+                            ]
+                          },
+                          "ceremonyEvidenceDigest": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200000,
+                            "pattern": "^[A-Za-z0-9_-]+$"
+                          },
+                          "approvalUserIds": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            },
+                            "maxItems": 2
+                          },
+                          "createdAt": {
+                            "type": "string"
+                          },
+                          "retiredAt": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "cancelledAt": {
+                            "type": "string",
+                            "nullable": true
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "ceremonyId",
+                          "keyFingerprint",
+                          "publicEncryptionKey",
+                          "threshold",
+                          "shareCount",
+                          "status",
+                          "ceremonyEvidenceDigest",
+                          "approvalUserIds",
+                          "createdAt",
+                          "retiredAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "readiness": {
+                      "type": "object",
+                      "properties": {
+                        "requiredAdministratorCount": {
+                          "type": "number",
+                          "enum": [
+                            3
+                          ]
+                        },
+                        "administratorCount": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "readyAdministratorCount": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "ready": {
+                          "type": "boolean"
+                        },
+                        "administrators": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "userId": {
+                                "type": "string"
+                              },
+                              "username": {
+                                "type": "string"
+                              },
+                              "displayName": {
+                                "type": "string"
+                              },
+                              "identitySource": {
+                                "type": "string",
+                                "enum": [
+                                  "dev",
+                                  "oidc",
+                                  "ldap",
+                                  "feishu"
+                                ]
+                              },
+                              "active": {
+                                "type": "boolean"
+                              },
+                              "hasCryptoProfile": {
+                                "type": "boolean"
+                              },
+                              "activeDeviceCount": {
+                                "type": "integer",
+                                "minimum": 0
+                              },
+                              "ready": {
+                                "type": "boolean"
+                              }
+                            },
+                            "required": [
+                              "userId",
+                              "username",
+                              "displayName",
+                              "identitySource",
+                              "active",
+                              "hasCryptoProfile",
+                              "activeDeviceCount",
+                              "ready"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "requiredAdministratorCount",
+                        "administratorCount",
+                        "readyAdministratorCount",
+                        "ready",
+                        "administrators"
+                      ],
+                      "additionalProperties": false,
+                      "nullable": true
+                    },
+                    "coverage": {
+                      "type": "object",
+                      "properties": {
+                        "keyId": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "totalVaultCount": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "coveredVaultCount": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "complete": {
+                          "type": "boolean"
+                        },
+                        "vaults": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "vaultId": {
+                                "type": "string",
+                                "format": "uuid"
+                              },
+                              "epoch": {
+                                "type": "integer",
+                                "exclusiveMinimum": true,
+                                "minimum": 0,
+                                "nullable": true
+                              },
+                              "covered": {
+                                "type": "boolean"
+                              },
+                              "canManage": {
+                                "type": "boolean"
+                              },
+                              "ownerUserIds": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              }
+                            },
+                            "required": [
+                              "vaultId",
+                              "epoch",
+                              "covered",
+                              "canManage",
+                              "ownerUserIds"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "keyId",
+                        "totalVaultCount",
+                        "coveredVaultCount",
+                        "complete",
+                        "vaults"
+                      ],
+                      "additionalProperties": false,
+                      "nullable": true
+                    },
+                    "requests": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "vaultId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "recoveryKeyId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "keyEpoch": {
+                            "type": "integer",
+                            "exclusiveMinimum": true,
+                            "minimum": 0
+                          },
+                          "targetUserId": {
+                            "type": "string"
+                          },
+                          "targetDeviceId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "targetEncryptionPublicKey": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200000,
+                            "pattern": "^[A-Za-z0-9_-]+$"
+                          },
+                          "targetKeyVersion": {
+                            "type": "integer",
+                            "exclusiveMinimum": true,
+                            "minimum": 0
+                          },
+                          "targetCapability": {
+                            "type": "string",
+                            "enum": [
+                              "metadata",
+                              "full"
+                            ]
+                          },
+                          "accountResetRequestId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "nullable": true
+                          },
+                          "requestDigest": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200000,
+                            "pattern": "^[A-Za-z0-9_-]+$"
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "pending",
+                              "approved",
+                              "completed",
+                              "cancelled",
+                              "expired",
+                              "failed"
+                            ]
+                          },
+                          "approvalUserIds": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            },
+                            "maxItems": 2
+                          },
+                          "createdAt": {
+                            "type": "string"
+                          },
+                          "expiresAt": {
+                            "type": "string"
+                          },
+                          "completedAt": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "cancelledAt": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "expiredAt": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "lastErrorCode": {
+                            "type": "string",
+                            "nullable": true
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "vaultId",
+                          "recoveryKeyId",
+                          "keyEpoch",
+                          "targetUserId",
+                          "targetDeviceId",
+                          "targetEncryptionPublicKey",
+                          "targetKeyVersion",
+                          "targetCapability",
+                          "accountResetRequestId",
+                          "requestDigest",
+                          "status",
+                          "approvalUserIds",
+                          "createdAt",
+                          "expiresAt",
+                          "completedAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "candidates": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "vaultId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "targetUserId": {
+                            "type": "string"
+                          },
+                          "targetDisplayName": {
+                            "type": "string"
+                          },
+                          "targetUsername": {
+                            "type": "string"
+                          },
+                          "targetDeviceId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "targetEncryptionPublicKey": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200000,
+                            "pattern": "^[A-Za-z0-9_-]+$"
+                          },
+                          "targetKeyVersion": {
+                            "type": "integer",
+                            "exclusiveMinimum": true,
+                            "minimum": 0
+                          },
+                          "targetCapability": {
+                            "type": "string",
+                            "enum": [
+                              "full"
+                            ]
+                          },
+                          "reason": {
+                            "type": "string",
+                            "enum": [
+                              "personal_owner_missing_current_full_envelope"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "vaultId",
+                          "targetUserId",
+                          "targetDisplayName",
+                          "targetUsername",
+                          "targetDeviceId",
+                          "targetEncryptionPublicKey",
+                          "targetKeyVersion",
+                          "targetCapability",
+                          "reason"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "refreshedAt",
+                    "keys",
+                    "readiness",
+                    "coverage",
+                    "requests",
+                    "candidates"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "请求校验、认证、授权、资源状态或版本冲突失败。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "integer"
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentVersion": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "statusCode",
+                    "error",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getRecoveryWorkspace",
+        "summary": "读取企业恢复操作中心快照",
         "security": [
           {
             "webSession": []
@@ -16884,7 +17460,8 @@
                         "staged",
                         "active",
                         "retired",
-                        "compromised"
+                        "compromised",
+                        "cancelled"
                       ]
                     },
                     "ceremonyEvidenceDigest": {
@@ -16898,12 +17475,16 @@
                       "items": {
                         "type": "string"
                       },
-                      "maxItems": 3
+                      "maxItems": 2
                     },
                     "createdAt": {
                       "type": "string"
                     },
                     "retiredAt": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "cancelledAt": {
                       "type": "string",
                       "nullable": true
                     }
@@ -16962,6 +17543,191 @@
         },
         "operationId": "approveRecoveryKey",
         "summary": "审批企业恢复公钥",
+        "security": [
+          {
+            "webSession": []
+          }
+        ]
+      }
+    },
+    "/api/v2/recovery/keys/{keyId}/cancel": {
+      "post": {
+        "tags": [
+          "企业恢复"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "idempotencyKey": {
+                    "type": "string",
+                    "minLength": 8,
+                    "maxLength": 80
+                  },
+                  "ceremonyEvidenceDigest": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200000,
+                    "pattern": "^[A-Za-z0-9_-]+$"
+                  }
+                },
+                "required": [
+                  "idempotencyKey",
+                  "ceremonyEvidenceDigest"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "in": "path",
+            "name": "keyId",
+            "required": true
+          },
+          {
+            "$ref": "#/components/parameters/csrfToken"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "请求成功。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "ceremonyId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 200
+                    },
+                    "keyFingerprint": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 200000,
+                      "pattern": "^[A-Za-z0-9_-]+$"
+                    },
+                    "publicEncryptionKey": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 200000,
+                      "pattern": "^[A-Za-z0-9_-]+$"
+                    },
+                    "threshold": {
+                      "type": "number",
+                      "enum": [
+                        2
+                      ]
+                    },
+                    "shareCount": {
+                      "type": "number",
+                      "enum": [
+                        3
+                      ]
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "pending",
+                        "staged",
+                        "active",
+                        "retired",
+                        "compromised",
+                        "cancelled"
+                      ]
+                    },
+                    "ceremonyEvidenceDigest": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 200000,
+                      "pattern": "^[A-Za-z0-9_-]+$"
+                    },
+                    "approvalUserIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "maxItems": 2
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    },
+                    "retiredAt": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "cancelledAt": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "ceremonyId",
+                    "keyFingerprint",
+                    "publicEncryptionKey",
+                    "threshold",
+                    "shareCount",
+                    "status",
+                    "ceremonyEvidenceDigest",
+                    "approvalUserIds",
+                    "createdAt",
+                    "retiredAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "请求校验、认证、授权、资源状态或版本冲突失败。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "integer"
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentVersion": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "statusCode",
+                    "error",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "operationId": "cancelRecoveryKey",
+        "summary": "取消未启用的企业恢复公钥",
         "security": [
           {
             "webSession": []
@@ -17269,7 +18035,8 @@
                         "staged",
                         "active",
                         "retired",
-                        "compromised"
+                        "compromised",
+                        "cancelled"
                       ]
                     },
                     "ceremonyEvidenceDigest": {
@@ -17283,12 +18050,16 @@
                       "items": {
                         "type": "string"
                       },
-                      "maxItems": 3
+                      "maxItems": 2
                     },
                     "createdAt": {
                       "type": "string"
                     },
                     "retiredAt": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "cancelledAt": {
                       "type": "string",
                       "nullable": true
                     }
@@ -17381,6 +18152,11 @@
                         "type": "string",
                         "format": "uuid"
                       },
+                      "keyEpoch": {
+                        "type": "integer",
+                        "exclusiveMinimum": true,
+                        "minimum": 0
+                      },
                       "targetUserId": {
                         "type": "string"
                       },
@@ -17424,6 +18200,7 @@
                           "approved",
                           "completed",
                           "cancelled",
+                          "expired",
                           "failed"
                         ]
                       },
@@ -17432,7 +18209,7 @@
                         "items": {
                           "type": "string"
                         },
-                        "maxItems": 3
+                        "maxItems": 2
                       },
                       "createdAt": {
                         "type": "string"
@@ -17443,12 +18220,25 @@
                       "completedAt": {
                         "type": "string",
                         "nullable": true
+                      },
+                      "cancelledAt": {
+                        "type": "string",
+                        "nullable": true
+                      },
+                      "expiredAt": {
+                        "type": "string",
+                        "nullable": true
+                      },
+                      "lastErrorCode": {
+                        "type": "string",
+                        "nullable": true
                       }
                     },
                     "required": [
                       "id",
                       "vaultId",
                       "recoveryKeyId",
+                      "keyEpoch",
                       "targetUserId",
                       "targetDeviceId",
                       "targetEncryptionPublicKey",
@@ -17595,6 +18385,11 @@
                       "type": "string",
                       "format": "uuid"
                     },
+                    "keyEpoch": {
+                      "type": "integer",
+                      "exclusiveMinimum": true,
+                      "minimum": 0
+                    },
                     "targetUserId": {
                       "type": "string"
                     },
@@ -17638,6 +18433,7 @@
                         "approved",
                         "completed",
                         "cancelled",
+                        "expired",
                         "failed"
                       ]
                     },
@@ -17646,7 +18442,7 @@
                       "items": {
                         "type": "string"
                       },
-                      "maxItems": 3
+                      "maxItems": 2
                     },
                     "createdAt": {
                       "type": "string"
@@ -17657,12 +18453,25 @@
                     "completedAt": {
                       "type": "string",
                       "nullable": true
+                    },
+                    "cancelledAt": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "expiredAt": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "lastErrorCode": {
+                      "type": "string",
+                      "nullable": true
                     }
                   },
                   "required": [
                     "id",
                     "vaultId",
                     "recoveryKeyId",
+                    "keyEpoch",
                     "targetUserId",
                     "targetDeviceId",
                     "targetEncryptionPublicKey",
@@ -17725,6 +18534,221 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/csrfToken"
+          }
+        ]
+      }
+    },
+    "/api/v2/recovery/requests/{requestId}/cancel": {
+      "post": {
+        "tags": [
+          "企业恢复"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "idempotencyKey": {
+                    "type": "string",
+                    "minLength": 8,
+                    "maxLength": 80
+                  },
+                  "requestDigest": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200000,
+                    "pattern": "^[A-Za-z0-9_-]+$"
+                  }
+                },
+                "required": [
+                  "idempotencyKey",
+                  "requestDigest"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "in": "path",
+            "name": "requestId",
+            "required": true
+          },
+          {
+            "$ref": "#/components/parameters/csrfToken"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "请求成功。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "vaultId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "recoveryKeyId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "keyEpoch": {
+                      "type": "integer",
+                      "exclusiveMinimum": true,
+                      "minimum": 0
+                    },
+                    "targetUserId": {
+                      "type": "string"
+                    },
+                    "targetDeviceId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "targetEncryptionPublicKey": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 200000,
+                      "pattern": "^[A-Za-z0-9_-]+$"
+                    },
+                    "targetKeyVersion": {
+                      "type": "integer",
+                      "exclusiveMinimum": true,
+                      "minimum": 0
+                    },
+                    "targetCapability": {
+                      "type": "string",
+                      "enum": [
+                        "metadata",
+                        "full"
+                      ]
+                    },
+                    "accountResetRequestId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "nullable": true
+                    },
+                    "requestDigest": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 200000,
+                      "pattern": "^[A-Za-z0-9_-]+$"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "pending",
+                        "approved",
+                        "completed",
+                        "cancelled",
+                        "expired",
+                        "failed"
+                      ]
+                    },
+                    "approvalUserIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "maxItems": 2
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    },
+                    "expiresAt": {
+                      "type": "string"
+                    },
+                    "completedAt": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "cancelledAt": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "expiredAt": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "lastErrorCode": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "vaultId",
+                    "recoveryKeyId",
+                    "keyEpoch",
+                    "targetUserId",
+                    "targetDeviceId",
+                    "targetEncryptionPublicKey",
+                    "targetKeyVersion",
+                    "targetCapability",
+                    "accountResetRequestId",
+                    "requestDigest",
+                    "status",
+                    "approvalUserIds",
+                    "createdAt",
+                    "expiresAt",
+                    "completedAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "请求校验、认证、授权、资源状态或版本冲突失败。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "integer"
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentVersion": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "statusCode",
+                    "error",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "operationId": "cancelRecoveryRequest",
+        "summary": "取消企业恢复请求",
+        "security": [
+          {
+            "webSession": []
           }
         ]
       }
@@ -17881,6 +18905,11 @@
                       "type": "string",
                       "format": "uuid"
                     },
+                    "keyEpoch": {
+                      "type": "integer",
+                      "exclusiveMinimum": true,
+                      "minimum": 0
+                    },
                     "targetUserId": {
                       "type": "string"
                     },
@@ -17924,6 +18953,7 @@
                         "approved",
                         "completed",
                         "cancelled",
+                        "expired",
                         "failed"
                       ]
                     },
@@ -17932,7 +18962,7 @@
                       "items": {
                         "type": "string"
                       },
-                      "maxItems": 3
+                      "maxItems": 2
                     },
                     "createdAt": {
                       "type": "string"
@@ -17943,12 +18973,25 @@
                     "completedAt": {
                       "type": "string",
                       "nullable": true
+                    },
+                    "cancelledAt": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "expiredAt": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "lastErrorCode": {
+                      "type": "string",
+                      "nullable": true
                     }
                   },
                   "required": [
                     "id",
                     "vaultId",
                     "recoveryKeyId",
+                    "keyEpoch",
                     "targetUserId",
                     "targetDeviceId",
                     "targetEncryptionPublicKey",
@@ -18145,6 +19188,11 @@
                       "type": "string",
                       "format": "uuid"
                     },
+                    "keyEpoch": {
+                      "type": "integer",
+                      "exclusiveMinimum": true,
+                      "minimum": 0
+                    },
                     "targetUserId": {
                       "type": "string"
                     },
@@ -18188,6 +19236,7 @@
                         "approved",
                         "completed",
                         "cancelled",
+                        "expired",
                         "failed"
                       ]
                     },
@@ -18196,7 +19245,7 @@
                       "items": {
                         "type": "string"
                       },
-                      "maxItems": 3
+                      "maxItems": 2
                     },
                     "createdAt": {
                       "type": "string"
@@ -18207,12 +19256,25 @@
                     "completedAt": {
                       "type": "string",
                       "nullable": true
+                    },
+                    "cancelledAt": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "expiredAt": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "lastErrorCode": {
+                      "type": "string",
+                      "nullable": true
                     }
                   },
                   "required": [
                     "id",
                     "vaultId",
                     "recoveryKeyId",
+                    "keyEpoch",
                     "targetUserId",
                     "targetDeviceId",
                     "targetEncryptionPublicKey",
@@ -18434,6 +19496,11 @@
                       "type": "string",
                       "format": "uuid"
                     },
+                    "keyEpoch": {
+                      "type": "integer",
+                      "exclusiveMinimum": true,
+                      "minimum": 0
+                    },
                     "targetUserId": {
                       "type": "string"
                     },
@@ -18477,6 +19544,7 @@
                         "approved",
                         "completed",
                         "cancelled",
+                        "expired",
                         "failed"
                       ]
                     },
@@ -18485,7 +19553,7 @@
                       "items": {
                         "type": "string"
                       },
-                      "maxItems": 3
+                      "maxItems": 2
                     },
                     "createdAt": {
                       "type": "string"
@@ -18496,12 +19564,25 @@
                     "completedAt": {
                       "type": "string",
                       "nullable": true
+                    },
+                    "cancelledAt": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "expiredAt": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "lastErrorCode": {
+                      "type": "string",
+                      "nullable": true
                     }
                   },
                   "required": [
                     "id",
                     "vaultId",
                     "recoveryKeyId",
+                    "keyEpoch",
                     "targetUserId",
                     "targetDeviceId",
                     "targetEncryptionPublicKey",

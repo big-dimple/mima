@@ -31,6 +31,8 @@ beforeAll(async () => {
     { userId: localAdminOne.userId, role: 'platform-admin', assignedBy: 'test' },
     { userId: localAdminTwo.userId, role: 'platform-admin', assignedBy: 'test' },
   ]);
+  await app.ctx.db.update(users).set({ groups: ['group:default/platform'] })
+    .where(eq(users.id, directoryGroupMember.userId));
   await markRecoveryAdministratorsReady([directoryGroupMember, localAdminOne, localAdminTwo]);
 
   const staged = await recoveryKeyPayload(`staged-${randomUUID()}`);
@@ -133,15 +135,6 @@ describe('enterprise recovery key local administrator boundary', () => {
     expect((session.json() as { user: { isLocalPlatformAdmin: boolean } })
       .user.isLocalPlatformAdmin).toBe(true);
 
-    const registration = await recoveryKeyPayload(`local-register-${randomUUID()}`);
-    const registered = await app.inject({
-      method: 'POST',
-      url: '/api/v2/recovery/key',
-      ...authed(directoryGroupMember),
-      payload: registration,
-    });
-    expect(registered.statusCode, registered.body).toBe(201);
-
     const readiness = await app.inject({
       method: 'GET',
       url: '/api/v2/recovery/readiness',
@@ -149,14 +142,6 @@ describe('enterprise recovery key local administrator boundary', () => {
     });
     expect(readiness.statusCode, readiness.body).toBe(200);
     expect(readiness.json()).toMatchObject({ ready: true, readyAdministratorCount: 3 });
-
-    const approved = await app.inject({
-      method: 'POST',
-      url: `/api/v2/recovery/keys/${stagedKeyId}/approve`,
-      ...authed(directoryGroupMember),
-      payload: { idempotencyKey: key(), ceremonyEvidenceDigest: stagedEvidenceDigest },
-    });
-    expect(approved.statusCode, approved.body).toBe(200);
 
     const activated = await app.inject({
       method: 'POST',
@@ -166,6 +151,51 @@ describe('enterprise recovery key local administrator boundary', () => {
     });
     expect(activated.statusCode, activated.body).toBe(200);
     expect((activated.json() as { status: string }).status).toBe('active');
+
+    const registration = await recoveryKeyPayload(`local-register-${randomUUID()}`);
+    const registered = await app.inject({
+      method: 'POST',
+      url: '/api/v2/recovery/key',
+      ...authed(directoryGroupMember),
+      payload: registration,
+    });
+    expect(registered.statusCode, registered.body).toBe(201);
+    const registeredKey = registered.json() as { id: string };
+
+    const firstApproval = await app.inject({
+      method: 'POST',
+      url: `/api/v2/recovery/keys/${registeredKey.id}/approve`,
+      ...authed(directoryGroupMember),
+      payload: { idempotencyKey: key(), ceremonyEvidenceDigest: registration.ceremonyEvidenceDigest },
+    });
+    expect(firstApproval.statusCode, firstApproval.body).toBe(200);
+
+    const secondApproval = await app.inject({
+      method: 'POST',
+      url: `/api/v2/recovery/keys/${registeredKey.id}/approve`,
+      ...authed(localAdminOne),
+      payload: { idempotencyKey: key(), ceremonyEvidenceDigest: registration.ceremonyEvidenceDigest },
+    });
+    expect(secondApproval.statusCode, secondApproval.body).toBe(200);
+    expect((secondApproval.json() as { status: string }).status).toBe('staged');
+
+    const excessApproval = await app.inject({
+      method: 'POST',
+      url: `/api/v2/recovery/keys/${registeredKey.id}/approve`,
+      ...authed(localAdminTwo),
+      payload: { idempotencyKey: key(), ceremonyEvidenceDigest: registration.ceremonyEvidenceDigest },
+    });
+    expect(excessApproval.statusCode, excessApproval.body).toBe(409);
+    expect((excessApproval.json() as { message: string }).message).toContain('两人确认');
+
+    const rotated = await app.inject({
+      method: 'POST',
+      url: `/api/v2/recovery/keys/${registeredKey.id}/activate`,
+      ...authed(directoryGroupMember),
+      payload: { idempotencyKey: key(), ceremonyEvidenceDigest: registration.ceremonyEvidenceDigest },
+    });
+    expect(rotated.statusCode, rotated.body).toBe(200);
+    expect((rotated.json() as { status: string }).status).toBe('active');
   });
 });
 

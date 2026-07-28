@@ -99,9 +99,9 @@ import {
   digestBlob,
   encodeBase64Url,
   encodeCipherBlob,
+  envelopeSignerProfiles,
   getActiveDevice,
   getCryptoProfile,
-  listPublicCryptoProfiles,
   publicKeyFingerprint,
   resolveEnvelopeRecipient,
   sha256,
@@ -343,7 +343,14 @@ export function registerE2eeVaultRoutes(app: FastifyInstance): void {
           createdByDeviceId: currentActor.id,
           activatedAt: new Date(),
         });
-        await insertEnvelopes(tx, body.envelopes, checkedEnvelopes, currentActor.id, 'active');
+        await insertEnvelopes(
+          tx,
+          body.envelopes,
+          checkedEnvelopes,
+          currentActor.id,
+          currentProfile.publicSigningKey,
+          'active',
+        );
         const headerRow = (await tx.insert(encryptedVaultHeaders).values({
           vaultId: vault.id,
           headerVersion: 1,
@@ -697,10 +704,7 @@ export function registerE2eeVaultRoutes(app: FastifyInstance): void {
       const state = stateByVault.get(header.vaultId);
       return state?.activeEpoch === header.keyEpoch && state.activeHeaderVersion === header.headerVersion;
     });
-    const signerProfiles = await listPublicCryptoProfiles(
-      db,
-      ownEnvelopes.map(({ sender }) => sender.userId),
-    );
+    const signerProfiles = envelopeSignerProfiles(ownEnvelopes);
     const activeHeaderByVault = new Map(activeHeaders.map((header) => [header.vaultId, header]));
     return {
       user: req.user,
@@ -814,7 +818,14 @@ export function registerE2eeVaultRoutes(app: FastifyInstance): void {
           createdByDeviceId: actor.id,
           activatedAt: new Date(),
         });
-        await insertEnvelopes(tx, req.body.envelopes, checkedEnvelopes, actor.id, 'active');
+        await insertEnvelopes(
+          tx,
+          req.body.envelopes,
+          checkedEnvelopes,
+          actor.id,
+          currentProfile.publicSigningKey,
+          'active',
+        );
         await tx.insert(encryptedVaultHeaders).values({
           vaultId: req.params.vaultId,
           headerVersion: 1,
@@ -1129,6 +1140,9 @@ function registerEncryptedMembershipRoutes(app: FastifyInstance): void {
               ciphertext,
               ciphertextDigest: sha256(ciphertext),
               senderDeviceId: actor.id,
+              signerUserId: req.user.id,
+              signerKeyVersion: currentProfile.cryptoGeneration,
+              signerPublicKey: currentProfile.publicSigningKey,
               signature: decodeBase64Url(prepared.envelope.signature, { exact: 64 }),
               status: 'active',
               activatedAt: now,
@@ -1827,7 +1841,14 @@ function registerRekeyRoute(app: FastifyInstance): void {
             createdByUserId: req.user.id, createdByDeviceId: actor.id,
           });
         }
-        await insertEnvelopes(tx, req.body.envelopes, checkedEnvelopes, actor.id, 'pending');
+        await insertEnvelopes(
+          tx,
+          req.body.envelopes,
+          checkedEnvelopes,
+          actor.id,
+          profile.publicSigningKey,
+          'pending',
+        );
         const manifestSignature = decodeBase64Url(req.body.manifestSignature, { exact: 64 });
         await tx.insert(encryptedVaultHeaders).values({
           vaultId: state.vaultId, headerVersion: req.body.header.version, keyEpoch: req.body.newEpoch,
@@ -2175,7 +2196,14 @@ function registerMigrationRoutes(app: FastifyInstance): void {
         await tx.update(vaultKeyEpochs).set({ ...commitments, keyPossessionPublicKey }).where(and(
           eq(vaultKeyEpochs.vaultId, job.vaultId), eq(vaultKeyEpochs.epoch, job.targetEpoch),
         ));
-        await insertEnvelopes(tx, req.body.envelopes, recipients, actor.id, 'pending');
+        await insertEnvelopes(
+          tx,
+          req.body.envelopes,
+          recipients,
+          actor.id,
+          profile.publicSigningKey,
+          'pending',
+        );
         const headerRow = (await tx.insert(encryptedVaultHeaders).values({
           vaultId: job.vaultId, headerVersion: 1, keyEpoch: job.targetEpoch,
           schemaVersion: req.body.headerFormatVersion ?? 2,
@@ -2664,6 +2692,7 @@ async function enterpriseRecoveryKeyDto(
     approvalUserIds: approvals.map((approval) => approval.userId),
     createdAt: row.createdAt.toISOString(),
     retiredAt: row.retiredAt?.toISOString() ?? null,
+    cancelledAt: row.cancelledAt?.toISOString() ?? null,
   };
 }
 
@@ -2738,6 +2767,7 @@ async function insertEnvelopes(
   envelopes: VaultKeyEnvelopeInput[],
   recipients: Awaited<ReturnType<typeof validateEnvelopes>>,
   senderDeviceId: string,
+  signerPublicKey: Buffer,
   status: 'pending' | 'active',
 ) {
   const now = new Date();
@@ -2761,6 +2791,9 @@ async function insertEnvelopes(
       ciphertext,
       ciphertextDigest: sha256(ciphertext),
       senderDeviceId,
+      signerUserId: envelope.signerUserId,
+      signerKeyVersion: envelope.signerKeyVersion,
+      signerPublicKey,
       signature: decodeBase64Url(envelope.signature, { exact: 64 }),
       status,
       ...(status === 'active' ? { activatedAt: now } : {}),

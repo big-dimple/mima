@@ -1,5 +1,5 @@
 import * as Tooltip from '@radix-ui/react-tooltip';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { UserPicker } from '../src/components/UserPicker.tsx';
@@ -20,8 +20,8 @@ describe('UserPicker', () => {
       </AppContext.Provider>,
     );
 
-    expect(await screen.findByRole('combobox', { name: '初始拥有者' }))
-      .toHaveValue('Bob Li (bob)');
+    const input = screen.getByRole('combobox', { name: '初始拥有者' });
+    await waitFor(() => expect(input).toHaveValue('Bob Li (bob)'));
     expect(searchUsers).toHaveBeenCalledWith('', ['u-bob'], 1);
   });
 

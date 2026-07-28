@@ -338,6 +338,42 @@ export async function listPublicCryptoProfiles(db: DbOrTx, userIds: string[]) {
   }));
 }
 
+export function envelopeSignerProfiles(rows: Array<{
+  envelope: {
+    signerUserId: string | null;
+    signerKeyVersion: number | null;
+    signerPublicKey: Uint8Array | null;
+  };
+  sender: { userId: string };
+  signer: {
+    cryptoGeneration: number;
+    publicEncryptionKey: Uint8Array;
+    publicSigningKey: Uint8Array;
+  };
+}>) {
+  const profiles = new Map<string, {
+    userId: string;
+    keyVersion: number;
+    encryptionPublicKey: string;
+    signingPublicKey: string;
+  }>();
+  for (const { envelope, sender, signer } of rows) {
+    const userId = envelope.signerUserId ?? sender.userId;
+    const keyVersion = envelope.signerKeyVersion ?? signer.cryptoGeneration;
+    const signingPublicKey = envelope.signerPublicKey ?? signer.publicSigningKey;
+    const key = `${userId}:${keyVersion}`;
+    if (!profiles.has(key)) {
+      profiles.set(key, {
+        userId,
+        keyVersion,
+        encryptionPublicKey: encodeBase64Url(signer.publicEncryptionKey),
+        signingPublicKey: encodeBase64Url(signingPublicKey),
+      });
+    }
+  }
+  return [...profiles.values()];
+}
+
 export async function assertKnownUser(db: DbOrTx, userId: string): Promise<void> {
   const row = (await db.select({ id: users.id }).from(users).where(eq(users.id, userId)).limit(1))[0];
   if (!row) throw new Error('unknown user');
@@ -357,6 +393,8 @@ export function toEnvelopeDto(
     ciphertext: Uint8Array;
     signature: Uint8Array;
     createdAt: Date;
+    signerUserId?: string | null;
+    signerKeyVersion?: number | null;
   },
   signer: { userId: string; keyVersion: number },
 ): VaultKeyEnvelope {
@@ -369,8 +407,8 @@ export function toEnvelopeDto(
     recipientKeyVersion: row.envelopeVersion,
     capability: row.accessScope,
     sealedKeyBundle: encodeBase64Url(row.ciphertext),
-    signerUserId: signer.userId,
-    signerKeyVersion: signer.keyVersion,
+    signerUserId: row.signerUserId ?? signer.userId,
+    signerKeyVersion: row.signerKeyVersion ?? signer.keyVersion,
     signature: encodeBase64Url(row.signature),
     createdAt: row.createdAt.toISOString(),
   };

@@ -115,6 +115,7 @@ beforeAll(async () => {
     approvalUserIds: [],
     createdAt: recoveryRow.createdAt.toISOString(),
     retiredAt: null,
+    cancelledAt: null,
   };
 });
 
@@ -958,6 +959,9 @@ async function insertEnvelope(
     ciphertext,
     ciphertextDigest: createHash('sha256').update(ciphertext).digest(),
     senderDeviceId: ownerDeviceId,
+    signerUserId: owner.userId,
+    signerKeyVersion: ownerProfile.keyVersion,
+    signerPublicKey: Buffer.from(ownerProfile.signingPublicKey, 'base64url'),
     signature: randomBytes(64),
     status: 'active',
     activatedAt: new Date(),

@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -103,10 +103,14 @@ describe('enterprise recovery target request', () => {
     expect(recoveryPackage).toHaveBeenCalledWith(request.id);
     expect(createObjectURL).toHaveBeenCalled();
 
-    fireEvent.change(screen.getByLabelText('离线恢复结果'), {
-      target: { value: JSON.stringify(currentToolResult(request)) },
-    });
-    await userEvent.click(screen.getByRole('button', { name: '本地验证并导入' }));
+    await userEvent.upload(
+      screen.getByLabelText('离线恢复结果 JSON'),
+      new File([JSON.stringify(currentToolResult(request))], 'recovery-result.json', {
+        type: 'application/json',
+      }),
+    );
+    expect(await screen.findByText('recovery-result.json')).toBeVisible();
+    await userEvent.click(screen.getByRole('button', { name: '验证并导入恢复结果' }));
     await waitFor(() => expect(completeRecovery).toHaveBeenCalledWith(
       request,
       expect.objectContaining({
@@ -115,7 +119,7 @@ describe('enterprise recovery target request', () => {
         recoveredEnvelope: expect.objectContaining({ recipientId: owner.id }),
       } satisfies Partial<OfflineRecoveryResult>),
     ));
-    expect(await screen.findByText(/当前没有需要你下载或导入的企业恢复请求/)).toBeVisible();
+    expect(await screen.findByText(/当前没有需要你处理的恢复请求/)).toBeVisible();
   });
 });
 
@@ -180,6 +184,7 @@ function recoveryRequest(): EnterpriseRecoveryRequest {
     id: '30000000-0000-4000-8000-000000000001',
     vaultId: vaultOne,
     recoveryKeyId: stagedRecoveryKey().id,
+    keyEpoch: 1,
     targetUserId: owner.id,
     targetDeviceId: '40000000-0000-4000-8000-000000000001',
     targetEncryptionPublicKey: 'D'.repeat(43),

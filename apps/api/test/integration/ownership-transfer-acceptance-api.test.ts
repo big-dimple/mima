@@ -77,6 +77,7 @@ beforeAll(async () => {
     approvalUserIds: [],
     createdAt: row.createdAt.toISOString(),
     retiredAt: null,
+    cancelledAt: null,
   };
 });
 
@@ -186,6 +187,9 @@ describe('signed ownership transfer acceptance', () => {
       ciphertext: unrelatedCiphertext,
       ciphertextDigest: createHash('sha256').update(unrelatedCiphertext).digest(),
       senderDeviceId: ownerDeviceId,
+      signerUserId: owner.userId,
+      signerKeyVersion: ownerProfile.keyVersion,
+      signerPublicKey: Buffer.from(ownerProfile.signingPublicKey, 'base64url'),
       signature: randomBytes(64),
       status: 'active',
       activatedAt: new Date(),

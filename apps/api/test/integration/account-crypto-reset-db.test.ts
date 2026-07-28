@@ -75,6 +75,16 @@ describe('account crypto reset database approval guards', () => {
       requestDigest: request.requestDigest,
     });
     expect(await resetStatus(request.id)).toBe('approved');
+    await app.ctx.db.insert(systemRoleAssignments).values({
+      userId: ordinaryUser.userId,
+      role: 'platform-admin',
+      assignedBy: 'test',
+    });
+    await expect(app.ctx.db.insert(accountCryptoResetApprovals).values({
+      requestId: request.id,
+      approverUserId: ordinaryUser.userId,
+      requestDigest: request.requestDigest,
+    })).rejects.toThrow();
     await expect(app.ctx.db.update(accountCryptoResetRequests).set({
       status: 'activated',
       activatedAt: new Date(),
@@ -93,6 +103,9 @@ describe('account crypto reset database approval guards', () => {
       approverUserId: adminOne.userId,
       requestDigest: expired.requestDigest,
     })).rejects.toThrow();
+    const replacement = await insertResetRequest();
+    expect(await resetStatus(expired.id)).toBe('expired');
+    expect(await resetStatus(replacement.id)).toBe('pending');
   });
 });
 

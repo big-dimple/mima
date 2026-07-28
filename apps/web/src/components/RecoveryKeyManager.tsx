@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   CheckCircle2,
   Download,
+  FileCheck2,
   KeyRound,
   PackageCheck,
   ShieldCheck,
@@ -12,12 +13,15 @@ import {
   type EnterpriseRecoveryCoverage,
   type EnterpriseRecoveryKey,
   type EnterpriseRecoveryReadiness,
+  type EnterpriseRecoveryWorkspace,
   type RegisterEnterpriseRecoveryKeyRequest,
 } from '@mima/contracts';
 import { useApp, useMeta } from '../state/app-context.ts';
 import { useUi } from '../state/ui-store.ts';
+import { readTextFile } from '../utils/read-text-file.ts';
 import { ErrorState, LoadingState } from './AsyncState.tsx';
 import styles from './RecoveryDialog.module.css';
+import { useOptionalRecoveryWorkspace } from './RecoveryWorkspaceContext.tsx';
 
 interface ManagerState {
   keys: EnterpriseRecoveryKey[];
@@ -30,15 +34,31 @@ export function RecoveryKeyManager() {
   const { api } = useApp();
   const currentUserId = useMeta((store) => store.user?.id ?? '');
   const toast = useUi((state) => state.toast);
-  const manifestRef = useRef<HTMLTextAreaElement>(null);
-  const [state, setState] = useState<ManagerState | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const recoveryWorkspace = useOptionalRecoveryWorkspace();
+  const refreshWorkspace = recoveryWorkspace?.refresh;
+  const hasWorkspace = recoveryWorkspace !== null;
+  const manifestInputRef = useRef<HTMLInputElement>(null);
+  const [manifest, setManifest] = useState<{
+    fileName: string;
+    request: RegisterEnterpriseRecoveryKeyRequest;
+  } | null>(null);
+  const [manifestError, setManifestError] = useState<string | null>(null);
+  const [standaloneState, setStandaloneState] = useState<ManagerState | null>(null);
+  const [standaloneLoadError, setStandaloneLoadError] = useState<string | null>(null);
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const state = recoveryWorkspace
+    ? managerStateFromWorkspace(recoveryWorkspace.workspace)
+    : standaloneState;
+  const loadError = recoveryWorkspace?.error ?? standaloneLoadError;
 
   const load = useCallback(async () => {
-    setState(null);
-    setLoadError(null);
+    if (refreshWorkspace) {
+      await refreshWorkspace({ showLoading: true });
+      return;
+    }
+    setStandaloneState(null);
+    setStandaloneLoadError(null);
     try {
       const [keys, readiness] = await Promise.all([
         api.recoveryKeys(),
@@ -50,34 +70,49 @@ export function RecoveryKeyManager() {
       const coverage = workflowKey && (workflowKey.status === 'staged' || workflowKey.status === 'active')
         ? await api.recoveryCoverage(workflowKey.id)
         : null;
-      setState({ keys, readiness, workflowKey, coverage });
+      setStandaloneState({ keys, readiness, workflowKey, coverage });
     } catch (caught) {
-      setLoadError(caught instanceof Error ? caught.message : '企业恢复状态加载失败');
+      setStandaloneLoadError(caught instanceof Error ? caught.message : '企业恢复状态加载失败');
     }
-  }, [api]);
+  }, [api, refreshWorkspace]);
 
   useEffect(() => {
+    if (hasWorkspace) return undefined;
     void load();
     const refresh = () => void load();
     window.addEventListener('mima:recovery-coverage-updated', refresh);
     return () => window.removeEventListener('mima:recovery-coverage-updated', refresh);
-  }, [load]);
+  }, [hasWorkspace, load]);
 
   const refreshWorkflow = async () => {
-    await load();
+    if (refreshWorkspace) await refreshWorkspace();
+    else await load();
     window.dispatchEvent(new Event('mima:recovery-key-updated'));
+  };
+
+  const selectManifest = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0] ?? null;
+    setManifest(null);
+    setManifestError(null);
+    setActionError(null);
+    if (!file) return;
+    try {
+      const request = parseEnterpriseRecoveryManifest(await readTextFile(file));
+      setManifest({ fileName: file.name, request });
+    } catch (caught) {
+      setManifestError(caught instanceof Error ? caught.message : '公开清单读取失败');
+    }
   };
 
   const register = async (event: React.FormEvent) => {
     event.preventDefault();
-    const raw = manifestRef.current?.value.trim() ?? '';
-    if (!raw) return;
+    if (!manifest) return;
     setBusyAction('register');
     setActionError(null);
     try {
-      const request = parseEnterpriseRecoveryManifest(raw);
-      await api.registerRecoveryKey(request);
-      if (manifestRef.current) manifestRef.current.value = '';
+      await api.registerRecoveryKey(manifest.request);
+      if (manifestInputRef.current) manifestInputRef.current.value = '';
+      setManifest(null);
       await refreshWorkflow();
       toast('info', '公开清单已登记，等待两名不同管理员核对并批准');
     } catch (caught) {
@@ -130,7 +165,7 @@ export function RecoveryKeyManager() {
   };
 
   return (
-    <section className={styles.keyManager} aria-labelledby="recovery-key-heading" data-recovery-tour="recovery-key-manager">
+    <section className={styles.keyManager} aria-labelledby="recovery-key-heading">
       <div className={styles.sectionHeading}>
         <div>
           <h2 id="recovery-key-heading"><KeyRound size={16} aria-hidden />企业恢复设置</h2>
@@ -143,8 +178,11 @@ export function RecoveryKeyManager() {
       {state && <RecoveryWorkflow
         state={state}
         currentUserId={currentUserId}
-        manifestRef={manifestRef}
+        manifest={manifest}
+        manifestError={manifestError}
+        manifestInputRef={manifestInputRef}
         busyAction={busyAction}
+        onManifestSelected={selectManifest}
         onRegister={register}
         onApprove={approve}
         onActivate={activate}
@@ -156,16 +194,22 @@ export function RecoveryKeyManager() {
 function RecoveryWorkflow({
   state,
   currentUserId,
-  manifestRef,
+  manifest,
+  manifestError,
+  manifestInputRef,
   busyAction,
+  onManifestSelected,
   onRegister,
   onApprove,
   onActivate,
 }: {
   state: ManagerState;
   currentUserId: string;
-  manifestRef: React.RefObject<HTMLTextAreaElement>;
+  manifest: { fileName: string; request: RegisterEnterpriseRecoveryKeyRequest } | null;
+  manifestError: string | null;
+  manifestInputRef: React.RefObject<HTMLInputElement>;
   busyAction: string | null;
+  onManifestSelected: (event: React.ChangeEvent<HTMLInputElement>) => Promise<void>;
   onRegister: (event: React.FormEvent) => Promise<void>;
   onApprove: (key: EnterpriseRecoveryKey) => Promise<void>;
   onActivate: (key: EnterpriseRecoveryKey) => Promise<void>;
@@ -230,15 +274,22 @@ function RecoveryWorkflow({
         </div>
         <form className={styles.manifestForm} onSubmit={onRegister}>
           <label htmlFor="recovery-key-manifest">公开清单 manifest.json</label>
-          <textarea
-            ref={manifestRef}
+          <input
+            ref={manifestInputRef}
             id="recovery-key-manifest"
-            rows={5}
-            spellCheck={false}
-            autoComplete="off"
-            placeholder="粘贴公开 manifest.json；不要粘贴 .mimashare"
+            className={styles.fileInput}
+            type="file"
+            accept="application/json,.json"
+            onChange={(event) => void onManifestSelected(event)}
           />
-          <button type="submit" disabled={busyAction !== null}>
+          {manifest && (
+            <div className={styles.fileSummary}>
+              <FileCheck2 size={16} aria-hidden />
+              <span><strong>{manifest.fileName}</strong>公开清单已在本机校验，可以登记。</span>
+            </div>
+          )}
+          {manifestError && <div className={styles.fieldError} role="alert">{manifestError}</div>}
+          <button type="submit" disabled={busyAction !== null || !manifest}>
             <KeyRound size={15} aria-hidden />
             {busyAction === 'register'
               ? '正在登记…'
@@ -335,6 +386,19 @@ function RecoveryWorkflow({
   );
 }
 
+function managerStateFromWorkspace(workspace: EnterpriseRecoveryWorkspace | null): ManagerState | null {
+  if (!workspace?.readiness) return null;
+  const workflowKey = workspace.keys.find((key) => key.status === 'pending' || key.status === 'staged')
+    ?? workspace.keys.find((key) => key.status === 'active')
+    ?? null;
+  return {
+    keys: workspace.keys,
+    readiness: workspace.readiness,
+    workflowKey,
+    coverage: workspace.coverage,
+  };
+}
+
 function WorkflowStep({
   number,
   title,
@@ -382,7 +446,7 @@ export function parseEnterpriseRecoveryManifest(raw: string): RegisterEnterprise
   try {
     value = JSON.parse(raw) as unknown;
   } catch {
-    throw new Error('公开清单不是有效 JSON。请粘贴 manifest.json，不要粘贴 .mimashare');
+    throw new Error('公开清单不是有效 JSON。请选择 manifest.json，不要选择 .mimashare');
   }
   if (!isRecord(value)
     || value.protocol !== 'lm-e2ee-v1'

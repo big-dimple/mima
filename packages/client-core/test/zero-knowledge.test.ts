@@ -1603,6 +1603,7 @@ describe('zero-knowledge client key lifecycle', () => {
       const request = {
         id: requestId,
         vaultId,
+        keyEpoch: 3,
         recoveryKeyId: '08f85828-fe08-4728-b7ea-bbd78e627b8e',
         targetUserId: accountId,
         targetDeviceId: deviceId,
@@ -1730,6 +1731,7 @@ describe('zero-knowledge client key lifecycle', () => {
       const request = {
         id: requestId,
         vaultId,
+        keyEpoch: 4,
         recoveryKeyId: '73370211-c7d0-4ca3-ad2d-9b13a4fd4b40',
         targetUserId: accountId,
         targetDeviceId: deviceId,

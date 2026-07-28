@@ -9,6 +9,12 @@ export async function lockEnterpriseRecoveryCoverage(db: DbOrTx): Promise<void> 
   `);
 }
 
+export async function lockEnterpriseRecoveryAdministration(db: DbOrTx): Promise<void> {
+  await db.execute(sql`
+    LOCK TABLE system_role_assignments, users, user_crypto_profiles, user_devices IN SHARE MODE
+  `);
+}
+
 export async function lockRecipientSets(db: DbOrTx, userIds: Iterable<string>): Promise<void> {
   const orderedUserIds = [...new Set(userIds)].sort((left, right) => left.localeCompare(right));
   for (const userId of orderedUserIds) {

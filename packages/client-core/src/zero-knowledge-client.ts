@@ -1643,14 +1643,17 @@ export class ZeroKnowledgeClient {
   private async applyUnlockedBootstrap(bootstrap: EncryptedBootstrapResponse): Promise<void> {
     const signerIds = [...new Set(bootstrap.envelopes.map((envelope) => envelope.signerUserId))];
     const embeddedProfiles = (bootstrap as EncryptedBootstrapResponse & {
-      signerProfiles?: Array<{ userId: string; signingPublicKey: string }>;
+      signerProfiles?: Array<{ userId: string; keyVersion: number; signingPublicKey: string }>;
     }).signerProfiles ?? [];
     const profiles = signerIds.length > 0 && this.online && embeddedProfiles.length === 0
       ? await this.api.cryptoPublicProfiles(signerIds)
       : embeddedProfiles;
     const projection = await this.keyring.decryptBootstrap(
       bootstrap,
-      Object.fromEntries(profiles.map((profile) => [profile.userId, profile.signingPublicKey])),
+      Object.fromEntries(profiles.map((profile) => [
+        `${profile.userId}:${profile.keyVersion}`,
+        profile.signingPublicKey,
+      ])),
     );
     for (const state of Object.values(projection.vaultCrypto)) {
       const taskId = (state as typeof state & { rekeyTaskId?: string | null }).rekeyTaskId;

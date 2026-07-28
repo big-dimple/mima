@@ -30,6 +30,7 @@ let vaultId: string;
 let ownerDeviceId: string;
 let recipientDeviceId: string;
 let extensionDeviceId: string;
+let ownerProfile: ReturnType<typeof profile>;
 
 beforeAll(async () => {
   app = await freshTestApp('mima_test_vault_envelope_tasks_db');
@@ -38,7 +39,8 @@ beforeAll(async () => {
   ownerDeviceId = randomUUID();
   recipientDeviceId = randomUUID();
   extensionDeviceId = randomUUID();
-  await app.ctx.db.insert(userCryptoProfiles).values(profile(owner.userId));
+  ownerProfile = profile(owner.userId);
+  await app.ctx.db.insert(userCryptoProfiles).values(ownerProfile);
   await app.ctx.db.insert(userDevices).values([
     device(ownerDeviceId, owner.userId, 'web'),
     device(recipientDeviceId, recipient.userId, 'web'),
@@ -72,7 +74,11 @@ beforeAll(async () => {
     authorizationKind: 'recovery', authorizationRef: recovery.id, envelopeVersion: 1,
     ciphertext: recoveryCiphertext,
     ciphertextDigest: createHash('sha256').update(recoveryCiphertext).digest(),
-    senderDeviceId: ownerDeviceId, signature: randomBytes(64), status: 'active', activatedAt: new Date(),
+    senderDeviceId: ownerDeviceId,
+    signerUserId: owner.userId,
+    signerKeyVersion: ownerProfile.cryptoGeneration,
+    signerPublicKey: ownerProfile.publicSigningKey,
+    signature: randomBytes(64), status: 'active', activatedAt: new Date(),
   });
   await app.ctx.db.insert(encryptedVaultHeaders).values({
     vaultId, headerVersion: 1, keyEpoch: 1,
@@ -309,6 +315,9 @@ function envelope(input: {
     ciphertext,
     ciphertextDigest: createHash('sha256').update(ciphertext).digest(),
     senderDeviceId: input.senderDeviceId,
+    signerUserId: owner.userId,
+    signerKeyVersion: ownerProfile.cryptoGeneration,
+    signerPublicKey: ownerProfile.publicSigningKey,
     signature: randomBytes(64),
     status: 'active' as const,
     activatedAt: new Date(),

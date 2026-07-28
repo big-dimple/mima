@@ -13,6 +13,7 @@ import {
   legacyMigrationEvidence,
   legacyMigrationJobs,
   systemRoleAssignments,
+  userCryptoProfiles,
   vaultCryptoStates,
   vaultKeyEnvelopes,
   vaultKeyEpochs,
@@ -277,6 +278,8 @@ async function initializeEmptyE2eeVault(
   recovery: typeof enterpriseRecoveryKeys.$inferSelect,
 ) {
   const now = new Date();
+  const signerProfile = (await app.ctx.db.select().from(userCryptoProfiles)
+    .where(eq(userCryptoProfiles.userId, owner.userId)).limit(1))[0]!;
   await app.ctx.db.insert(vaultKeyEpochs).values({
     vaultId,
     epoch: 1,
@@ -303,6 +306,9 @@ async function initializeEmptyE2eeVault(
     ciphertext: recoveryCiphertext,
     ciphertextDigest: createHash('sha256').update(recoveryCiphertext).digest(),
     senderDeviceId: owner.deviceId,
+    signerUserId: owner.userId,
+    signerKeyVersion: signerProfile.cryptoGeneration,
+    signerPublicKey: signerProfile.publicSigningKey,
     signature: randomBytes(64),
     status: 'active',
     activatedAt: now,

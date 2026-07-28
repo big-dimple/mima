@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { and, desc, eq, inArray, ne, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, lte, ne, sql } from 'drizzle-orm';
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
@@ -65,6 +65,7 @@ export function registerE2eeAccountResetRoutes(app: FastifyInstance): void {
       response: { 200: z.array(AccountCryptoResetRequestSchema), '4xx': ZeroKnowledgeApiErrorSchema },
     },
   }, async (req, reply) => {
+    await expireAccountCryptoResetRequests(db);
     const filters = [];
     if (!req.user.isLocalPlatformAdmin) filters.push(eq(accountCryptoResetRequests.targetUserId, req.user.id));
     else if (req.query.targetUserId) filters.push(eq(accountCryptoResetRequests.targetUserId, req.query.targetUserId));
@@ -85,6 +86,7 @@ export function registerE2eeAccountResetRoutes(app: FastifyInstance): void {
       response: { 200: AccountCryptoResetRequestSchema, '4xx': ZeroKnowledgeApiErrorSchema },
     },
   }, async (req, reply) => {
+    await expireAccountCryptoResetRequests(db);
     const row = (await db.select().from(accountCryptoResetRequests)
       .where(eq(accountCryptoResetRequests.id, req.params.requestId)).limit(1))[0];
     if (!row) return reply.code(404).send(notFoundBody('账户加密身份重置请求不存在') as never);
@@ -189,6 +191,7 @@ export function registerE2eeAccountResetRoutes(app: FastifyInstance): void {
 
     try {
       const result = await runCommand(db, bus, audit, req.user.id, req.body.idempotencyKey, async (tx) => {
+        await expireAccountCryptoResetRequests(tx);
         const current = (await tx.select().from(userCryptoProfiles)
           .where(eq(userCryptoProfiles.userId, req.user.id)).for('update').limit(1))[0];
         if (!current
@@ -232,7 +235,7 @@ export function registerE2eeAccountResetRoutes(app: FastifyInstance): void {
           details: {},
         });
         return { statusCode: 201, response: await accountResetDto(tx, row) };
-      });
+      }, commandIdentity('crypto.account_reset.create', req.body));
       reply.header('cache-control', 'no-store');
       return reply.code(201).send(result.response);
     } catch (error) {
@@ -252,6 +255,7 @@ export function registerE2eeAccountResetRoutes(app: FastifyInstance): void {
     },
   }, async (req, reply) => {
     if (!req.user.isLocalPlatformAdmin) return forbidden(reply, '只有本地授权的系统管理员可以审批账户加密身份重置');
+    await expireAccountCryptoResetRequests(db);
     const row = (await db.select().from(accountCryptoResetRequests)
       .where(eq(accountCryptoResetRequests.id, req.params.requestId)).limit(1))[0];
     if (!row) return reply.code(404).send(notFoundBody('账户加密身份重置请求不存在') as never);
@@ -265,13 +269,30 @@ export function registerE2eeAccountResetRoutes(app: FastifyInstance): void {
     if (!Buffer.from(row.requestDigest).equals(requestDigest)) return conflict(reply, '账户加密身份重置摘要不匹配');
     try {
       const result = await runCommand(db, bus, audit, req.user.id, req.body.idempotencyKey, async (tx) => {
+        await expireAccountCryptoResetRequests(tx);
+        const locked = (await tx.select().from(accountCryptoResetRequests)
+          .where(eq(accountCryptoResetRequests.id, row.id)).for('update').limit(1))[0];
+        if (!locked || !['pending', 'approved'].includes(locked.status)) {
+          throw new AccountResetConflictError(locked?.status === 'expired'
+            ? '这次主密码重置申请已过期，请让申请人重新发起'
+            : '这次主密码重置申请已经结束，请刷新查看最新状态');
+        }
+        const approvals = await tx.select({ userId: accountCryptoResetApprovals.approverUserId })
+          .from(accountCryptoResetApprovals)
+          .where(eq(accountCryptoResetApprovals.requestId, locked.id));
+        if (approvals.some((approval) => approval.userId === req.user.id)) {
+          throw new AccountResetConflictError('你已经确认过这次主密码重置，无需重复操作');
+        }
+        if (approvals.length >= 2) {
+          throw new AccountResetConflictError('这次主密码重置已完成两人确认，请刷新后进入下一步');
+        }
         await tx.insert(accountCryptoResetApprovals).values({
-          requestId: row.id,
+          requestId: locked.id,
           approverUserId: req.user.id,
           requestDigest,
         });
         const updated = (await tx.select().from(accountCryptoResetRequests)
-          .where(eq(accountCryptoResetRequests.id, row.id)).limit(1))[0]!;
+          .where(eq(accountCryptoResetRequests.id, locked.id)).limit(1))[0]!;
         await appendAudit(tx, audit, {
           actorUserId: req.user.id,
           action: 'crypto.account_reset.approve',
@@ -279,9 +300,10 @@ export function registerE2eeAccountResetRoutes(app: FastifyInstance): void {
           details: {},
         });
         return { statusCode: 200, response: await accountResetDto(tx, updated) };
-      });
+      }, commandIdentity('crypto.account_reset.approve', { requestId: req.params.requestId, ...req.body }));
       return reply.code(200).send(result.response);
     } catch (error) {
+      if (error instanceof AccountResetConflictError) return conflict(reply, error.message);
       if (isUniqueViolation(error)) return conflict(reply, '你已经审批过该账户加密身份重置请求');
       return conflict(reply, '该账户加密身份重置请求已变化或不再接受审批');
     }
@@ -296,6 +318,7 @@ export function registerE2eeAccountResetRoutes(app: FastifyInstance): void {
       response: { 200: AccountCryptoResetRequestSchema, '4xx': ZeroKnowledgeApiErrorSchema },
     },
   }, async (req, reply) => {
+    await expireAccountCryptoResetRequests(db);
     const row = (await db.select().from(accountCryptoResetRequests)
       .where(eq(accountCryptoResetRequests.id, req.params.requestId)).limit(1))[0];
     if (!row) return reply.code(404).send(notFoundBody('账户加密身份重置请求不存在') as never);
@@ -322,7 +345,7 @@ export function registerE2eeAccountResetRoutes(app: FastifyInstance): void {
           details: {},
         });
         return { statusCode: 200, response: await accountResetDto(tx, cancelled) };
-      });
+      }, commandIdentity('crypto.account_reset.cancel', { requestId: req.params.requestId, ...req.body }));
       return reply.code(200).send(result.response);
     } catch (error) {
       if (error instanceof AccountResetConflictError) return conflict(reply, error.message);
@@ -339,6 +362,7 @@ export function registerE2eeAccountResetRoutes(app: FastifyInstance): void {
       response: { 200: ActivateAccountCryptoResetResponseSchema, '4xx': ZeroKnowledgeApiErrorSchema },
     },
   }, async (req, reply) => {
+    await expireAccountCryptoResetRequests(db);
     const row = (await db.select().from(accountCryptoResetRequests)
       .where(eq(accountCryptoResetRequests.id, req.params.requestId)).limit(1))[0];
     if (!row) return reply.code(404).send(notFoundBody('账户加密身份重置请求不存在') as never);
@@ -371,6 +395,7 @@ export function registerE2eeAccountResetRoutes(app: FastifyInstance): void {
     try {
       const result = await runCommand(db, bus, audit, req.user.id, req.body.idempotencyKey, async (tx, collect) => {
         await lockRecipientSets(tx, [req.user.id]);
+        await expireAccountCryptoResetRequests(tx);
         const reset = (await tx.select().from(accountCryptoResetRequests)
           .where(eq(accountCryptoResetRequests.id, row.id)).for('update').limit(1))[0];
         const profile = (await tx.select().from(userCryptoProfiles)
@@ -627,7 +652,7 @@ export function registerE2eeAccountResetRoutes(app: FastifyInstance): void {
             rekeyTasks,
           },
         };
-      });
+      }, commandIdentity('crypto.account_reset.activate', { requestId: req.params.requestId, ...req.body }));
       reply.header('cache-control', 'no-store');
       return reply.code(200).send(result.response);
     } catch (error) {
@@ -649,6 +674,21 @@ export function mergeAccountResetAffectedVaultIds(
     ...deviceEnvelopeRows.map((entry) => entry.vaultId),
     ...authorizedVaults.map((entry) => entry.vaultId),
   ])];
+}
+
+function commandIdentity(commandName: string, request: unknown) {
+  return { commandName, requestDigest: sha256(canonicalJson(request as never)) };
+}
+
+async function expireAccountCryptoResetRequests(db: DbOrTx): Promise<void> {
+  await db.update(accountCryptoResetRequests).set({
+    status: 'expired',
+    expiredAt: new Date(),
+    lastErrorCode: 'request_expired',
+  }).where(and(
+    inArray(accountCryptoResetRequests.status, ['pending', 'approved']),
+    lte(accountCryptoResetRequests.expiresAt, new Date()),
+  ));
 }
 
 async function accountResetDto(
@@ -709,6 +749,8 @@ async function accountResetDto(
     approvedAt: row.approvedAt?.toISOString() ?? null,
     activatedAt: row.activatedAt?.toISOString() ?? null,
     cancelledAt: row.cancelledAt?.toISOString() ?? null,
+    expiredAt: row.expiredAt?.toISOString() ?? null,
+    lastErrorCode: row.lastErrorCode,
   };
 }
 

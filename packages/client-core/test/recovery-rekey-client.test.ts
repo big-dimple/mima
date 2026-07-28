@@ -184,6 +184,7 @@ function recoveryClientFixture(
   const request = {
     id: '25226487-1027-4af8-ac8a-f229e9a70b51',
     vaultId,
+    keyEpoch: 1,
     recoveryKeyId: recoveryKey.id,
     targetUserId: accountId,
     targetDeviceId: deviceId,

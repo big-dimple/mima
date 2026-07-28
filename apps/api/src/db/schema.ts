@@ -329,11 +329,13 @@ export const commandDedup = pgTable(
   {
     idempotencyKey: text('idempotency_key').notNull(),
     userId: text('user_id').notNull(),
+    commandName: text('command_name').notNull().default('legacy'),
+    requestDigest: bytea('request_digest'),
     statusCode: integer('status_code').notNull(),
     response: jsonb('response').$type<Record<string, unknown>>().notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [uniqueIndex('command_dedup_uq').on(t.idempotencyKey, t.userId)],
+  (t) => [uniqueIndex('command_dedup_uq').on(t.idempotencyKey, t.userId, t.commandName)],
 );
 
 export const authAttempts = pgTable(
@@ -364,7 +366,7 @@ export const enterpriseRecoveryKeys = pgTable(
     threshold: integer('threshold').notNull().default(2),
     shareCount: integer('share_count').notNull().default(3),
     status: text('status')
-      .$type<'pending' | 'staged' | 'active' | 'retired' | 'compromised'>()
+      .$type<'pending' | 'staged' | 'active' | 'retired' | 'compromised' | 'cancelled'>()
       .notNull()
       .default('pending'),
     ceremonyEvidenceDigest: bytea('ceremony_evidence_digest').notNull(),
@@ -373,11 +375,15 @@ export const enterpriseRecoveryKeys = pgTable(
       .references(() => users.id, { onDelete: 'restrict' }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     retiredAt: timestamp('retired_at', { withTimezone: true }),
+    cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
   },
   (t) => [
     uniqueIndex('enterprise_recovery_keys_ceremony_uq').on(t.ceremonyId),
     uniqueIndex('enterprise_recovery_keys_fingerprint_uq').on(t.keyFingerprint),
     uniqueIndex('enterprise_recovery_keys_active_uq').on(t.status).where(sql`${t.status} = 'active'`),
+    uniqueIndex('enterprise_recovery_keys_draft_uq')
+      .on(sql`(true)`)
+      .where(sql`${t.status} IN ('pending', 'staged')`),
   ],
 );
 
@@ -764,6 +770,9 @@ export const vaultKeyEnvelopes = pgTable(
     senderDeviceId: uuid('sender_device_id')
       .notNull()
       .references(() => userDevices.id, { onDelete: 'restrict' }),
+    signerUserId: text('signer_user_id').references(() => users.id, { onDelete: 'restrict' }),
+    signerKeyVersion: integer('signer_key_version'),
+    signerPublicKey: bytea('signer_public_key'),
     signature: bytea('signature').notNull(),
     status: text('status').$type<'pending' | 'active' | 'revoked' | 'superseded'>().notNull().default('pending'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -1311,7 +1320,7 @@ export const accountCryptoResetRequests = pgTable(
     candidateUserProof: bytea('candidate_user_proof').notNull(),
     requestDigest: bytea('request_digest').notNull().unique(),
     status: text('status')
-      .$type<'pending' | 'approved' | 'activated' | 'cancelled' | 'failed'>()
+      .$type<'pending' | 'approved' | 'activated' | 'cancelled' | 'expired' | 'failed'>()
       .notNull()
       .default('pending'),
     createdByUserId: text('created_by_user_id')
@@ -1322,6 +1331,7 @@ export const accountCryptoResetRequests = pgTable(
     approvedAt: timestamp('approved_at', { withTimezone: true }),
     activatedAt: timestamp('activated_at', { withTimezone: true }),
     cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
+    expiredAt: timestamp('expired_at', { withTimezone: true }),
     failedAt: timestamp('failed_at', { withTimezone: true }),
     lastErrorCode: text('last_error_code'),
   },
@@ -1379,6 +1389,7 @@ export const enterpriseRecoveryRequests = pgTable(
     recoveryKeyId: uuid('recovery_key_id')
       .notNull()
       .references(() => enterpriseRecoveryKeys.id, { onDelete: 'restrict' }),
+    keyEpoch: integer('key_epoch').notNull(),
     targetUserId: text('target_user_id')
       .notNull()
       .references(() => users.id, { onDelete: 'restrict' }),
@@ -1395,7 +1406,7 @@ export const enterpriseRecoveryRequests = pgTable(
     ),
     requestDigest: bytea('request_digest').notNull().unique(),
     status: text('status')
-      .$type<'pending' | 'approved' | 'completed' | 'cancelled' | 'failed'>()
+      .$type<'pending' | 'approved' | 'completed' | 'cancelled' | 'expired' | 'failed'>()
       .notNull()
       .default('pending'),
     createdByUserId: text('created_by_user_id')
@@ -1411,9 +1422,15 @@ export const enterpriseRecoveryRequests = pgTable(
     approvedAt: timestamp('approved_at', { withTimezone: true }),
     completedAt: timestamp('completed_at', { withTimezone: true }),
     cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
+    expiredAt: timestamp('expired_at', { withTimezone: true }),
     failedAt: timestamp('failed_at', { withTimezone: true }),
   },
   (t) => [
+    foreignKey({
+      columns: [t.vaultId, t.keyEpoch],
+      foreignColumns: [vaultKeyEpochs.vaultId, vaultKeyEpochs.epoch],
+      name: 'enterprise_recovery_requests_epoch_fk',
+    }).onDelete('restrict'),
     foreignKey({
       columns: [t.targetDeviceId, t.targetUserId],
       foreignColumns: [userDevices.id, userDevices.userId],

@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { and, asc, desc, eq, inArray } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNotNull, lte } from 'drizzle-orm';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
@@ -8,6 +8,8 @@ import {
   ActivateEnterpriseRecoveryKeyRequestSchema,
   ApproveEnterpriseRecoveryKeyRequestSchema,
   ApproveEnterpriseRecoveryRequestSchema,
+  CancelEnterpriseRecoveryKeyRequestSchema,
+  CancelEnterpriseRecoveryRequestSchema,
   CompleteEnterpriseRecoveryRequestSchema,
   CreateEnterpriseRecoveryRequestSchema,
   DistributeEnterpriseRecoveryEnvelopeRequestSchema,
@@ -17,6 +19,7 @@ import {
   EnterpriseRecoveryKeySchema,
   EnterpriseRecoveryReadinessSchema,
   EnterpriseRecoveryRequestSchema,
+  EnterpriseRecoveryWorkspaceSchema,
   RegisterEnterpriseRecoveryKeyRequestSchema,
 } from '@mima/contracts';
 import {
@@ -58,7 +61,11 @@ import {
   resolveAuthorizedVaultCapability,
 } from '../services/vault-envelope-tasks.ts';
 import { hasLocalPlatformAdminRole } from '../services/system-roles.ts';
-import { lockEnterpriseRecoveryCoverage } from '../services/recipient-set-lock.ts';
+import {
+  lockEnterpriseRecoveryAdministration,
+  lockEnterpriseRecoveryCoverage,
+  lockRecipientSets,
+} from '../services/recipient-set-lock.ts';
 
 const RecoveryParams = z.object({ requestId: z.string().uuid() });
 const RecoveryKeyParams = z.object({ keyId: z.string().uuid() });
@@ -115,6 +122,56 @@ export function registerE2eeRecoveryRoutes(app: FastifyInstance): void {
   }, async (_req, reply) => {
     reply.header('cache-control', 'no-store');
     return enterpriseRecoveryReadinessDto(db);
+  });
+
+  r.get('/api/v2/recovery/workspace', {
+    preHandler: [app.requireSession],
+    schema: {
+      tags: ['e2ee-recovery'],
+      response: { 200: EnterpriseRecoveryWorkspaceSchema, '4xx': ZeroKnowledgeApiErrorSchema },
+    },
+  }, async (req, reply) => {
+    await expireEnterpriseRecoveryRequests(db);
+    const canManage = await hasLocalPlatformAdminRole(db, req.user.id);
+    const keys = canManage
+      ? await db.select().from(enterpriseRecoveryKeys).orderBy(desc(enterpriseRecoveryKeys.createdAt))
+      : await db.select().from(enterpriseRecoveryKeys)
+          .where(inArray(enterpriseRecoveryKeys.status, ['staged', 'active']))
+          .orderBy(desc(enterpriseRecoveryKeys.createdAt));
+    const workflowKey = keys.find((key) => key.status === 'pending' || key.status === 'staged')
+      ?? keys.find((key) => key.status === 'active')
+      ?? null;
+    const requestRows = canManage
+      ? await db.select().from(enterpriseRecoveryRequests).orderBy(desc(enterpriseRecoveryRequests.createdAt))
+      : await db.select().from(enterpriseRecoveryRequests)
+          .where(eq(enterpriseRecoveryRequests.targetUserId, req.user.id))
+          .orderBy(desc(enterpriseRecoveryRequests.createdAt));
+    const [readiness, coverage, candidates] = await Promise.all([
+      canManage ? enterpriseRecoveryReadinessDto(db) : Promise.resolve(null),
+      workflowKey && ['staged', 'active'].includes(workflowKey.status)
+        ? enterpriseRecoveryCoverageDto(db, workflowKey.id, req.user.id, canManage)
+        : Promise.resolve(null),
+      canManage ? listPersonalVaultRecoveryCandidates(db) : Promise.resolve([]),
+    ]);
+    reply.header('cache-control', 'no-store');
+    return {
+      refreshedAt: new Date().toISOString(),
+      keys: await Promise.all(keys.map((key) => recoveryKeyDto(db, key))),
+      readiness,
+      coverage,
+      requests: await Promise.all(requestRows.map((request) => recoveryRequestDto(db, request))),
+      candidates: candidates.map((candidate) => ({
+        vaultId: candidate.vault.id,
+        targetUserId: candidate.user.id,
+        targetDisplayName: candidate.user.displayName,
+        targetUsername: candidate.user.username,
+        targetDeviceId: candidate.targetDevice.id,
+        targetEncryptionPublicKey: encodeBase64Url(candidate.profile.publicEncryptionKey),
+        targetKeyVersion: candidate.profile.cryptoGeneration,
+        targetCapability: 'full' as const,
+        reason: 'personal_owner_missing_current_full_envelope' as const,
+      })),
+    };
   });
 
   r.get('/api/v2/recovery/keys/:keyId/coverage', {
@@ -199,13 +256,27 @@ export function registerE2eeRecoveryRoutes(app: FastifyInstance): void {
     if (!['pending', 'staged'].includes(key.status)) return conflict(reply, '该企业恢复公钥不再接受审批');
     try {
       const result = await runCommand(db, bus, audit, req.user.id, req.body.idempotencyKey, async (tx) => {
+        const lockedKey = (await tx.select().from(enterpriseRecoveryKeys)
+          .where(eq(enterpriseRecoveryKeys.id, key.id)).for('update').limit(1))[0];
+        if (!lockedKey || !['pending', 'staged'].includes(lockedKey.status)) {
+          throw new RecoveryRequestError(409, '这份公开清单已经结束，请刷新查看最新状态');
+        }
+        const approvals = await tx.select({ userId: enterpriseRecoveryKeyApprovals.approverUserId })
+          .from(enterpriseRecoveryKeyApprovals)
+          .where(eq(enterpriseRecoveryKeyApprovals.recoveryKeyId, lockedKey.id));
+        if (approvals.some((approval) => approval.userId === req.user.id)) {
+          throw new RecoveryRequestError(409, '你已经确认过这份公开清单，无需重复操作');
+        }
+        if (approvals.length >= 2) {
+          throw new RecoveryRequestError(409, '这份公开清单已完成两人确认，请刷新后进入下一步');
+        }
         await tx.insert(enterpriseRecoveryKeyApprovals).values({
-          recoveryKeyId: key.id,
+          recoveryKeyId: lockedKey.id,
           approverUserId: req.user.id,
           ceremonyEvidenceDigest: evidenceDigest,
         });
         const updated = (await tx.select().from(enterpriseRecoveryKeys)
-          .where(eq(enterpriseRecoveryKeys.id, key.id)).limit(1))[0]!;
+          .where(eq(enterpriseRecoveryKeys.id, lockedKey.id)).limit(1))[0]!;
         await appendAudit(tx, audit, {
           actorUserId: req.user.id,
           action: 'recovery.key.approve',
@@ -213,11 +284,61 @@ export function registerE2eeRecoveryRoutes(app: FastifyInstance): void {
           details: {},
         });
         return { statusCode: 200, response: await recoveryKeyDto(tx, updated) };
-      });
+      }, commandIdentity('recovery.key.approve', { keyId: req.params.keyId, ...req.body }));
       return reply.code(200).send(result.response);
     } catch (error) {
+      if (error instanceof RecoveryRequestError) return sendRecoveryRequestError(reply, error);
       if (isUniqueViolation(error)) return conflict(reply, '你已经审批过该企业恢复公钥');
       throw error;
+    }
+  });
+
+  r.post('/api/v2/recovery/keys/:keyId/cancel', {
+    preHandler: recoveryKeyWriteGuard,
+    schema: {
+      tags: ['e2ee-recovery'],
+      params: RecoveryKeyParams,
+      body: CancelEnterpriseRecoveryKeyRequestSchema,
+      response: { 200: EnterpriseRecoveryKeySchema, '4xx': ZeroKnowledgeApiErrorSchema },
+    },
+  }, async (req, reply) => {
+    let evidenceDigest;
+    try { evidenceDigest = decodeBase64Url(req.body.ceremonyEvidenceDigest, { exact: 32 }); }
+    catch { return badRequest(reply, '公开清单摘要格式无效'); }
+    try {
+      const result = await runCommand(
+        db,
+        bus,
+        audit,
+        req.user.id,
+        req.body.idempotencyKey,
+        async (tx) => {
+          const key = (await tx.select().from(enterpriseRecoveryKeys)
+            .where(eq(enterpriseRecoveryKeys.id, req.params.keyId)).for('update').limit(1))[0];
+          if (!key) throw new RecoveryRequestError(404, '企业恢复公开清单不存在');
+          if (!['pending', 'staged'].includes(key.status)) {
+            throw new RecoveryRequestError(409, '这份公开清单已经结束，刷新后可查看最新状态');
+          }
+          if (!Buffer.from(key.ceremonyEvidenceDigest).equals(evidenceDigest)) {
+            throw new RecoveryRequestError(409, '公开清单摘要不匹配，请重新导入原文件');
+          }
+          const cancelled = (await tx.update(enterpriseRecoveryKeys).set({
+            status: 'cancelled',
+            cancelledAt: new Date(),
+          }).where(eq(enterpriseRecoveryKeys.id, key.id)).returning())[0]!;
+          await appendAudit(tx, audit, {
+            actorUserId: req.user.id,
+            action: 'recovery.key.cancel',
+            success: true,
+            details: {},
+          });
+          return { statusCode: 200, response: await recoveryKeyDto(tx, cancelled) };
+        },
+        commandIdentity('recovery.key.cancel', { keyId: req.params.keyId, ...req.body }),
+      );
+      return reply.code(200).send(result.response);
+    } catch (error) {
+      return sendRecoveryRequestError(reply, error);
     }
   });
 
@@ -242,7 +363,9 @@ export function registerE2eeRecoveryRoutes(app: FastifyInstance): void {
       db.select().from(vaultCryptoStates).where(eq(vaultCryptoStates.vaultId, req.params.vaultId)).limit(1),
     ]);
     if (!actor || !profile) return forbidden(reply, '当前设备未授权');
-    if (!key[0] || key[0].status !== 'staged') return conflict(reply, '企业恢复公钥尚未完成双人审批');
+    if (!key[0] || !['staged', 'active'].includes(key[0].status)) {
+      return conflict(reply, '企业恢复公开清单尚未完成两人确认，或已不再接受保护更新');
+    }
     if (!state[0] || state[0].storageMode !== 'e2ee' || !state[0].activeEpoch) {
       return conflict(reply, '该密码库尚未启用零知识加密');
     }
@@ -267,23 +390,79 @@ export function registerE2eeRecoveryRoutes(app: FastifyInstance): void {
     } catch { return badRequest(reply, '企业恢复 envelope 格式无效'); }
     try {
       const result = await runCommand(db, bus, audit, req.user.id, req.body.idempotencyKey, async (tx) => {
-        await tx.insert(vaultKeyEnvelopes).values({
-          vaultId: req.params.vaultId,
-          keyEpoch: state[0]!.activeEpoch!,
-          recipientKind: 'enterprise_recovery',
-          accessScope: 'recovery',
-          recipientRecoveryKeyId: key[0]!.id,
-          recipientKeyFingerprint: key[0]!.keyFingerprint,
-          authorizationKind: 'recovery',
-          authorizationRef: key[0]!.ceremonyId,
-          envelopeVersion: 1,
-          ciphertext,
-          ciphertextDigest: sha256(ciphertext),
-          senderDeviceId: actor.id,
-          signature: envelopeSignature,
-          status: 'active',
-          activatedAt: new Date(),
-        });
+        await lockEnterpriseRecoveryCoverage(tx);
+        await lockRecipientSets(tx, [req.user.id]);
+        const [lockedAccess, lockedActor, lockedProfile] = await Promise.all([
+          getVaultAccess(tx, req.user, req.params.vaultId),
+          getActiveDevice(tx, req.user.id, req.body.actorDeviceId),
+          getCryptoProfile(tx, req.user.id),
+        ]);
+        const lockedKey = (await tx.select().from(enterpriseRecoveryKeys)
+          .where(eq(enterpriseRecoveryKeys.id, req.params.keyId)).for('share').limit(1))[0];
+        const lockedState = (await tx.select().from(vaultCryptoStates)
+          .where(eq(vaultCryptoStates.vaultId, req.params.vaultId)).for('update').limit(1))[0];
+        if (!lockedAccess || lockedAccess.role !== 'owner') {
+          throw new RecoveryRequestError(403, '你已不是该密码库的拥有者，请刷新后核对权限');
+        }
+        if (!lockedActor || !lockedProfile) {
+          throw new RecoveryRequestError(403, '当前设备授权已经变化，请重新解锁后重试');
+        }
+        if (!lockedKey || !['staged', 'active'].includes(lockedKey.status)) {
+          throw new RecoveryRequestError(409, '企业恢复公开清单尚未完成两人确认，或已不再接受保护更新');
+        }
+        if (!lockedState?.activeEpoch || lockedState.storageMode !== 'e2ee') {
+          throw new RecoveryRequestError(409, '密码库安全状态已经变化，请刷新后重试');
+        }
+        if (
+          envelope.epoch !== lockedState.activeEpoch
+          || envelope.signerKeyVersion !== lockedProfile.cryptoGeneration
+          || !Buffer.from(lockedProfile.publicSigningKey).equals(profile.publicSigningKey)
+          || !await verifyVaultEnvelope(envelope, encodeBase64Url(lockedProfile.publicSigningKey))
+        ) throw new RecoveryRequestError(409, '密码库密钥或账号安全信息已经变化，请刷新后重新添加保护');
+        const existing = (await tx.select().from(vaultKeyEnvelopes).where(and(
+          eq(vaultKeyEnvelopes.vaultId, req.params.vaultId),
+          eq(vaultKeyEnvelopes.keyEpoch, lockedState.activeEpoch),
+          eq(vaultKeyEnvelopes.recipientRecoveryKeyId, lockedKey.id),
+          eq(vaultKeyEnvelopes.accessScope, 'recovery'),
+          eq(vaultKeyEnvelopes.authorizationKind, 'recovery'),
+        )).for('update').limit(1))[0];
+        const alreadyCovered = Boolean(
+          existing?.status === 'active'
+          && existing.signerUserId
+          && existing.signerKeyVersion
+          && existing.signerPublicKey,
+        );
+        if (!alreadyCovered) {
+          const values = {
+            ciphertext,
+            ciphertextDigest: sha256(ciphertext),
+            senderDeviceId: lockedActor.id,
+            signerUserId: req.user.id,
+            signerKeyVersion: lockedProfile.cryptoGeneration,
+            signerPublicKey: lockedProfile.publicSigningKey,
+            signature: envelopeSignature,
+            status: 'active' as const,
+            activatedAt: new Date(),
+            revokedAt: null,
+            revocationReason: null,
+          };
+          if (existing) {
+            await tx.update(vaultKeyEnvelopes).set(values).where(eq(vaultKeyEnvelopes.id, existing.id));
+          } else {
+            await tx.insert(vaultKeyEnvelopes).values({
+              vaultId: req.params.vaultId,
+              keyEpoch: lockedState.activeEpoch,
+              recipientKind: 'enterprise_recovery',
+              accessScope: 'recovery',
+              recipientRecoveryKeyId: lockedKey.id,
+              recipientKeyFingerprint: lockedKey.keyFingerprint,
+              authorizationKind: 'recovery',
+              authorizationRef: lockedKey.ceremonyId,
+              envelopeVersion: 1,
+              ...values,
+            });
+          }
+        }
         await appendAudit(tx, audit, {
           actorUserId: req.user.id,
           action: 'recovery.key.distribute',
@@ -293,22 +472,17 @@ export function registerE2eeRecoveryRoutes(app: FastifyInstance): void {
         });
         return {
           statusCode: 201,
-          response: { ok: true as const, alreadyCovered: false },
+          response: { ok: true as const, alreadyCovered },
         };
-      });
+      }, commandIdentity('recovery.key.distribute', {
+        keyId: req.params.keyId,
+        vaultId: req.params.vaultId,
+        ...req.body,
+      }));
       return reply.code(201).send(result.response);
     } catch (error) {
-      if (isUniqueViolation(error)) {
-        const existing = (await db.select({ id: vaultKeyEnvelopes.id }).from(vaultKeyEnvelopes)
-          .where(and(
-            eq(vaultKeyEnvelopes.vaultId, req.params.vaultId),
-            eq(vaultKeyEnvelopes.keyEpoch, state[0]!.activeEpoch!),
-            eq(vaultKeyEnvelopes.recipientRecoveryKeyId, key[0]!.id),
-            eq(vaultKeyEnvelopes.status, 'active'),
-          )).limit(1))[0];
-        if (existing) return reply.code(201).send({ ok: true, alreadyCovered: true });
-        return conflict(reply, '该密码库的企业恢复覆盖状态已经变化');
-      }
+      if (error instanceof RecoveryRequestError) return sendRecoveryRequestError(reply, error);
+      if (isUniqueViolation(error)) return conflict(reply, '该密码库的企业恢复保护已经由其他操作更新，请刷新查看');
       throw error;
     }
   });
@@ -326,6 +500,7 @@ export function registerE2eeRecoveryRoutes(app: FastifyInstance): void {
     try {
       const result = await runCommand(db, bus, audit, req.user.id, req.body.idempotencyKey, async (tx, collect) => {
         await lockEnterpriseRecoveryCoverage(tx);
+        await lockEnterpriseRecoveryAdministration(tx);
         const key = (await tx.select().from(enterpriseRecoveryKeys)
           .where(eq(enterpriseRecoveryKeys.id, req.params.keyId)).for('update').limit(1))[0];
         if (!key || key.status !== 'staged') throw new RecoveryKeyConflictError('企业恢复公钥尚未完成双人审批');
@@ -367,6 +542,7 @@ export function registerE2eeRecoveryRoutes(app: FastifyInstance): void {
             inArray(vaultKeyEnvelopes.vaultId, states.map((state) => state.vaultId)),
             eq(vaultKeyEnvelopes.recipientRecoveryKeyId, key.id),
             eq(vaultKeyEnvelopes.status, 'active'),
+            isNotNull(vaultKeyEnvelopes.signerUserId),
           )) : [];
         const coveredEpochs = new Set(coveredRows.map((row) => `${row.vaultId}:${row.keyEpoch}`));
         if (states.some((state) => !state.activeEpoch || !coveredEpochs.has(`${state.vaultId}:${state.activeEpoch}`))) {
@@ -413,7 +589,7 @@ export function registerE2eeRecoveryRoutes(app: FastifyInstance): void {
           details: {},
         });
         return { statusCode: 200, response: await recoveryKeyDto(tx, activated) };
-      });
+      }, commandIdentity('recovery.key.activate', { keyId: req.params.keyId, ...req.body }));
       return reply.code(200).send(result.response);
     } catch (error) {
       if (error instanceof RecoveryKeyConflictError) return conflict(reply, error.message);
@@ -425,12 +601,69 @@ export function registerE2eeRecoveryRoutes(app: FastifyInstance): void {
     preHandler: [app.requireSession],
     schema: { tags: ['e2ee-recovery'], response: { 200: z.array(EnterpriseRecoveryRequestSchema), '4xx': ZeroKnowledgeApiErrorSchema } },
   }, async (req) => {
+    await expireEnterpriseRecoveryRequests(db);
     const rows = req.user.isLocalPlatformAdmin
       ? await db.select().from(enterpriseRecoveryRequests).orderBy(desc(enterpriseRecoveryRequests.createdAt))
       : await db.select().from(enterpriseRecoveryRequests)
           .where(eq(enterpriseRecoveryRequests.targetUserId, req.user.id))
           .orderBy(desc(enterpriseRecoveryRequests.createdAt));
     return Promise.all(rows.map((row) => recoveryRequestDto(db, row)));
+  });
+
+  r.post('/api/v2/recovery/requests/:requestId/cancel', {
+    preHandler: writeGuard,
+    schema: {
+      tags: ['e2ee-recovery'],
+      params: RecoveryParams,
+      body: CancelEnterpriseRecoveryRequestSchema,
+      response: { 200: EnterpriseRecoveryRequestSchema, '4xx': ZeroKnowledgeApiErrorSchema },
+    },
+  }, async (req, reply) => {
+    let requestDigest;
+    try { requestDigest = decodeBase64Url(req.body.requestDigest, { exact: 32 }); }
+    catch { return badRequest(reply, '恢复请求摘要格式无效'); }
+    try {
+      const result = await runCommand(
+        db,
+        bus,
+        audit,
+        req.user.id,
+        req.body.idempotencyKey,
+        async (tx) => {
+          await expireEnterpriseRecoveryRequests(tx);
+          const request = (await tx.select().from(enterpriseRecoveryRequests)
+            .where(eq(enterpriseRecoveryRequests.id, req.params.requestId)).for('update').limit(1))[0];
+          if (!request) throw new RecoveryRequestError(404, '恢复请求不存在');
+          const canCancel = request.targetUserId === req.user.id
+            || request.createdByUserId === req.user.id
+            || await hasLocalPlatformAdminRole(tx, req.user.id);
+          if (!canCancel) throw new RecoveryRequestError(403, '你没有取消这次恢复申请的权限');
+          if (!Buffer.from(request.requestDigest).equals(requestDigest)) {
+            throw new RecoveryRequestError(409, '恢复请求已经变化，请刷新后重试');
+          }
+          if (!['pending', 'approved'].includes(request.status)) {
+            throw new RecoveryRequestError(409, '这次恢复申请已经结束，刷新后可查看最新状态');
+          }
+          const cancelled = (await tx.update(enterpriseRecoveryRequests).set({
+            status: 'cancelled',
+            cancelledAt: new Date(),
+            lastErrorCode: 'cancelled_by_user',
+          }).where(eq(enterpriseRecoveryRequests.id, request.id)).returning())[0]!;
+          await appendAudit(tx, audit, {
+            actorUserId: req.user.id,
+            action: 'recovery.request.cancel',
+            vaultId: request.vaultId,
+            success: true,
+            details: {},
+          });
+          return { statusCode: 200, response: await recoveryRequestDto(tx, cancelled) };
+        },
+        commandIdentity('recovery.request.cancel', { requestId: req.params.requestId, ...req.body }),
+      );
+      return reply.code(200).send(result.response);
+    } catch (error) {
+      return sendRecoveryRequestError(reply, error);
+    }
   });
 
   r.get('/api/v2/recovery/candidates', {
@@ -460,6 +693,7 @@ export function registerE2eeRecoveryRoutes(app: FastifyInstance): void {
     preHandler: [app.requireSession],
     schema: { tags: ['e2ee-recovery'], params: RecoveryParams, response: { 200: EnterpriseRecoveryRequestSchema, '4xx': ZeroKnowledgeApiErrorSchema } },
   }, async (req, reply) => {
+    await expireEnterpriseRecoveryRequests(db);
     const row = (await db.select().from(enterpriseRecoveryRequests)
       .where(eq(enterpriseRecoveryRequests.id, req.params.requestId)).limit(1))[0];
     if (!row) return reply.code(404).send(notFoundBody('恢复请求不存在') as never);
@@ -471,14 +705,17 @@ export function registerE2eeRecoveryRoutes(app: FastifyInstance): void {
     preHandler: [app.requireSession],
     schema: { tags: ['e2ee-recovery'], params: RecoveryParams, response: { 200: z.unknown(), '4xx': ZeroKnowledgeApiErrorSchema } },
   }, async (req, reply) => {
+    await expireEnterpriseRecoveryRequests(db);
     const request = (await db.select().from(enterpriseRecoveryRequests)
       .where(eq(enterpriseRecoveryRequests.id, req.params.requestId)).limit(1))[0];
     if (!request) return reply.code(404).send(notFoundBody('恢复请求不存在') as never);
     if (!req.user.isLocalPlatformAdmin && request.targetUserId !== req.user.id) {
       return forbidden(reply, '没有下载该恢复请求包的权限');
     }
-    if (request.status !== 'approved' || request.expiresAt <= new Date()) {
-      return conflict(reply, '恢复请求尚未获得双人审批或已经过期');
+    if (request.status !== 'approved') {
+      return conflict(reply, request.status === 'expired'
+        ? '这次恢复申请已过期，请联系管理员重新发起'
+        : '恢复申请尚未完成两人确认，或已经结束');
     }
     const currentCapability = await resolveAuthorizedVaultCapability(
       db,
@@ -493,41 +730,46 @@ export function registerE2eeRecoveryRoutes(app: FastifyInstance): void {
       db.select().from(enterpriseRecoveryKeys).where(eq(enterpriseRecoveryKeys.id, request.recoveryKeyId)).limit(1),
       getCryptoProfile(db, request.targetUserId),
     ]);
-    if (!state[0]?.activeEpoch || !recoveryKey[0] || !targetProfile) return conflict(reply, '恢复请求绑定的数据已经变化');
+    if (
+      !state[0]?.activeEpoch
+      || state[0].activeEpoch !== request.keyEpoch
+      || !recoveryKey[0]
+      || !targetProfile
+    ) return conflict(reply, '密码库密钥或恢复对象已经变化，请重新发起本次恢复');
     const header = (await db.select().from(encryptedVaultHeaders).where(and(
       eq(encryptedVaultHeaders.vaultId, request.vaultId),
-      eq(encryptedVaultHeaders.keyEpoch, state[0].activeEpoch),
+      eq(encryptedVaultHeaders.keyEpoch, request.keyEpoch),
       eq(encryptedVaultHeaders.headerVersion, state[0].activeHeaderVersion),
     )).limit(1))[0];
     if (!header) return conflict(reply, '当前密码库缺少绑定到活动密钥版本的加密头');
     const envelopeRow = (await db.select({
       envelope: vaultKeyEnvelopes,
-      sender: userDevices,
-      signer: userCryptoProfiles,
     }).from(vaultKeyEnvelopes)
-      .innerJoin(userDevices, eq(userDevices.id, vaultKeyEnvelopes.senderDeviceId))
-      .innerJoin(userCryptoProfiles, eq(userCryptoProfiles.userId, userDevices.userId))
       .where(and(
         eq(vaultKeyEnvelopes.vaultId, request.vaultId),
-        eq(vaultKeyEnvelopes.keyEpoch, state[0].activeEpoch),
+        eq(vaultKeyEnvelopes.keyEpoch, request.keyEpoch),
         eq(vaultKeyEnvelopes.recipientRecoveryKeyId, recoveryKey[0].id),
         eq(vaultKeyEnvelopes.status, 'active'),
+        isNotNull(vaultKeyEnvelopes.signerUserId),
       )).limit(1))[0];
-    if (!envelopeRow) return conflict(reply, '当前密码库缺少企业恢复 envelope');
+    if (!envelopeRow?.envelope.signerUserId
+      || !envelopeRow.envelope.signerKeyVersion
+      || !envelopeRow.envelope.signerPublicKey
+    ) return conflict(reply, '该密码库的恢复保护版本较旧，请由拥有者刷新保护后再试');
     return {
       protocol: 'lm-e2ee-v1',
       kind: 'enterprise-recovery-request-package',
       request: await recoveryRequestDto(db, request),
-      activeEpoch: state[0].activeEpoch,
+      activeEpoch: request.keyEpoch,
       recoveryKey: await recoveryKeyDto(db, recoveryKey[0]),
       recoveryEnvelope: toEnvelopeDto(envelopeRow.envelope, {
-        userId: envelopeRow.sender.userId,
-        keyVersion: envelopeRow.signer.cryptoGeneration,
+        userId: envelopeRow.envelope.signerUserId,
+        keyVersion: envelopeRow.envelope.signerKeyVersion,
       }),
       trustedSigner: {
-        userId: envelopeRow.signer.userId,
-        keyVersion: envelopeRow.signer.cryptoGeneration,
-        signingPublicKey: encodeBase64Url(envelopeRow.signer.publicSigningKey),
+        userId: envelopeRow.envelope.signerUserId,
+        keyVersion: envelopeRow.envelope.signerKeyVersion,
+        signingPublicKey: encodeBase64Url(envelopeRow.envelope.signerPublicKey),
       },
       encryptedHeader: {
         vaultId: header.vaultId,
@@ -612,10 +854,59 @@ export function registerE2eeRecoveryRoutes(app: FastifyInstance): void {
     });
     try {
       const result = await runCommand(db, bus, audit, req.user.id, req.body.idempotencyKey, async (tx) => {
+        await lockEnterpriseRecoveryCoverage(tx);
+        await lockEnterpriseRecoveryAdministration(tx);
+        await lockRecipientSets(tx, [req.body.targetUserId]);
+        await expireEnterpriseRecoveryRequests(tx);
+        if (!await hasLocalPlatformAdminRole(tx, req.user.id)) {
+          throw new RecoveryRequestError(403, '你已不再是企业恢复管理员，请刷新页面');
+        }
+        const lockedKey = (await tx.select().from(enterpriseRecoveryKeys)
+          .where(eq(enterpriseRecoveryKeys.status, 'active')).for('share').limit(1))[0];
+        const lockedState = (await tx.select().from(vaultCryptoStates)
+          .where(eq(vaultCryptoStates.vaultId, req.body.vaultId)).for('update').limit(1))[0];
+        const [lockedDevice, lockedProfile, lockedCapability] = await Promise.all([
+          getActiveDevice(tx, req.body.targetUserId, req.body.targetDeviceId),
+          getCryptoProfile(tx, req.body.targetUserId),
+          resolveAuthorizedVaultCapability(tx, req.body.vaultId, req.body.targetUserId),
+        ]);
+        const lockedReset = req.body.reason === 'account_reset' && req.body.accountResetRequestId
+          ? (await tx.select({ request: accountCryptoResetRequests })
+              .from(accountCryptoResetRequests)
+              .innerJoin(accountCryptoResetVaults, eq(
+                accountCryptoResetVaults.requestId,
+                accountCryptoResetRequests.id,
+              ))
+              .where(and(
+                eq(accountCryptoResetRequests.id, req.body.accountResetRequestId),
+                eq(accountCryptoResetRequests.targetUserId, req.body.targetUserId),
+                eq(accountCryptoResetRequests.status, 'activated'),
+                eq(accountCryptoResetVaults.vaultId, req.body.vaultId),
+              )).limit(1))[0]?.request
+          : null;
+        const lockedResetValid = req.body.reason !== 'account_reset' || Boolean(
+          lockedReset
+          && lockedReset.candidateDeviceId === req.body.targetDeviceId
+          && lockedReset.newCryptoGeneration === req.body.targetKeyVersion,
+        );
+        if (
+          !lockedKey
+          || lockedKey.id !== recoveryKey[0]!.id
+          || !lockedState?.activeEpoch
+          || lockedState.storageMode !== 'e2ee'
+          || lockedState.activeEpoch !== state[0]!.activeEpoch
+          || !lockedDevice
+          || !lockedProfile
+          || lockedProfile.cryptoGeneration !== targetProfile.cryptoGeneration
+          || !Buffer.from(lockedProfile.publicEncryptionKey).equals(targetEncryptionPublicKey)
+          || lockedCapability !== targetCapability
+          || !lockedResetValid
+        ) throw new RecoveryRequestError(409, '恢复对象、权限或密码库密钥刚刚发生变化，请刷新后重新发起');
         const row = (await tx.insert(enterpriseRecoveryRequests).values({
           id,
           vaultId: req.body.vaultId,
           recoveryKeyId: recoveryKey[0]!.id,
+          keyEpoch: state[0]!.activeEpoch!,
           targetUserId: req.body.targetUserId,
           targetDeviceId: req.body.targetDeviceId,
           targetEncryptionPublicKey,
@@ -636,9 +927,10 @@ export function registerE2eeRecoveryRoutes(app: FastifyInstance): void {
           details: {},
         });
         return { statusCode: 201, response: await recoveryRequestDto(tx, row) };
-      });
+      }, commandIdentity('recovery.request.create', req.body));
       return reply.code(201).send(result.response);
     } catch (error) {
+      if (error instanceof RecoveryRequestError) return sendRecoveryRequestError(reply, error);
       if (isUniqueViolation(error)) return conflict(reply, '该用户已有进行中的恢复请求');
       throw error;
     }
@@ -658,24 +950,45 @@ export function registerE2eeRecoveryRoutes(app: FastifyInstance): void {
     if (!Buffer.from(request.requestDigest).equals(requestDigest)) return conflict(reply, '恢复请求摘要不匹配');
     try {
       const result = await runCommand(db, bus, audit, req.user.id, req.body.idempotencyKey, async (tx) => {
+        await expireEnterpriseRecoveryRequests(tx);
+        const lockedRequest = (await tx.select().from(enterpriseRecoveryRequests)
+          .where(eq(enterpriseRecoveryRequests.id, request.id)).for('update').limit(1))[0];
+        if (!lockedRequest || !['pending', 'approved'].includes(lockedRequest.status)) {
+          throw new RecoveryRequestError(409, lockedRequest?.status === 'expired'
+            ? '这次恢复申请已过期，请重新发起新的申请'
+            : '这次恢复申请已经结束，请刷新查看最新状态');
+        }
+        if (!Buffer.from(lockedRequest.requestDigest).equals(requestDigest)) {
+          throw new RecoveryRequestError(409, '恢复请求摘要不匹配，请刷新后重试');
+        }
+        const existingApprovals = await tx.select({ userId: enterpriseRecoveryApprovals.approverUserId })
+          .from(enterpriseRecoveryApprovals)
+          .where(eq(enterpriseRecoveryApprovals.requestId, lockedRequest.id));
+        if (existingApprovals.some((approval) => approval.userId === req.user.id)) {
+          throw new RecoveryRequestError(409, '你已经确认过这次恢复申请，无需重复操作');
+        }
+        if (existingApprovals.length >= 2) {
+          throw new RecoveryRequestError(409, '这次恢复申请已完成两人确认，请刷新后进入下一步');
+        }
         await tx.insert(enterpriseRecoveryApprovals).values({
-          requestId: request.id,
+          requestId: lockedRequest.id,
           approverUserId: req.user.id,
           requestDigest,
         });
         const updated = (await tx.select().from(enterpriseRecoveryRequests)
-          .where(eq(enterpriseRecoveryRequests.id, request.id)).limit(1))[0]!;
+          .where(eq(enterpriseRecoveryRequests.id, lockedRequest.id)).limit(1))[0]!;
         await appendAudit(tx, audit, {
           actorUserId: req.user.id,
           action: 'recovery.request.approve',
-          vaultId: request.vaultId,
+          vaultId: lockedRequest.vaultId,
           success: true,
           details: {},
         });
         return { statusCode: 200, response: await recoveryRequestDto(tx, updated) };
-      });
+      }, commandIdentity('recovery.request.approve', { requestId: req.params.requestId, ...req.body }));
       return reply.code(200).send(result.response);
     } catch (error) {
+      if (error instanceof RecoveryRequestError) return sendRecoveryRequestError(reply, error);
       if (isUniqueViolation(error)) return conflict(reply, '你已经审批过该恢复请求');
       throw error;
     }
@@ -692,14 +1005,18 @@ export function registerE2eeRecoveryRoutes(app: FastifyInstance): void {
     } catch { return badRequest(reply, '恢复证据摘要格式无效'); }
     try {
       const result = await runCommand(db, bus, audit, req.user.id, req.body.idempotencyKey, async (tx, collect) => {
+        await lockRecipientSets(tx, [req.user.id]);
+        await expireEnterpriseRecoveryRequests(tx);
         const request = (await tx.select().from(enterpriseRecoveryRequests)
           .where(eq(enterpriseRecoveryRequests.id, req.params.requestId)).for('update').limit(1))[0];
         if (!request) throw new RecoveryRequestError(404, '恢复请求不存在');
         if (request.targetUserId !== req.user.id) {
           throw new RecoveryRequestError(403, '只有目标用户可以确认恢复完成');
         }
-        if (request.status !== 'approved' || request.expiresAt.getTime() <= Date.now()) {
-          throw new RecoveryRequestError(409, '恢复请求尚未获得双人审批或已经过期');
+        if (request.status !== 'approved') {
+          throw new RecoveryRequestError(409, request.status === 'expired'
+            ? '这次恢复申请已过期，请联系管理员重新发起'
+            : '恢复申请尚未完成两人确认，或已经结束');
         }
         if (!Buffer.from(request.requestDigest).equals(requestDigest)) {
           throw new RecoveryRequestError(409, '恢复请求摘要不匹配');
@@ -718,11 +1035,11 @@ export function registerE2eeRecoveryRoutes(app: FastifyInstance): void {
         }
         const state = stateRows[0];
         const envelope = req.body.recoveredEnvelope;
-        if (!state?.activeEpoch || !profile ||
+        if (!state?.activeEpoch || state.activeEpoch !== request.keyEpoch || !profile ||
           !recoveryCapabilityStillAuthorized(request.targetCapability, currentCapability) ||
           profile.cryptoGeneration !== request.targetKeyVersion ||
           !Buffer.from(profile.publicEncryptionKey).equals(request.targetEncryptionPublicKey) ||
-          envelope.vaultId !== request.vaultId || envelope.epoch !== state.activeEpoch ||
+          envelope.vaultId !== request.vaultId || envelope.epoch !== request.keyEpoch ||
           envelope.recipientKind !== 'user' || envelope.recipientId !== req.user.id ||
           envelope.recipientKeyVersion !== profile.cryptoGeneration || envelope.capability !== request.targetCapability ||
           envelope.signerUserId !== req.user.id || envelope.signerKeyVersion !== profile.cryptoGeneration ||
@@ -743,7 +1060,7 @@ export function registerE2eeRecoveryRoutes(app: FastifyInstance): void {
         const now = new Date();
         const insertedEnvelope = (await tx.insert(vaultKeyEnvelopes).values({
           vaultId: request.vaultId,
-          keyEpoch: state.activeEpoch,
+          keyEpoch: request.keyEpoch,
           recipientKind: 'user',
           accessScope: request.targetCapability,
           recipientUserId: req.user.id,
@@ -754,6 +1071,9 @@ export function registerE2eeRecoveryRoutes(app: FastifyInstance): void {
           ciphertext,
           ciphertextDigest: sha256(ciphertext),
           senderDeviceId: actor.id,
+          signerUserId: req.user.id,
+          signerKeyVersion: profile.cryptoGeneration,
+          signerPublicKey: profile.publicSigningKey,
           signature,
           status: 'active',
           activatedAt: now,
@@ -792,7 +1112,7 @@ export function registerE2eeRecoveryRoutes(app: FastifyInstance): void {
           details: {},
         });
         return { statusCode: 200, response: await recoveryRequestDto(tx, completed) };
-      });
+      }, commandIdentity('recovery.request.complete', { requestId: req.params.requestId, ...req.body }));
       return reply.code(200).send(result.response);
     } catch (error) {
       if (error instanceof RecoveryRequestError) {
@@ -825,6 +1145,7 @@ async function recoveryKeyDto(db: DbOrTx, row: typeof enterpriseRecoveryKeys.$in
     approvalUserIds: approvals.map((approval) => approval.userId),
     createdAt: row.createdAt.toISOString(),
     retiredAt: row.retiredAt?.toISOString() ?? null,
+    cancelledAt: row.cancelledAt?.toISOString() ?? null,
   };
 }
 
@@ -914,6 +1235,7 @@ async function enterpriseRecoveryCoverageDto(
         inArray(vaultKeyEnvelopes.vaultId, vaultIds),
         eq(vaultKeyEnvelopes.recipientRecoveryKeyId, keyId),
         eq(vaultKeyEnvelopes.status, 'active'),
+        isNotNull(vaultKeyEnvelopes.signerUserId),
       )),
   ]);
   const ownersByVault = new Map<string, string[]>();
@@ -958,6 +1280,7 @@ async function recoveryRequestDto(
     id: row.id,
     vaultId: row.vaultId,
     recoveryKeyId: row.recoveryKeyId,
+    keyEpoch: row.keyEpoch,
     targetUserId: row.targetUserId,
     targetDeviceId: row.targetDeviceId,
     targetEncryptionPublicKey: encodeBase64Url(row.targetEncryptionPublicKey),
@@ -970,11 +1293,29 @@ async function recoveryRequestDto(
     createdAt: row.createdAt.toISOString(),
     expiresAt: row.expiresAt.toISOString(),
     completedAt: row.completedAt?.toISOString() ?? null,
+    cancelledAt: row.cancelledAt?.toISOString() ?? null,
+    expiredAt: row.expiredAt?.toISOString() ?? null,
+    lastErrorCode: row.lastErrorCode,
   };
 }
 
 function recoveryRequestDigest(value: unknown) {
   return sha256(canonicalJson(value as never));
+}
+
+function commandIdentity(commandName: string, request: unknown) {
+  return { commandName, requestDigest: recoveryRequestDigest(request) };
+}
+
+async function expireEnterpriseRecoveryRequests(db: DbOrTx): Promise<void> {
+  await db.update(enterpriseRecoveryRequests).set({
+    status: 'expired',
+    expiredAt: new Date(),
+    lastErrorCode: 'request_expired',
+  }).where(and(
+    inArray(enterpriseRecoveryRequests.status, ['pending', 'approved']),
+    lte(enterpriseRecoveryRequests.expiresAt, new Date()),
+  ));
 }
 
 export function recoveryCapabilityStillAuthorized(
@@ -1015,6 +1356,15 @@ function forbidden(reply: FastifyReply, message: string) {
 
 function conflict(reply: FastifyReply, message: string) {
   return reply.code(409).send({ statusCode: 409, error: 'Conflict', message } as never);
+}
+
+function sendRecoveryRequestError(reply: FastifyReply, error: unknown) {
+  if (!(error instanceof RecoveryRequestError)) throw error;
+  if (error.statusCode === 400) return badRequest(reply, error.message);
+  if (error.statusCode === 401) return unauthorized(reply, error.message);
+  if (error.statusCode === 403) return forbidden(reply, error.message);
+  if (error.statusCode === 404) return reply.code(404).send(notFoundBody(error.message) as never);
+  return conflict(reply, error.message);
 }
 
 function notFoundBody(message: string) {

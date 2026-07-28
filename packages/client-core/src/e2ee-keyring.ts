@@ -158,7 +158,7 @@ export type RekeyVaultCommitRequest = RekeyVaultRequest & {
 };
 
 export interface SignerPublicKeys {
-  [userId: string]: string;
+  [userAndKeyVersion: string]: string;
 }
 
 export interface EncryptedOfflineSnapshot {
@@ -1126,7 +1126,8 @@ export class E2eeKeyring {
       const sorted = [...grants].sort((left, right) => right.epoch - left.epoch);
       let opened = false;
       for (const grant of sorted) {
-        const signerPublicKey = signerPublicKeys[grant.signerUserId];
+        const signerPublicKey = signerPublicKeys[`${grant.signerUserId}:${grant.signerKeyVersion}`]
+          ?? signerPublicKeys[grant.signerUserId];
         if (!signerPublicKey) continue;
         const recipient = grant.recipientKind === 'user' && grant.recipientId === account.accountId
           ? account.encryptionKeyPair
