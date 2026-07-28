@@ -43,6 +43,8 @@ describe('UserPicker', () => {
     const input = screen.getByRole('combobox', { name: '初始拥有者' });
     await userEvent.type(input, 'wang');
     const option = await screen.findByRole('option', { name: /Alice/ });
+    expect(input).toHaveAttribute('aria-controls', option.parentElement?.id);
+    expect(input).toHaveAttribute('aria-activedescendant', option.id);
     await userEvent.click(option);
     expect(searchUsers).toHaveBeenCalledWith('wang', []);
     expect(onChange).toHaveBeenCalledWith(

@@ -34,7 +34,24 @@
 }
 
 .filter {
-  grid-template-columns: 68px repeat(3, minmax(0, 1fr));
+  grid-template-columns: 58px repeat(3, minmax(0, 1fr));
+}
+
+.filter .option {
+  min-width: 0;
+  gap: 3px;
+  padding-inline: 3px;
+  font-size: 12px;
+}
+
+.filter .option > [data-kind] {
+  width: 20px;
+  height: 20px;
+  flex-basis: 20px;
+}
+
+.filter .option > span:last-child {
+  min-width: 0;
 }
 
 .option:hover {

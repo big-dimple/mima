@@ -18,6 +18,7 @@ const item = {
   favorite: false,
   sensitivity: 'medium',
   secretState: 'present',
+  canReveal: true,
   version: 1,
   secretVersion: 1,
   keyEpoch: 1,

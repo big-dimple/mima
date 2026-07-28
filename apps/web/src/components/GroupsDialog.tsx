@@ -34,6 +34,7 @@ export function GroupsDialog() {
   const [conflictMessage, setConflictMessage] = useState<string | null>(null);
   const listRequestRef = useRef(0);
   const detailRequestRef = useRef(0);
+  const dirtyRef = useRef(false);
   const mainRef = useRef<HTMLElement>(null);
 
   const dirty = useMemo(() => {
@@ -42,6 +43,7 @@ export function GroupsDialog() {
     return draftName.trim() !== detail.name ||
       !sameMemberIds(draftMembers.map((member) => member.id), detail.members.map((member) => member.id));
   }, [creating, detail, draftMembers, draftName]);
+  dirtyRef.current = dirty;
 
   const loadGroups = useCallback(async () => {
     const requestId = ++listRequestRef.current;
@@ -52,7 +54,7 @@ export function GroupsDialog() {
       if (requestId !== listRequestRef.current) return;
       setGroups(rows);
       setSelectedId((current) => (
-        current && rows.some((row) => row.id === current)
+        dirtyRef.current || (current && rows.some((row) => row.id === current))
           ? current
           : rows[0]?.id ?? null
       ));
@@ -306,7 +308,14 @@ export function GroupsDialog() {
               </div>
               <div className={styles.search}>
                 <Search size={14} aria-hidden />
-                <input value={query} onChange={(event) => setQuery(event.target.value)} aria-label="搜索用户组" placeholder="搜索用户组" />
+                <input
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  aria-label="搜索用户组"
+                  placeholder={dirty ? '请先保存或取消当前修改' : '搜索用户组'}
+                  title={dirty ? '请先保存或取消当前修改' : undefined}
+                  disabled={dirty || saving}
+                />
               </div>
               {scope === 'owned' && (
                 <button className={styles.createButton} onClick={() => void beginCreate()}>

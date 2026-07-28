@@ -151,27 +151,24 @@
   min-height: 0;
 }
 
-.drawerLayer {
-  position: absolute;
-  inset: 0;
-  z-index: var(--layer-drawer);
-}
-
 .drawerBackdrop {
-  position: absolute;
+  position: fixed;
   inset: 0;
   width: 100%;
   background: rgba(20, 30, 35, 0.35);
+  z-index: var(--layer-drawer);
 }
 
 .drawer {
-  position: absolute;
+  position: fixed;
   inset: 0 auto 0 0;
   width: min(320px, calc(100% - 48px));
   display: flex;
   flex-direction: column;
   background: var(--panel-2);
   box-shadow: var(--shadow);
+  z-index: calc(var(--layer-drawer) + 1);
+  outline: 0;
 }
 
 .drawerHeader {
@@ -182,6 +179,11 @@
   padding: 0 10px 0 16px;
   border-bottom: 1px solid var(--border);
   background: var(--panel);
+}
+
+.drawerHeader > :first-child {
+  margin: 0;
+  font-size: var(--font-md);
 }
 
 .drawer > nav {

@@ -17,7 +17,7 @@ export function ConfirmDialog() {
         <Dialog.Overlay className={dialogStyles.overlay} />
         <Dialog.Content className={dialogStyles.content}>
           <Dialog.Title className={dialogStyles.title}>{title}</Dialog.Title>
-          <Dialog.Description className={dialogStyles.description}>{body}</Dialog.Description>
+          <Dialog.Description className={`${dialogStyles.description} ${styles.body}`}>{body}</Dialog.Description>
           <div className={styles.actions}>
             <ActionButton label={cancelText} variant="secondary" onClick={() => closeConfirm(false)} />
             <ActionButton label={confirmText} variant={danger ? 'danger' : 'primary'} onClick={() => closeConfirm(true)} />

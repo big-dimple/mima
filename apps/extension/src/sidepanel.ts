@@ -169,7 +169,7 @@ function scheduleOfflineRefresh(): void {
       render();
     }).catch(() => {
       offlineRetryDelay = Math.min(offlineRetryDelay * 2, 30_000);
-      render();
+      scheduleOfflineRefresh();
     });
   }, offlineRetryDelay);
 }

@@ -45,6 +45,7 @@ interface PendingTrustedUnlock {
   attemptedWorkbenches: Set<CoordinatorPort>;
   createdAt: number;
   legacyGraceTimer: ReturnType<typeof setTimeout> | null;
+  lastErrorMessage: string | null;
 }
 
 interface AwaitingTrustedUnlockCompletion {
@@ -351,6 +352,7 @@ export class BackgroundCoordinator {
       attemptedWorkbenches: new Set(),
       createdAt: this.now(),
       legacyGraceTimer: null,
+      lastErrorMessage: null,
     };
     if (this.legacyWorkbenchGraceMs > 0) {
       pending.legacyGraceTimer = setTimeout(() => {
@@ -367,7 +369,12 @@ export class BackgroundCoordinator {
     const pending = this.pending.get(message.requestId);
     if (!pending || pending.status !== 'dispatched' || pending.selectedWorkbench !== port) return;
     if (message.kind === 'trusted_unlock_error') {
+      pending.lastErrorMessage = normalizeTrustedUnlockError(message.message);
       this.releaseSelectedWorkbench(pending, true);
+      if (!this.hasEligibleWorkbench(pending)) {
+        this.failTrustedUnlock(pending, pending.lastErrorMessage);
+        return;
+      }
       this.requestPump();
       return;
     }
@@ -523,6 +530,36 @@ export class BackgroundCoordinator {
   private timeoutTrustedUnlock(requestId: string): void {
     const pending = this.pending.get(requestId);
     if (!pending) return;
+    this.failTrustedUnlock(pending, pending.lastErrorMessage ?? TRUSTED_UNLOCK_TIMEOUT_MESSAGE);
+  }
+
+  private timeoutWorkbenchAttempt(requestId: string, workbench: CoordinatorPort): void {
+    const pending = this.pending.get(requestId);
+    if (!pending || pending.selectedWorkbench !== workbench || pending.acknowledged) return;
+    if (this.leaders.get(pending.request.accountId) === workbench) {
+      this.leaders.delete(pending.request.accountId);
+    }
+    this.releaseSelectedWorkbench(pending, true);
+    if (!this.hasEligibleWorkbench(pending)) {
+      this.failTrustedUnlock(
+        pending,
+        pending.lastErrorMessage ?? '已解锁工作台没有响应。请刷新工作台页面后重试；扩展设备仍然受信任，无需重新配对。',
+      );
+      return;
+    }
+    this.requestPump();
+  }
+
+  private hasEligibleWorkbench(pending: PendingTrustedUnlock): boolean {
+    return [...this.workbenches.entries()].some(([port, state]) => (
+      state.unlocked
+      && state.accountId === pending.request.accountId
+      && !pending.attemptedWorkbenches.has(port)
+    ));
+  }
+
+  private failTrustedUnlock(pending: PendingTrustedUnlock, message: string): void {
+    const requestId = pending.request.requestId;
     this.pending.delete(requestId);
     clearTimeout(pending.timer);
     if (pending.legacyGraceTimer) clearTimeout(pending.legacyGraceTimer);
@@ -534,19 +571,9 @@ export class BackgroundCoordinator {
       this.post(pending.sidePanel, {
         kind: 'trusted_unlock_error',
         requestId,
-        message: TRUSTED_UNLOCK_TIMEOUT_MESSAGE,
+        message,
       });
     }
-    this.requestPump();
-  }
-
-  private timeoutWorkbenchAttempt(requestId: string, workbench: CoordinatorPort): void {
-    const pending = this.pending.get(requestId);
-    if (!pending || pending.selectedWorkbench !== workbench || pending.acknowledged) return;
-    if (this.leaders.get(pending.request.accountId) === workbench) {
-      this.leaders.delete(pending.request.accountId);
-    }
-    this.releaseSelectedWorkbench(pending, true);
     this.requestPump();
   }
 
@@ -727,4 +754,15 @@ function isExtSession(value: unknown): value is ExtSession {
 
 function validGeneration(value: number | undefined): value is number {
   return Number.isSafeInteger(value) && (value ?? 0) >= 1;
+}
+
+function normalizeTrustedUnlockError(value: unknown): string {
+  const message = typeof value === 'string' ? value : '';
+  if (/设备|授权|撤销/.test(message)) {
+    return '工作台已解锁，但此扩展设备未获授权。请在工作台的设备管理中确认后重试。';
+  }
+  if (/主密码|未解锁|密码库/.test(message)) {
+    return '工作台尚未完成主密码解锁。请先解锁同一账号的工作台，再重试。';
+  }
+  return '工作台无法完成此次恢复。请刷新工作台页面后重试；扩展设备仍然受信任，无需重新配对。';
 }

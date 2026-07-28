@@ -9,6 +9,7 @@ import type {
 } from '@mima/contracts';
 import {
   createUnsignedVaultKeyGrant,
+  createUnlockChallenge,
   createVaultKeys,
   canonicalJson,
   destroyKeyPair,
@@ -260,6 +261,66 @@ describe('zero-knowledge client key lifecycle', () => {
     expect(api.encryptedBootstrap).not.toHaveBeenCalled();
     expect(api.cryptoProfile).toHaveBeenCalledOnce();
     expect(api.cryptoDevices).toHaveBeenCalledOnce();
+  });
+
+  it('rebuilds the signed unlock challenge once after an uncertain transport failure', async () => {
+    const password = 'correct horse battery staple';
+    const { keyring, setup, profile, device } = await setupAccount(password);
+    await keyring.lock();
+    const storage = new MemoryEncryptedStorage();
+    await storage.putAccount({
+      accountId,
+      profile,
+      device,
+      deviceBundle: setup.deviceBundle,
+      encryptedBootstrap: null,
+      cachedAt: new Date().toISOString(),
+    });
+    let challengeSequence = 0;
+    const createChallenge = vi.fn(async () => {
+      challengeSequence += 1;
+      const issuedAt = new Date(Date.now() + challengeSequence).toISOString();
+      const expiresAt = new Date(Date.now() + 60_000 + challengeSequence).toISOString();
+      const challenge = await createUnlockChallenge({
+        challengeId: `unlock-${challengeSequence}`,
+        accountId,
+        deviceId,
+        sessionId: '8e94ea8d-2f4c-4ac5-b89a-7453630dbd95',
+        issuedAt,
+        expiresAt,
+      });
+      return {
+        id: challenge.challengeId,
+        challenge: Buffer.from(canonicalJson(challenge as unknown as JsonValue)).toString('base64url'),
+        expiresAt,
+      };
+    });
+    const completeUnlock = vi.fn()
+      .mockRejectedValueOnce(new ApiRequestError(0, { message: 'upstream reset' }))
+      .mockResolvedValue({ ok: true, deviceId });
+    const api = {
+      setCsrfToken: vi.fn(),
+      cryptoProfile: vi.fn().mockResolvedValue(profile),
+      cryptoDevices: vi.fn().mockResolvedValue([device]),
+      accountCryptoResetRequests: vi.fn().mockResolvedValue([]),
+      createUnlockChallenge: createChallenge,
+      completeCryptoUnlock: completeUnlock,
+      encryptedBootstrap: vi.fn().mockResolvedValue(emptyBootstrap(profile, device)),
+    } as unknown as ApiClient;
+    const client = createZeroKnowledgeClient(api, keyring, storage);
+
+    await client.prepare({
+      user,
+      csrfToken: 'csrf-test',
+      locked: true,
+      cryptoProfileInitialized: true,
+      cryptoDeviceId: null,
+    });
+    await expect(client.unlock(password)).resolves.toBeUndefined();
+
+    expect(createChallenge).toHaveBeenCalledTimes(2);
+    expect(completeUnlock).toHaveBeenCalledTimes(2);
+    expect(client.phase).toBe('unlocked-online');
   });
 
   it('creates a team vault without recovery and retries the same atomic request after network uncertainty', async () => {

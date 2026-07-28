@@ -28,6 +28,11 @@ test.describe.serial('桌面、平板和手机布局', () => {
     await ensureLoginItem(page, LAYOUT_ITEM);
     await page.getByRole('option', { name: new RegExp(LAYOUT_ITEM.title) }).click();
     await expectNoHorizontalOverflow(page);
+    const filterButtons = page.getByRole('group', { name: '类型过滤' }).getByRole('button');
+    await expect(filterButtons).toHaveCount(4);
+    expect(await filterButtons.evaluateAll((buttons) =>
+      buttons.map((button) => button.scrollWidth <= button.clientWidth),
+    )).toEqual([true, true, true, true]);
 
     const navigationBox = await page.getByRole('navigation', { name: '库导航' }).boundingBox();
     const listBox = await page.getByRole('region', { name: '凭证列表' }).boundingBox();
@@ -162,6 +167,9 @@ test.describe.serial('桌面、平板和手机布局', () => {
         fullPage: true,
       });
       await cancel.click();
+      const discardDialog = page.getByRole('dialog', { name: '放弃未保存的修改？' });
+      await expect(discardDialog).toBeVisible();
+      await discardDialog.getByRole('button', { name: '放弃修改' }).click();
       await expect(page.getByRole('button', { name: '编辑', exact: true })).toBeVisible();
     }
   });

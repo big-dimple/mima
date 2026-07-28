@@ -46,6 +46,8 @@ export class PanelActions {
   private automaticTrustedUnlockBlocked = false;
   private automaticTrustedUnlockGeneration = 0;
   private sessionInvalidationInFlight = 0;
+  private clipboardGeneration = 0;
+  private clipboardPending = false;
 
   constructor(
     private readonly model: PanelModel,
@@ -57,10 +59,11 @@ export class PanelActions {
 
   async startup(): Promise<void> {
     await this.keyring.lock();
-    const [session, device, pending] = await Promise.all([
+    const [session, device, pending, cache] = await Promise.all([
       this.browser.loadSession(),
       this.storage.loadDevice(),
       this.storage.loadPendingEnrollment(),
+      this.storage.loadCiphertextCache(),
     ]);
     this.model.state.device = device;
     if (pending && Date.parse(pending.expiresAt) > Date.now()) {
@@ -86,7 +89,8 @@ export class PanelActions {
       if (!this.browser.isWorkbenchUnlocked(device.userId)) {
         this.model.setLocked(session
           ? '工作台尚未解锁。可输入同一主密码本地解锁，或先解锁工作台后自动联动。'
-          : '此扩展仍受信任。打开并解锁同一账号的工作台后会自动恢复，无需重新配对。');
+          : '此扩展仍受信任。可从已解锁工作台恢复；工作台暂时不可用时，也可用主密码打开本机保存的数据。',
+        Boolean(cache));
         return;
       }
       try {
@@ -99,7 +103,8 @@ export class PanelActions {
     if (device && !device.pairingOnly) {
       this.model.setLocked(session
         ? '此设备需要完成一次兼容升级。用主密码解锁后，以后工作台和扩展会一起解锁。'
-        : '此扩展仍受信任。打开并解锁工作台，再输入一次主密码完成升级；无需配对码。');
+        : '此扩展仍受信任。打开并解锁工作台，再输入一次主密码完成升级；无需配对码。',
+      Boolean(cache));
       return;
     }
     if (session || this.model.state.session) {
@@ -232,7 +237,10 @@ export class PanelActions {
     const session = this.model.state.session;
     if (!device) throw new Error('扩展尚未完成配对');
     if (!session) {
-      if (device.webUnlock) throw new Error('请先打开并解锁工作台恢复连接');
+      if (device.webUnlock) {
+        await this.unlockLocalCache(device, unlockFactor);
+        return;
+      }
       if (device.pairingOnly) throw new Error('上一次配对没有完成，请重新配对');
       await this.upgradeLegacyDeviceWithWorkbench(device, unlockFactor);
       return;
@@ -286,6 +294,7 @@ export class PanelActions {
   async lock(): Promise<void> {
     this.model.setLocked();
     await this.keyring.lock();
+    await this.clearSensitiveClipboard();
   }
 
   async syncSession(session: ExtSession | null): Promise<void> {
@@ -301,6 +310,7 @@ export class PanelActions {
         '工作台已更新安全状态，扩展正在等待同一账号重新解锁。',
       );
       await this.keyring.lock();
+      await this.clearSensitiveClipboard();
     }
   }
 
@@ -311,7 +321,7 @@ export class PanelActions {
       await this.api.requestUnlockChallenge(deviceId);
       return false;
     } catch (error) {
-      if (error instanceof PanelApiError && error.status === 403) {
+      if (isConfirmedDeviceRevocation(error)) {
         await this.handleRevocation();
         return true;
       }
@@ -321,13 +331,16 @@ export class PanelActions {
 
   async refreshData(): Promise<void> {
     if (!this.keyring.unlocked) throw new Error('扩展已锁定，请先用主密码解锁');
+    if (!this.model.state.session) {
+      throw new Error('当前正在使用本机数据；恢复在线连接后才能刷新');
+    }
     if (!(await this.browser.ensureApiAccess())) throw new Error('未授权扩展访问Mima服务');
     const generation = this.model.captureSecurityGeneration();
     let bootstrap: ExtensionBootstrap;
     try {
       bootstrap = await this.withSessionRetry((session) => this.api.encryptedBootstrap(session));
     } catch (error) {
-      if (error instanceof PanelApiError && error.status === 403) await this.handleRevocation();
+      if (isConfirmedDeviceRevocation(error)) await this.handleRevocation();
       if (error instanceof SessionUnavailableError) {
         await this.recoverAfterSessionLoss();
         throw new Error(this.model.state.error ?? '扩展连接已恢复，请重试刚才的操作');
@@ -363,6 +376,7 @@ export class PanelActions {
   async unpair(): Promise<string | null> {
     this.model.setLocked();
     await this.keyring.lock();
+    await this.clearSensitiveClipboard();
     let warning: string | null = null;
     if (this.model.state.session) {
       try {
@@ -382,6 +396,7 @@ export class PanelActions {
 
   async cancelPendingPairing(): Promise<void> {
     await this.keyring.lock();
+    await this.clearSensitiveClipboard();
     await this.browser.clearSession().catch(() => undefined);
     await this.storage.clearAll();
     this.model.state.session = null;
@@ -392,6 +407,7 @@ export class PanelActions {
 
   async fill(item: DecryptedExtensionItem): Promise<string | null> {
     if (item.secretState === 'absent') return '该条目未保存密码';
+    if (!item.canReveal) return '你当前只能查看条目信息，不能填充密码或敏感内容';
     const expectedSite = {
       origin: this.model.state.tabOrigin,
       url: this.model.state.tabUrl,
@@ -429,15 +445,23 @@ export class PanelActions {
 
   async copy(item: DecryptedExtensionItem): Promise<string | null> {
     if (item.secretState === 'absent') return '该条目未保存密码';
+    if (!item.canReveal) return '你当前只能查看条目信息，不能复制密码或敏感内容';
     const generation = this.model.captureSecurityGeneration();
     const value = await this.readSensitiveContent(item, 'copy');
     if (!this.canUseDecrypted(generation)) return null;
+    const clipboardGeneration = ++this.clipboardGeneration;
     await this.browser.writeClipboard(value);
+    this.clipboardPending = true;
     if (!this.canUseDecrypted(generation)) {
+      this.clipboardPending = false;
+      this.clipboardGeneration += 1;
       await this.browser.writeClipboard('').catch(() => undefined);
       return null;
     }
     this.browser.schedule(() => {
+      if (clipboardGeneration !== this.clipboardGeneration) return;
+      this.clipboardGeneration += 1;
+      this.clipboardPending = false;
       void this.browser.writeClipboard('').catch(() => undefined);
     }, CLIPBOARD_CLEAR_MS);
     return '已复制，30 秒后尽力清理剪贴板';
@@ -455,10 +479,17 @@ export class PanelActions {
     purpose: 'copy' | 'fill',
   ): Promise<string> {
     if (item.secretState === 'absent') throw new Error('该条目未保存密码');
+    if (!item.canReveal) throw new Error('你当前只能查看条目信息，不能查看密码或敏感内容');
     if (!this.keyring.unlocked) throw new Error('扩展已锁定，请先用主密码解锁');
     const cacheKey = contentCacheKey(item);
     let encrypted;
     let fetchedOnline = false;
+    if (!this.model.state.session || this.model.state.offline) {
+      const cache = await this.storage.loadCiphertextCache();
+      const cached = cache?.contents[cacheKey];
+      if (!cached) throw new Error('本机没有保存这条敏感内容；恢复在线连接后再试');
+      return this.keyring.decryptContent(item, cached);
+    }
     try {
       encrypted = await this.withSessionRetry(async (session) => {
         const signature = await this.keyring.signContentIntent({
@@ -475,8 +506,12 @@ export class PanelActions {
       });
       fetchedOnline = true;
     } catch (error) {
-      if (error instanceof PanelApiError && error.status === 403) {
+      if (isConfirmedDeviceRevocation(error)) {
         await this.handleRevocation();
+        throw error;
+      }
+      if (error instanceof PanelApiError && error.code === 'extension_access_denied') {
+        await this.refreshData().catch(() => undefined);
         throw error;
       }
       if (error instanceof SessionUnavailableError) {
@@ -711,7 +746,7 @@ export class PanelActions {
     allowTrustedRecovery: boolean,
   ): Promise<boolean> {
     await this.keyring.lock();
-    if (error instanceof DeviceRevokedError || (error instanceof PanelApiError && error.status === 403)) {
+    if (isConfirmedDeviceRevocation(error)) {
       await this.handleRevocation();
       return false;
     }
@@ -734,12 +769,11 @@ export class PanelActions {
   }
 
   private async saveBootstrap(bootstrap: ExtensionBootstrap): Promise<void> {
-    const current = await this.storage.loadCiphertextCache();
     const { contents: bootstrapContents, ...baseBootstrap } = bootstrap;
     await this.storage.saveCiphertextCache({
       version: 1,
       bootstrap: baseBootstrap,
-      contents: retainCurrentContents(current, bootstrap, bootstrapContents),
+      contents: currentBootstrapContents(bootstrap, bootstrapContents),
       updatedAt: new Date().toISOString(),
     });
   }
@@ -747,6 +781,7 @@ export class PanelActions {
   private async handleRevocation(): Promise<void> {
     this.model.setRevoked();
     await this.keyring.lock();
+    await this.clearSensitiveClipboard();
     await this.browser.clearSession().catch(() => undefined);
     await this.storage.clearAll();
   }
@@ -757,6 +792,7 @@ export class PanelActions {
       ? '连接状态已更新，但自动恢复尚未完成。请保持同一账号工作台已解锁后再次恢复，无需重新配对。'
       : '连接状态已更新。此扩展仍受信任，请完成一次兼容升级，无需重新配对。');
     await this.keyring.lock();
+    await this.clearSensitiveClipboard();
     if (!this.model.state.device?.webUnlock) return false;
     try {
       await this.tryTrustedUnlock();
@@ -820,6 +856,35 @@ export class PanelActions {
       && this.model.state.phase === phase;
   }
 
+  private async unlockLocalCache(device: LocalDeviceRecord, unlockFactor: string): Promise<void> {
+    const cache = await this.storage.loadCiphertextCache();
+    if (!cache) throw new Error('本机没有可用数据，请打开并解锁工作台恢复连接');
+    this.model.setUnlocking();
+    const generation = this.model.captureSecurityGeneration();
+    try {
+      await this.keyring.unlock(device, unlockFactor);
+      if (!this.canContinueUnlock(generation)) return;
+      const items = await this.keyring.loadBootstrap(cache.bootstrap);
+      if (!this.canContinueUnlock(generation)) return;
+      const activeTab = await this.browser.readActiveTab();
+      if (!this.canContinueUnlock(generation)) return;
+      this.applyActiveTab(activeTab);
+      this.model.setReady(items, true);
+    } catch (error) {
+      if (!this.model.isSecurityGenerationCurrent(generation)) return;
+      await this.keyring.lock();
+      this.model.setLocked(errorMessage(error, '本机数据解锁失败'), true);
+      throw error;
+    }
+  }
+
+  private async clearSensitiveClipboard(): Promise<void> {
+    if (!this.clipboardPending) return;
+    this.clipboardPending = false;
+    this.clipboardGeneration += 1;
+    await this.browser.writeClipboard('').catch(() => undefined);
+  }
+
   private applyActiveTab(activeTab: ActiveTabContext): void {
     this.model.state.tabId = activeTab.tabId;
     this.model.state.tabOrigin = activeTab.origin;
@@ -875,7 +940,7 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T
 
 function isConfirmedDeviceRevocation(error: unknown): boolean {
   return error instanceof DeviceRevokedError
-    || (error instanceof PanelApiError && error.status === 403);
+    || (error instanceof PanelApiError && error.code === 'extension_device_revoked');
 }
 
 function accountBundleFromProfile(profile: UserCryptoProfile): AccountBundle {
@@ -891,8 +956,7 @@ function accountBundleFromProfile(profile: UserCryptoProfile): AccountBundle {
   };
 }
 
-function retainCurrentContents(
-  cache: CiphertextCache | null,
+function currentBootstrapContents(
   bootstrap: ExtensionBootstrap,
   bootstrapContents: ExtensionBootstrap['contents'],
 ): Record<string, CiphertextCache['contents'][string]> {
@@ -901,9 +965,7 @@ function retainCurrentContents(
       .filter((item) => !item.deleted)
       .map((item) => `${item.itemId}:${item.version}:${item.secretVersion}`),
   );
-  const retained = Object.fromEntries(
-    Object.entries(cache?.contents ?? {}).filter(([key]) => live.has(key)),
-  );
+  const retained: Record<string, CiphertextCache['contents'][string]> = {};
   for (const content of bootstrapContents ?? []) {
     const key = `${content.metadata.itemId}:${content.metadata.version}:${content.metadata.secretVersion}`;
     if (live.has(key)) retained[key] = content;

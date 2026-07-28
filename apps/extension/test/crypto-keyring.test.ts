@@ -234,6 +234,7 @@ describe('ExtensionKeyring local device protection', () => {
       expect(decrypted).toMatchObject({
         title: 'Internal portal',
         secretState: 'present',
+        canReveal: true,
         username: 'bob',
         origin: 'https://internal.example.test',
         loginUrl: 'https://internal.example.test/login?tenant=team',

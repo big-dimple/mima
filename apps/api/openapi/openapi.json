@@ -19841,6 +19841,89 @@
         "security": []
       }
     },
+    "/api/v2/extension/pairing/status": {
+      "post": {
+        "tags": [
+          "浏览器扩展"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "code": {
+                    "type": "string",
+                    "minLength": 6,
+                    "maxLength": 12
+                  }
+                },
+                "required": [
+                  "code"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "请求成功。",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "4XX": {
+            "description": "请求校验、认证、授权、资源状态或版本冲突失败。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "integer"
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentVersion": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "statusCode",
+                    "error",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getEncryptedExtensionPairingStatus",
+        "summary": "读取当前配对码对应的设备申请",
+        "security": [
+          {
+            "webSession": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/csrfToken"
+          }
+        ]
+      }
+    },
     "/api/v2/extension/pairing/{enrollmentId}": {
       "get": {
         "tags": [

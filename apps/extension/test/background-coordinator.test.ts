@@ -326,6 +326,31 @@ describe('BackgroundCoordinator', () => {
     })));
   });
 
+  it('returns a useful error immediately when the only unlocked workbench cannot recover', async () => {
+    const coordinator = new BackgroundCoordinator(new MemorySessionStore());
+    const workbench = new FakePort();
+    const sidePanel = new FakePort();
+    unlockWorkbench(coordinator, workbench);
+    coordinator.registerSidePanel(sidePanel);
+    coordinator.handleSidePanelMessage(sidePanel, {
+      kind: 'trusted_unlock_request',
+      request: request('request-single-error'),
+    });
+
+    await vi.waitFor(() => expect(workbench.messages.filter(isTrustedRequest)).toHaveLength(1));
+    coordinator.handleWorkbenchMessage(workbench, {
+      kind: 'trusted_unlock_error',
+      requestId: 'request-single-error',
+      message: '密码库尚未解锁',
+    });
+
+    await vi.waitFor(() => expect(sidePanel.messages).toContainEqual({
+      kind: 'trusted_unlock_error',
+      requestId: 'request-single-error',
+      message: '工作台尚未完成主密码解锁。请先解锁同一账号的工作台，再重试。',
+    }));
+  });
+
   it('fails over when the newest unlocked workbench stops responding', async () => {
     const coordinator = new BackgroundCoordinator(
       new MemorySessionStore(),

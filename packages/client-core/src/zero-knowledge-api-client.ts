@@ -81,6 +81,7 @@ import { ApiRequestError } from './api-client.ts';
 import type {
   ApproveExtensionEnrollmentRequest,
   ExtensionEnrollment,
+  ExtensionPairingEnrollmentStatus,
   RekeyVaultCommitRequest,
   ResumeExtensionSessionRequest,
 } from './e2ee-keyring.ts';
@@ -125,23 +126,30 @@ export class ZeroKnowledgeApiClient {
     const headers: Record<string, string> = {};
     if (body !== undefined) headers['content-type'] = 'application/json';
     if (this.csrfToken && method !== 'GET') headers[CSRF_HEADER] = this.csrfToken;
-    let response: Response;
-    try {
-      response = await fetch(`${this.baseUrl}${path}`, {
-        method,
-        headers,
-        credentials: 'include',
-        body: body === undefined ? undefined : JSON.stringify(body),
-        signal,
-      });
-    } catch (error) {
-      if (signal?.aborted) {
-        throw signal.reason instanceof Error ? signal.reason : new Error('操作已取消');
+    let response: Response | undefined;
+    const attempts = method === 'GET' ? 2 : 1;
+    for (let attempt = 0; attempt < attempts; attempt += 1) {
+      try {
+        response = await fetch(`${this.baseUrl}${path}`, {
+          method,
+          headers,
+          credentials: 'include',
+          body: body === undefined ? undefined : JSON.stringify(body),
+          signal,
+        });
+      } catch (error) {
+        if (signal?.aborted) {
+          throw signal.reason instanceof Error ? signal.reason : new Error('操作已取消');
+        }
+        if (attempt + 1 < attempts) continue;
+        throw new ApiRequestError(0, {
+          message: error instanceof Error ? error.message : '网络错误',
+        });
       }
-      throw new ApiRequestError(0, {
-        message: error instanceof Error ? error.message : '网络错误',
-      });
+      if (attempt + 1 < attempts && [502, 503, 504].includes(response.status)) continue;
+      break;
     }
+    if (!response) throw new ApiRequestError(0, { message: '网络错误' });
     if (!response.ok) {
       let parsed: Partial<ZeroKnowledgeApiError> = {};
       try {
@@ -693,6 +701,12 @@ export class ZeroKnowledgeApiClient {
     return this.request('POST', '/api/v2/extension/pairing');
   }
 
+  extensionPairingStatus(code: string): Promise<ExtensionPairingEnrollmentStatus> {
+    return this.request<unknown>('POST', '/api/v2/extension/pairing/status', { code }).then(
+      normalizeExtensionPairingStatus,
+    );
+  }
+
   extensionEnrollments(): Promise<ExtensionEnrollment[]> {
     return this.request<unknown[]>('GET', '/api/v2/extension/enrollments').then(
       (values) => values.map(normalizeExtensionEnrollment),
@@ -748,6 +762,19 @@ function normalizeExtensionEnrollment(value: unknown): ExtensionEnrollment {
     joinChannelPublicKey: stringField(record, 'joinChannelPublicKey'),
     status: stringField(record, 'status') as ExtensionEnrollment['status'],
     expiresAt: stringField(record, 'expiresAt'),
+  };
+}
+
+function normalizeExtensionPairingStatus(value: unknown): ExtensionPairingEnrollmentStatus {
+  if (typeof value !== 'object' || value === null) throw new Error('扩展配对状态格式不正确');
+  const record = value as Record<string, unknown>;
+  const status = stringField(record, 'status');
+  if (status !== 'waiting' && status !== 'claimed' && status !== 'expired') {
+    throw new Error('扩展配对状态不受支持');
+  }
+  return {
+    status,
+    enrollment: record.enrollment === null ? null : normalizeExtensionEnrollment(record.enrollment),
   };
 }
 

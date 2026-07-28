@@ -112,6 +112,7 @@ const OPERATIONS: Record<string, OperationMetadata> = {
   'POST /api/v2/recovery/requests/{requestId}/complete': op('completeRecoveryRequest', '确认企业恢复结果', '企业恢复', 'web', true),
   'POST /api/v2/extension/pairing': op('createEncryptedExtensionPairing', '创建零知识扩展配对码', '浏览器扩展', 'web', true),
   'POST /api/v2/extension/pairing/claim': op('claimEncryptedExtensionPairing', '提交扩展设备公钥', '浏览器扩展', 'public'),
+  'POST /api/v2/extension/pairing/status': op('getEncryptedExtensionPairingStatus', '读取当前配对码对应的设备申请', '浏览器扩展', 'web', true),
   'GET /api/v2/extension/pairing/{enrollmentId}': op('pollEncryptedExtensionPairing', '轮询扩展配对结果', '浏览器扩展', 'public'),
   'GET /api/v2/extension/enrollments': op('listExtensionEnrollments', '读取扩展配对请求', '浏览器扩展', 'web'),
   'GET /api/v2/extension/enrollments/{enrollmentId}': op('getExtensionEnrollment', '读取扩展配对请求', '浏览器扩展', 'web'),

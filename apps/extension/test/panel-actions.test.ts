@@ -21,6 +21,7 @@ const item: DecryptedExtensionItem = {
   favorite: false,
   sensitivity: 'medium',
   secretState: 'present',
+  canReveal: true,
   version: 1,
   secretVersion: 1,
   keyEpoch: 1,
@@ -637,6 +638,47 @@ describe('PanelActions', () => {
     expect(storage.cache).not.toBeNull();
   });
 
+  it('opens cached data with the main password after a browser restart without a bearer', async () => {
+    const model = new PanelModel();
+    const storage = new MemoryExtensionStorage();
+    const device = {
+      deviceId: 'device-1',
+      userId: 'user-1',
+      name: 'Office Edge',
+      webUnlock: { version: 1 },
+    } as never;
+    storage.device = device;
+    storage.cache = {
+      version: 1,
+      bootstrap: { profile: {}, items: [], contents: [] } as never,
+      contents: {},
+      updatedAt: new Date().toISOString(),
+    };
+    const adapter = browser();
+    adapter.loadSession = vi.fn().mockResolvedValue(null);
+    adapter.isWorkbenchUnlocked = vi.fn().mockReturnValue(false);
+    const keyring = {
+      unlocked: false,
+      lock: vi.fn().mockImplementation(async function (this: { unlocked: boolean }) {
+        this.unlocked = false;
+      }),
+      unlock: vi.fn().mockImplementation(async function (this: { unlocked: boolean }) {
+        this.unlocked = true;
+      }),
+      loadBootstrap: vi.fn().mockResolvedValue([item]),
+    };
+    const actions = new PanelActions(model, {} as PanelApi, adapter, storage, keyring as never);
+
+    await actions.startup();
+    expect(model.state).toMatchObject({ phase: 'locked', localDataAvailable: true });
+
+    await actions.unlock('main-password');
+
+    expect(keyring.unlock).toHaveBeenCalledWith(device, 'main-password');
+    expect(model.state).toMatchObject({ phase: 'ready', offline: true });
+    expect(model.state.items).toEqual([item]);
+  });
+
   it('settles immediately as locked when no matching workbench is unlocked', async () => {
     const model = new PanelModel();
     const storage = new MemoryExtensionStorage();
@@ -774,7 +816,9 @@ describe('PanelActions', () => {
     storage.device = { deviceId: 'device-1' } as never;
     storage.cache = { version: 1, bootstrap: {} as never, contents: {}, updatedAt: new Date().toISOString() };
     const api = {
-      requestUnlockChallenge: vi.fn().mockRejectedValue(new PanelApiError('revoked', 403)),
+      requestUnlockChallenge: vi.fn().mockRejectedValue(
+        new PanelApiError('revoked', 403, null, 'extension_device_revoked'),
+      ),
     } as unknown as PanelApi;
     const keyring = { unlocked: true, lock: vi.fn().mockResolvedValue(undefined) };
     const actions = new PanelActions(model, api, browser(), storage, keyring as never);
@@ -796,7 +840,9 @@ describe('PanelActions', () => {
     storage.device = { deviceId: 'device-1' } as never;
     storage.cache = { version: 1, bootstrap: {} as never, contents: {}, updatedAt: new Date().toISOString() };
     const api = {
-      encryptedContent: vi.fn().mockRejectedValue(new PanelApiError('revoked', 403)),
+      encryptedContent: vi.fn().mockRejectedValue(
+        new PanelApiError('revoked', 403, null, 'extension_device_revoked'),
+      ),
     } as unknown as PanelApi;
     const keyring = {
       unlocked: true,
@@ -811,6 +857,74 @@ describe('PanelActions', () => {
     expect(storage.cache).toBeNull();
     expect(model.state.phase).toBe('revoked');
     expect(model.state.items).toEqual([]);
+  });
+
+  it('keeps the trusted device when a user lacks access to one item', async () => {
+    const model = readyModel();
+    const storage = new MemoryExtensionStorage();
+    storage.session = extSession();
+    storage.device = { deviceId: 'device-1' } as never;
+    storage.cache = {
+      version: 1,
+      bootstrap: {} as never,
+      contents: {},
+      updatedAt: new Date().toISOString(),
+    };
+    const api = {
+      encryptedContent: vi.fn().mockRejectedValue(
+        new PanelApiError('你当前只能查看条目信息', 403, 1, 'extension_access_denied'),
+      ),
+      encryptedBootstrap: vi.fn().mockRejectedValue(
+        new PanelApiError('你当前只能查看条目信息', 403, 1, 'extension_access_denied'),
+      ),
+    } as unknown as PanelApi;
+    const keyring = {
+      unlocked: true,
+      signContentIntent: vi.fn().mockResolvedValue('signature'),
+      lock: vi.fn().mockResolvedValue(undefined),
+    };
+    const actions = new PanelActions(model, api, browser(), storage, keyring as never);
+
+    await expect(actions.copy(item)).rejects.toThrow('你当前只能查看条目信息');
+
+    expect(storage.device).not.toBeNull();
+    expect(storage.cache).not.toBeNull();
+    expect(model.state.phase).toBe('ready');
+    expect(keyring.lock).not.toHaveBeenCalled();
+  });
+
+  it('lets only the newest clipboard timer clear copied content', async () => {
+    const model = readyModel();
+    const storage = new MemoryExtensionStorage();
+    const scheduled: Array<() => void> = [];
+    const adapter = browser();
+    adapter.schedule = vi.fn((callback) => scheduled.push(callback));
+    const api = {
+      encryptedContent: vi.fn()
+        .mockResolvedValueOnce({ value: 'first' })
+        .mockResolvedValueOnce({ value: 'second' }),
+    } as unknown as PanelApi;
+    const keyring = {
+      unlocked: true,
+      signContentIntent: vi.fn().mockResolvedValue('signature'),
+      decryptContent: vi.fn().mockImplementation(async (_item, encrypted) => encrypted.value),
+      lock: vi.fn().mockResolvedValue(undefined),
+    };
+    const actions = new PanelActions(model, api, adapter, storage, keyring as never);
+
+    await actions.copy(item);
+    await actions.copy(item);
+    expect(adapter.writeClipboard).toHaveBeenNthCalledWith(1, 'first');
+    expect(adapter.writeClipboard).toHaveBeenNthCalledWith(2, 'second');
+
+    scheduled[0]!();
+    await Promise.resolve();
+    expect(adapter.writeClipboard).toHaveBeenCalledTimes(2);
+
+    scheduled[1]!();
+    await vi.waitFor(() => expect(adapter.writeClipboard).toHaveBeenNthCalledWith(3, ''));
+    await actions.lock();
+    expect(adapter.writeClipboard).toHaveBeenCalledTimes(3);
   });
 
   it('always leaves the unlocking phase after the current bearer returns 401', async () => {
@@ -942,6 +1056,46 @@ describe('PanelActions', () => {
     expect(adapter.invalidateSession).toHaveBeenCalledWith(1);
     expect(model.state.session).toEqual(replacement);
     expect(model.state.phase).toBe('ready');
+  });
+
+  it('returns from offline mode when the retained bearer can reach the service again', async () => {
+    const model = readyModel();
+    model.setReady([item], true);
+    const bootstrap = { profile: {}, items: [], contents: [] } as never;
+    const api = { encryptedBootstrap: vi.fn().mockResolvedValue(bootstrap) } as unknown as PanelApi;
+    const keyring = {
+      unlocked: true,
+      loadBootstrap: vi.fn().mockResolvedValue([item]),
+    };
+    const actions = new PanelActions(
+      model,
+      api,
+      browser(),
+      new MemoryExtensionStorage(),
+      keyring as never,
+    );
+
+    await actions.refreshData();
+
+    expect(api.encryptedBootstrap).toHaveBeenCalledOnce();
+    expect(model.state).toMatchObject({ phase: 'ready', offline: false });
+  });
+
+  it('keeps sessionless local data unlocked when online refresh is unavailable', async () => {
+    const model = readyModel();
+    model.state.session = null;
+    model.setReady([item], true);
+    const actions = new PanelActions(
+      model,
+      {} as PanelApi,
+      browser(),
+      new MemoryExtensionStorage(),
+      { unlocked: true } as never,
+    );
+
+    await expect(actions.refreshData()).rejects.toThrow('当前正在使用本机数据');
+    expect(model.state).toMatchObject({ phase: 'ready', offline: true });
+    expect(model.state.items).toEqual([item]);
   });
 
   it('drops a bootstrap result that arrives after the extension was locked', async () => {

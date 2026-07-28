@@ -121,7 +121,12 @@ export function registerAuthHooks(app: FastifyInstance): void {
       )[0];
       if (!device || device.deviceGeneration !== session.securityGeneration) {
         await db.delete(extensionSessions).where(eq(extensionSessions.id, session.id));
-        return reply.code(403).send({ statusCode: 403, error: 'Forbidden', message: '扩展设备已被撤销，请重新配对' });
+        return reply.code(403).send({
+          statusCode: 403,
+          error: 'Forbidden',
+          code: 'extension_device_revoked',
+          message: '扩展设备已被撤销，请重新配对',
+        });
       }
     } else if (app.ctx.e2eeRequired) {
       await db.delete(extensionSessions).where(eq(extensionSessions.id, session.id));

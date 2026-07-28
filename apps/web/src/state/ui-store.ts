@@ -37,6 +37,9 @@ interface UiState {
   /** null=浏览; 'new'=新建; itemId=编辑 */
   editing: string | null;
   newItemPreset: NewItemPreset | null;
+  /** 只记录草稿状态；条目内容和敏感字段绝不进入全局状态。 */
+  itemDraftDirty: boolean;
+  itemSavePending: boolean;
   toasts: Toast[];
   membersDialogVaultId: string | null;
   auditDialogVaultId: string | null;
@@ -60,6 +63,8 @@ interface UiState {
   selectFolder(path: string | null): void;
   setEditing(v: string | null): void;
   startNewItem(preset?: NewItemPreset): void;
+  setItemDraftState(dirty: boolean, saving?: boolean): void;
+  discardItemDraft(): void;
   toast(kind: Toast['kind'], text: string): void;
   dismissToast(id: number): void;
   openMembers(vaultId: string | null): void;
@@ -83,7 +88,32 @@ interface UiState {
 
 let toastSeq = 1;
 
-export const useUi = create<UiState>((set, get) => ({
+export const useUi = create<UiState>((set, get) => {
+  const guardedItemTransition = (transition: () => void) => {
+    const state = get();
+    if (state.itemSavePending) {
+      state.toast('warn', '正在保存这条记录，请稍候');
+      return;
+    }
+    if (!state.editing || !state.itemDraftDirty) {
+      transition();
+      return;
+    }
+    if (state.confirm) return;
+    void state.requestConfirm({
+      title: '放弃未保存的修改？',
+      body: '当前条目还有未保存的内容。继续离开会丢弃这些修改。',
+      confirmText: '放弃修改',
+      cancelText: '继续编辑',
+      danger: true,
+    }).then((confirmed) => {
+      if (!confirmed) return;
+      set({ itemDraftDirty: false, itemSavePending: false });
+      transition();
+    });
+  };
+
+  return ({
   selectedVaultId: 'all',
   selectedItemId: null,
   search: '',
@@ -92,6 +122,8 @@ export const useUi = create<UiState>((set, get) => ({
   selectedFolderPath: null,
   editing: null,
   newItemPreset: null,
+  itemDraftDirty: false,
+  itemSavePending: false,
   toasts: [],
   membersDialogVaultId: null,
   auditDialogVaultId: null,
@@ -104,26 +136,51 @@ export const useUi = create<UiState>((set, get) => ({
   tourStep: null,
   expandedTreeNodeIds: new Set(),
   confirm: null,
-  selectVault: (id) => set({
+  selectVault: (id) => guardedItemTransition(() => set({
     selectedVaultId: id,
     selectedItemId: null,
     editing: null,
     newItemPreset: null,
     tagFilter: null,
     selectedFolderPath: null,
-  }),
-  selectItem: (id) => set({ selectedItemId: id, editing: null, newItemPreset: null }),
+    itemDraftDirty: false,
+  })),
+  selectItem: (id) => guardedItemTransition(() => set({
+    selectedItemId: id,
+    editing: null,
+    newItemPreset: null,
+    itemDraftDirty: false,
+  })),
   setSearch: (search) => set({ search }),
   setKindFilter: (kindFilter) => set({ kindFilter }),
   setTagFilter: (tagFilter) => set({ tagFilter }),
-  selectFolder: (selectedFolderPath) => set({
+  selectFolder: (selectedFolderPath) => guardedItemTransition(() => set({
     selectedFolderPath,
     selectedItemId: null,
     editing: null,
     newItemPreset: null,
+    itemDraftDirty: false,
+  })),
+  setEditing: (editing) => {
+    if (get().editing === editing) return;
+    guardedItemTransition(() => set({
+      editing,
+      newItemPreset: null,
+      itemDraftDirty: false,
+      itemSavePending: false,
+    }));
+  },
+  startNewItem: (newItemPreset) => guardedItemTransition(() => set({
+    editing: 'new',
+    newItemPreset: newItemPreset ?? null,
+    itemDraftDirty: false,
+    itemSavePending: false,
+  })),
+  setItemDraftState: (itemDraftDirty, itemSavePending = get().itemSavePending) => set({
+    itemDraftDirty,
+    itemSavePending,
   }),
-  setEditing: (editing) => set({ editing, newItemPreset: null }),
-  startNewItem: (newItemPreset) => set({ editing: 'new', newItemPreset: newItemPreset ?? null }),
+  discardItemDraft: () => set({ itemDraftDirty: false, itemSavePending: false }),
   toast: (kind, text) => {
     const id = toastSeq++;
     set({ toasts: [...get().toasts, { id, kind, text }] });
@@ -138,7 +195,13 @@ export const useUi = create<UiState>((set, get) => ({
   setDevicesOpen: (devicesOpen) => set({ devicesOpen }),
   setRetirementOpen: (retirementOpen) => set({ retirementOpen }),
   setGuideOpen: (guideOpen) => set({ guideOpen }),
-  startTour: () => set({ guideOpen: false, tourStep: 0, editing: null, newItemPreset: null }),
+  startTour: () => guardedItemTransition(() => set({
+    guideOpen: false,
+    tourStep: 0,
+    editing: null,
+    newItemPreset: null,
+    itemDraftDirty: false,
+  })),
   setTourStep: (tourStep) => set({ tourStep }),
   toggleTreeNode: (id) => set((state) => {
     const expandedTreeNodeIds = new Set(state.expandedTreeNodeIds);
@@ -177,6 +240,8 @@ export const useUi = create<UiState>((set, get) => ({
       selectedFolderPath: null,
       editing: null,
       newItemPreset: null,
+      itemDraftDirty: false,
+      itemSavePending: false,
       membersDialogVaultId: null,
       auditDialogVaultId: null,
       pairingOpen: false,
@@ -201,4 +266,5 @@ export const useUi = create<UiState>((set, get) => ({
       set({ confirm: null });
     }
   },
-}));
+  });
+});

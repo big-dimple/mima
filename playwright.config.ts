@@ -7,11 +7,11 @@ import { defineConfig } from '@playwright/test';
  */
 const E2E_WEB_PORT = 14273;
 const E2E_API_PORT = 14274;
-const E2E_WEB_HOST = '[::1]';
 const E2E_API_HOST = process.env.MIMA_E2E_API_HOST ?? '127.0.0.1';
 const E2E_API_URL_HOST = E2E_API_HOST.includes(':') ? `[${E2E_API_HOST}]` : E2E_API_HOST;
+const E2E_WEB_HOST = E2E_API_HOST;
 const E2E_API_BIND_HOST = E2E_API_HOST === 'localhost' ? '127.0.0.1' : E2E_API_HOST;
-const E2E_WEB_ORIGIN = `http://${E2E_WEB_HOST}:${E2E_WEB_PORT}`;
+const E2E_WEB_ORIGIN = `http://${E2E_API_URL_HOST}:${E2E_WEB_PORT}`;
 const E2E_DB_URL = process.env.MIMA_E2E_DATABASE_URL
   ?? 'postgres://mima:mima_dev_pw@127.0.0.1:55432/mima_test_e2e';
 
@@ -47,7 +47,7 @@ export default defineConfig({
       command: 'pnpm --filter @mima/api run e2e:server',
       url: `http://${E2E_API_URL_HOST}:${E2E_API_PORT}/api/healthz`,
       reuseExistingServer: false,
-      timeout: 60_000,
+      timeout: 120_000,
       env: {
         MIMA_DEMO_MODE: 'true',
         MIMA_DATABASE_URL: E2E_DB_URL,
@@ -58,14 +58,15 @@ export default defineConfig({
       },
     },
     {
-      command: 'pnpm --filter @mima/web build && pnpm --filter @mima/web preview --host ::1',
+      command: `pnpm --filter @mima/web build && pnpm --filter @mima/web preview --host ${E2E_WEB_HOST}`,
       url: E2E_WEB_ORIGIN,
       reuseExistingServer: false,
-      timeout: 60_000,
+      timeout: 120_000,
       env: {
         MIMA_WEB_PORT: String(E2E_WEB_PORT),
         MIMA_API_PORT: String(E2E_API_PORT),
         MIMA_API_PROXY_HOST: E2E_API_HOST,
+        VITE_MIMA_API_BASE: `http://${E2E_API_URL_HOST}:${E2E_API_PORT}`,
       },
     },
   ],

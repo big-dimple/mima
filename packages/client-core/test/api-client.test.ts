@@ -73,6 +73,48 @@ describe('ZeroKnowledgeApiClient error boundary', () => {
 describe.each([
   ['ApiClient', () => new ApiClient('https://mima.example.test')],
   ['ZeroKnowledgeApiClient', () => new ZeroKnowledgeApiClient('https://mima.example.test')],
+])('%s safe read retry', (_name, createClient) => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('retries one interrupted GET request', async () => {
+    const fetcher = vi.fn()
+      .mockRejectedValueOnce(new TypeError('connection reset'))
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }));
+    vi.stubGlobal('fetch', fetcher);
+
+    await expect(createClient().cryptoDevices()).resolves.toEqual([]);
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+
+  it('retries one temporary gateway response', async () => {
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce(new Response(null, { status: 503 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }));
+    vi.stubGlobal('fetch', fetcher);
+
+    await expect(createClient().cryptoDevices()).resolves.toEqual([]);
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+
+  it('never retries an uncertain mutation', async () => {
+    const fetcher = vi.fn().mockRejectedValue(new TypeError('connection reset'));
+    vi.stubGlobal('fetch', fetcher);
+
+    await expect(createClient().sendEncryptedCommand('POST', '/api/v2/items', { ciphertext: 'opaque' }))
+      .rejects.toMatchObject({ status: 0 });
+    expect(fetcher).toHaveBeenCalledOnce();
+  });
+});
+
+describe.each([
+  ['ApiClient', () => new ApiClient('https://mima.example.test')],
+  ['ZeroKnowledgeApiClient', () => new ZeroKnowledgeApiClient('https://mima.example.test')],
 ])('%s team vault creation', (_name, createClient) => {
   afterEach(() => vi.unstubAllGlobals());
 

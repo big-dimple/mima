@@ -480,7 +480,10 @@ export class ExtensionKeyring {
         const keys = nextKeys.get(vaultKeyId(encrypted.vaultId, encrypted.keyEpoch));
         if (!keys) continue;
         const metadata = await decryptMetadata(keys, encrypted);
-        items.push(parseItemMetadata(metadata, encrypted));
+        items.push({
+          ...parseItemMetadata(metadata, encrypted),
+          canReveal: Boolean(keys.contentKey),
+        });
       }
       const previousKeys = [...this.vaultKeys.values()];
       this.vaultKeys.clear();
@@ -847,7 +850,7 @@ function parseSignerProfile(value: unknown) {
 function parseItemMetadata(
   value: JsonValue,
   encrypted: EncryptedItemMetadata,
-): DecryptedExtensionItem {
+): Omit<DecryptedExtensionItem, 'canReveal'> {
   if (!isRecord(value)) throw new Error('条目信息校验失败，已拒绝显示');
   const kind = value.kind;
   const title = value.title;

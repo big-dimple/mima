@@ -203,14 +203,32 @@ input:focus-visible {
   font-weight: 500;
 }
 
+.searchWrap {
+  position: relative;
+  margin: 10px 12px 2px;
+}
+
+.searchWrap > svg {
+  position: absolute;
+  top: 50%;
+  left: 10px;
+  width: 15px;
+  height: 15px;
+  color: var(--faint);
+  pointer-events: none;
+  transform: translateY(-50%);
+}
+
 .search {
-  width: calc(100% - 24px);
-  margin: 8px 12px;
+  width: 100%;
   box-sizing: border-box;
-  padding: 7px 10px;
+  min-height: var(--control-compact);
+  padding: 7px 10px 7px 32px;
   border: 1px solid var(--border-strong);
   border-radius: 4px;
   font-size: 13px;
+  color: var(--text);
+  background: var(--panel);
 }
 
 .item {
@@ -242,11 +260,38 @@ input:focus-visible {
   white-space: nowrap;
 }
 
-.kindIcon {
-  width: 15px;
-  height: 15px;
-  flex: 0 0 auto;
-  color: var(--muted);
+.kindMark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+}
+
+.kindMark svg {
+  width: 14px;
+  height: 14px;
+}
+
+.kindMark-login {
+  color: var(--item-login-text);
+  background: var(--item-login-bg);
+  border-color: var(--item-login-border);
+}
+
+.kindMark-api_token {
+  color: var(--item-api-text);
+  background: var(--item-api-bg);
+  border-color: var(--item-api-border);
+}
+
+.kindMark-secure_note {
+  color: var(--item-note-text);
+  background: var(--item-note-bg);
+  border-color: var(--item-note-border);
 }
 
 .kindBadge {
@@ -358,6 +403,21 @@ input:focus-visible {
 
 .btnPrimary:hover:not(:disabled) {
   background: var(--accent-hover);
+}
+
+.listMore {
+  width: calc(100% - 24px);
+  min-height: var(--control-compact);
+  margin: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--accent);
+  background: var(--panel);
+  cursor: pointer;
+}
+
+.listMore:hover {
+  background: var(--accent-weak);
 }
 
 .empty {

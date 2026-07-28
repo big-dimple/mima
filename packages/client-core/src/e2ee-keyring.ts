@@ -195,6 +195,11 @@ export interface ExtensionEnrollment {
   expiresAt: string;
 }
 
+export interface ExtensionPairingEnrollmentStatus {
+  status: 'waiting' | 'claimed' | 'expired';
+  enrollment: ExtensionEnrollment | null;
+}
+
 export interface ApproveExtensionEnrollmentRequest {
   approverDeviceId: string;
   certificate: string;

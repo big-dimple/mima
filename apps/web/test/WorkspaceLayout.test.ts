@@ -36,7 +36,7 @@ describe('workspace layout preferences', () => {
   it('clamps only the rendered layout and restores the same preference on a wider viewport', () => {
     const preference = { navWidth: 384, listWidth: 420 };
     expect(clampLayout(preference, 1440)).toEqual(preference);
-    expect(clampLayout(preference, 1120)).toEqual({ navWidth: 316, listWidth: 300 });
+    expect(clampLayout(preference, 1120)).toEqual({ navWidth: 280, listWidth: 360 });
     expect(clampLayout(preference, 1440)).toEqual(preference);
   });
 });

@@ -33,6 +33,12 @@ type EnvelopeTasksState = {
   tasks: VaultEnvelopeTask[];
 };
 
+type OwnershipTransferState = {
+  vaultId: string | null;
+  status: 'loading' | 'loaded' | 'error';
+  transfer: VaultOwnershipTransfer | null;
+};
+
 type BatchGrantStatus = {
   vaultId: string;
   state: 'pending' | 'success' | 'failed';
@@ -57,6 +63,7 @@ export function MembersDialog() {
   const [role, setRole] = useState<MembershipRole>('viewer');
   const [transferTo, setTransferTo] = useState('');
   const envelopeTasksRequestId = useRef(0);
+  const ownershipTransferRequestId = useRef(0);
   const batchRunId = useRef(0);
   const [envelopeTasksState, setEnvelopeTasksState] = useState<EnvelopeTasksState>({
     vaultId: null,
@@ -64,7 +71,12 @@ export function MembersDialog() {
     tasks: [],
   });
   const [completingTaskId, setCompletingTaskId] = useState<string | null>(null);
-  const [ownershipTransfer, setOwnershipTransfer] = useState<VaultOwnershipTransfer | null>(null);
+  const [ownershipTransferState, setOwnershipTransferState] = useState<OwnershipTransferState>({
+    vaultId: null,
+    status: 'loading',
+    transfer: null,
+  });
+  const [removingMembershipKey, setRemovingMembershipKey] = useState<string | null>(null);
   const [acceptingTransfer, setAcceptingTransfer] = useState(false);
   const [cancellingTransfer, setCancellingTransfer] = useState(false);
   const [batchUserId, setBatchUserId] = useState('');
@@ -75,6 +87,12 @@ export function MembersDialog() {
   const envelopeTasks = envelopeTasksState.vaultId === vaultId ? envelopeTasksState.tasks : [];
   const envelopeTasksStatus = envelopeTasksState.vaultId === vaultId
     ? envelopeTasksState.status
+    : 'loading';
+  const ownershipTransfer = ownershipTransferState.vaultId === vaultId
+    ? ownershipTransferState.transfer
+    : null;
+  const ownershipTransferStatus = ownershipTransferState.vaultId === vaultId
+    ? ownershipTransferState.status
     : 'loading';
   const projects = Object.values(vaults)
     .filter((candidate) =>
@@ -90,11 +108,14 @@ export function MembersDialog() {
     setBatchRole('viewer');
     setBatchStatuses([]);
     setBatchRunning(false);
+    setRemovingMembershipKey(null);
   }, [vaultId]);
 
   const close = () => {
     envelopeTasksRequestId.current += 1;
+    ownershipTransferRequestId.current += 1;
     setEnvelopeTasksState({ vaultId: null, status: 'loading', tasks: [] });
+    setOwnershipTransferState({ vaultId: null, status: 'loading', transfer: null });
     useUi.getState().openMembers(null);
   };
 
@@ -114,11 +135,17 @@ export function MembersDialog() {
   };
 
   const loadOwnershipTransfer = async () => {
-    if (!vaultId) return;
+    const targetVaultId = vaultId;
+    if (!targetVaultId) return;
+    const requestId = ++ownershipTransferRequestId.current;
+    setOwnershipTransferState({ vaultId: targetVaultId, status: 'loading', transfer: null });
     try {
-      setOwnershipTransfer(await zeroKnowledge.getVaultOwnershipTransfer(vaultId));
+      const transfer = await zeroKnowledge.getVaultOwnershipTransfer(targetVaultId);
+      if (ownershipTransferRequestId.current !== requestId) return;
+      setOwnershipTransferState({ vaultId: targetVaultId, status: 'loaded', transfer });
     } catch {
-      setOwnershipTransfer(null);
+      if (ownershipTransferRequestId.current !== requestId) return;
+      setOwnershipTransferState({ vaultId: targetVaultId, status: 'error', transfer: null });
     }
   };
 
@@ -143,6 +170,7 @@ export function MembersDialog() {
     return () => {
       current = false;
       envelopeTasksRequestId.current += 1;
+      ownershipTransferRequestId.current += 1;
     };
   }, [api, memberships, vaultId, zeroKnowledge]);
 
@@ -238,9 +266,24 @@ export function MembersDialog() {
   };
 
   const remove = async (kind: SubjectKind, id: string) => {
-    close();
+    const membership = memberships.find((candidate) => candidate.subjectKind === kind && candidate.subjectId === id);
+    if (!membership || removingMembershipKey) return;
+    const subjectName = nameOf(kind, id);
+    const roleLabel = ROLES.find((candidate) => candidate.value === membership.role)?.label ?? membership.role;
+    const removingSelf = kind === 'user' && id === user?.id;
+    const confirmed = await useUi.getState().requestConfirm({
+      title: removingSelf ? '移除自己的密码库授权？' : '移除密码库授权？',
+      body: `将移除 ${subjectName} 的“${roleLabel}”授权。系统会保留其通过其他用户组或直接授权获得的有效访问；如果实际访问能力降低，将自动启动安全更新。${removingSelf ? ' 这是你自己的授权，完成后你可能立即失去当前密码库的访问。' : ''}`,
+      confirmText: '确认移除',
+      cancelText: '保留授权',
+      danger: true,
+    });
+    if (!confirmed) return;
+    const operationKey = `${kind}:${id}`;
+    setRemovingMembershipKey(operationKey);
     try {
       const result = await zeroKnowledge.removeVaultMembership(vaultId, kind, id);
+      await loadEnvelopeTasks();
       toast('info', result.rekeyRequired
         ? '授权已移除，正在安全更新密码库访问'
         : result.retainedAccess
@@ -250,6 +293,8 @@ export function MembersDialog() {
           : '授权已移除；对方此前尚未开通访问，无需额外处理');
     } catch (err) {
       toast('error', err instanceof Error ? err.message : '操作失败');
+    } finally {
+      setRemovingMembershipKey(null);
     }
   };
 
@@ -293,7 +338,8 @@ export function MembersDialog() {
     if (!confirmed) return;
     try {
       const result = await zeroKnowledge.transferVaultOwnership(vaultId!, transferTo);
-      setOwnershipTransfer(result);
+      if (result.vaultId !== vaultId) throw new Error('所有权转移结果与当前密码库不一致，请刷新后重试');
+      setOwnershipTransferState({ vaultId, status: 'loaded', transfer: result });
       setTransferTo('');
       await loadEnvelopeTasks();
       toast('info', `已发起转移，等待 ${name} 在已解锁设备上确认接收`);
@@ -303,7 +349,12 @@ export function MembersDialog() {
   };
 
   const acceptTransfer = async () => {
-    if (!ownershipTransfer || ownershipTransfer.toOwnerUserId !== user?.id) return;
+    if (
+      !ownershipTransfer ||
+      ownershipTransferState.vaultId !== vaultId ||
+      ownershipTransfer.vaultId !== vaultId ||
+      ownershipTransfer.toOwnerUserId !== user?.id
+    ) return;
     const confirmed = await useUi.getState().requestConfirm({
       title: '确认接收所有权',
       body: `确认接收「${vault.name}」的所有权？完成后你将负责成员管理和访问安全。`,
@@ -314,7 +365,8 @@ export function MembersDialog() {
     setAcceptingTransfer(true);
     try {
       const result = await zeroKnowledge.acceptVaultOwnershipTransfer(ownershipTransfer);
-      setOwnershipTransfer(result);
+      if (result.vaultId !== vaultId) throw new Error('所有权转移结果与当前密码库不一致，请刷新后重试');
+      setOwnershipTransferState({ vaultId, status: 'loaded', transfer: result });
       await loadEnvelopeTasks();
       toast('info', result.status === 'completed'
         ? '已接收所有权，正在安全更新密码库访问'
@@ -328,7 +380,11 @@ export function MembersDialog() {
   };
 
   const cancelTransfer = async (decision: 'cancel' | 'decline') => {
-    if (!ownershipTransfer) return;
+    if (
+      !ownershipTransfer ||
+      ownershipTransferState.vaultId !== vaultId ||
+      ownershipTransfer.vaultId !== vaultId
+    ) return;
     const confirmed = await useUi.getState().requestConfirm({
       title: decision === 'cancel' ? '取消所有权转移' : '拒绝接收所有权',
       body: decision === 'cancel'
@@ -342,7 +398,7 @@ export function MembersDialog() {
     setCancellingTransfer(true);
     try {
       await zeroKnowledge.cancelVaultOwnershipTransfer(ownershipTransfer, decision);
-      setOwnershipTransfer(null);
+      setOwnershipTransferState({ vaultId, status: 'loaded', transfer: null });
       toast('info', decision === 'cancel' ? '已取消所有权转移' : '已拒绝接收所有权');
     } catch (error) {
       toast('error', error instanceof Error ? error.message : '处理所有权转移失败');
@@ -429,7 +485,12 @@ export function MembersDialog() {
                         m.role === 'owner' &&
                         (envelopeTasksStatus !== 'loaded' || (membershipTasks(m).length === 0 && readyOwnerCount <= 1))
                       ) && (
-                        <IconButton label="移除授权" danger onClick={() => void remove(m.subjectKind, m.subjectId)}>
+                        <IconButton
+                          label="移除授权"
+                          danger
+                          disabled={removingMembershipKey !== null}
+                          onClick={() => void remove(m.subjectKind, m.subjectId)}
+                        >
                           <Trash2 size={14} />
                         </IconButton>
                       )}
@@ -582,7 +643,23 @@ export function MembersDialog() {
             团队密码库必须始终保留至少一名直接用户拥有者。
           </p>
 
-          {ownershipTransfer && (
+          {ownershipTransferStatus === 'loading' && (
+            <div className={styles.transferBox} role="status">
+              <div className={styles.transferTitle}>正在检查所有权转移状态…</div>
+            </div>
+          )}
+
+          {ownershipTransferStatus === 'error' && (
+            <div className={styles.transferBox} role="alert">
+              <div className={styles.transferTitle}>暂时无法确认所有权转移状态</div>
+              <p className={styles.transferStatus}>为避免对错误的密码库执行操作，状态恢复前不会开放新的转移。</p>
+              <button className={styles.cancelBtn} onClick={() => void loadOwnershipTransfer()}>
+                <RefreshCw size={14} aria-hidden />重新加载
+              </button>
+            </div>
+          )}
+
+          {ownershipTransferStatus === 'loaded' && ownershipTransfer && (
             <div className={styles.transferBox} data-testid="ownership-transfer-status">
               <div className={styles.transferTitle}>待完成的所有权转移</div>
               <p className={styles.transferStatus}>
@@ -633,7 +710,7 @@ export function MembersDialog() {
             </div>
           )}
 
-          {isOwner && !ownershipTransfer && (
+          {isOwner && ownershipTransferStatus === 'loaded' && !ownershipTransfer && (
             <div className={styles.transferBox}>
               <div className={styles.transferTitle}>转移所有权</div>
               <div className={styles.transferRow}>

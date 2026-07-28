@@ -62,6 +62,31 @@ describe('LoginScreen', () => {
     expect(screen.queryByLabelText('域密码')).not.toBeInTheDocument();
   });
 
+  it('describes a generic OIDC provider as company unified authentication', async () => {
+    const services = {
+      api: {
+        authConfig: vi.fn().mockResolvedValue({
+          mode: 'oidc',
+          loginProvider: 'oidc',
+          reauthProvider: 'oidc',
+          directoryProvider: 'oidc',
+          loginMethod: 'oidc',
+          reauthMethod: 'oidc',
+          providerLabel: '组织统一认证',
+        }),
+      },
+    } as unknown as AppServices;
+
+    render(
+      <AppContext.Provider value={services}>
+        <LoginScreen onLoggedIn={vi.fn()} />
+      </AppContext.Provider>,
+    );
+
+    expect(await screen.findByText('使用组织统一认证登录')).toBeVisible();
+    expect(screen.queryByText(/飞书账号/)).not.toBeInTheDocument();
+  });
+
   it('logs in with a domain account when LDAP is the login provider', async () => {
     const onLoggedIn = vi.fn().mockResolvedValue(undefined);
     const login = vi.fn().mockResolvedValue({ csrfToken: 'csrf-1', locked: false });

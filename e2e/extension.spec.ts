@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { chromium, expect, test, type BrowserContext, type Page } from '@playwright/test';
 import { fillLoginForm } from '../apps/extension/src/fill.ts';
 import {
+  E2E_API_ORIGIN,
   ensureLoginItem,
   expectNoHorizontalOverflow,
   loginAndUnlock,
@@ -14,7 +15,7 @@ import {
 const extensionPath = resolve(dirname(fileURLToPath(import.meta.url)), '../apps/extension/dist-e2e');
 const E2E_API_HOST = process.env.MIMA_E2E_API_HOST ?? '127.0.0.1';
 const E2E_API_URL_HOST = E2E_API_HOST.includes(':') ? `[${E2E_API_HOST}]` : E2E_API_HOST;
-const E2E_WEB_ORIGIN = 'http://[::1]:14273';
+const E2E_WEB_ORIGIN = `http://${E2E_API_URL_HOST}:14273`;
 const screenshotDir = process.env.MIMA_E2E_SCREENSHOT_DIR
   ?? join(tmpdir(), 'mima-e2e-screenshots');
 const EXPECTED_EXTENSION_ID = 'gkhbkfdgghiaoohpldbjkpmopaojjhhp';
@@ -262,11 +263,11 @@ test.describe.serial('浏览器扩展零知识链路', () => {
   });
 
   test('旧版工作台标签仍打开时不会扰动新版恢复', async () => {
-    const accountId = await web.evaluate(async () => {
-      const response = await fetch('/api/session');
+    const accountId = await web.evaluate(async (apiOrigin) => {
+      const response = await fetch(`${apiOrigin}/api/session`, { credentials: 'include' });
       const session = await response.json() as { user: { id: string } };
       return session.user.id;
-    });
+    }, E2E_API_ORIGIN);
     await standbyWeb.evaluate(({ targetExtensionId, userId }) => {
       const wakeEvent = 'mima-extension-wake-v1';
       let legacyPort: chrome.runtime.Port | null = null;
@@ -401,9 +402,15 @@ test.describe.serial('浏览器扩展零知识链路', () => {
     await expect(panel.getByRole('heading', { name: /恢复扩展连接|扩展已锁定/ })).toBeVisible();
 
     await web.getByLabel('主密码（本机解密）').fill(MAIN_PASSWORDS.bob);
+    const webUnlockResponse = web.waitForResponse((response) => (
+      response.request().method() === 'POST'
+      && new URL(response.url()).pathname === '/api/v2/session/crypto-unlock'
+    ));
     await web.getByRole('button', { name: '解锁密码库' }).click();
+    const completedWebUnlock = await webUnlockResponse;
+    expect(completedWebUnlock.status(), await completedWebUnlock.text()).toBe(200);
 
-    await expect(web.getByRole('region', { name: '凭证列表' })).toBeVisible();
+    await expect(web.getByRole('region', { name: '凭证列表' })).toBeVisible({ timeout: 15_000 });
     await expect(panel.getByLabel('搜索已解锁条目')).toBeVisible({ timeout: 15_000 });
     await expect.poll(() => resumeResponses, { timeout: 5_000 }).toEqual([200]);
     expect(challengeResponses).toEqual([401, 200]);

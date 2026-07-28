@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, ArrowDown, ArrowUp, Plus, Save, Trash2, WandSparkles } from 'lucide-react';
 import type { DecryptedItemMeta, DecryptedItemMetaPatch } from '@mima/client-core';
 import type { ItemKind } from '@mima/contracts';
@@ -56,6 +56,7 @@ export function ItemForm({
   const conflicts = useMeta((state) => state.conflicts);
   const vaultDirectories = useMeta((state) => state.vaultDirectories);
   const toast = useUi((state) => state.toast);
+  const setItemDraftState = useUi((state) => state.setItemDraftState);
   const initialItemRef = useRef(item);
   const initialItem = initialItemRef.current;
 
@@ -185,6 +186,14 @@ export function ItemForm({
     || secret.touched;
   const hasChanges = mode === 'new' ? newDraftTouched : changesSecret || Object.keys(editPatch).length > 0;
 
+  useEffect(() => {
+    setItemDraftState(hasChanges, busy);
+  }, [busy, hasChanges, setItemDraftState]);
+
+  useEffect(() => () => {
+    useUi.getState().discardItemDraft();
+  }, []);
+
   const validate = (): string | null => {
     if (!normalizedTitle) return '标题不能为空';
     if ((mode === 'new' || folderTouched) && folderPath.trim() && normalizedFolderPath === null) {
@@ -293,8 +302,10 @@ export function ItemForm({
     if (!hasChanges) return;
 
     submittingRef.current = true;
+    let savedSuccessfully = false;
     setError(null);
     setBusy(true);
+    setItemDraftState(hasChanges, true);
     try {
       if (mode === 'new') {
         if (targetVaultId === 'all' || targetVaultId === 'favorites') {
@@ -316,6 +327,8 @@ export function ItemForm({
           secretValue: kind === 'login' && (!secret.touched || secret.value.length === 0) ? null : secret.value,
         });
         secret.reset();
+        savedSuccessfully = true;
+        setItemDraftState(false, false);
         keepSavedItemVisible(id, normalizedFolderPath);
         onClose();
         toast('info', '条目已创建');
@@ -334,6 +347,8 @@ export function ItemForm({
         await actions.updateItemMeta(itemId, editPatch, expectedVersion);
         assertNoConflict();
       }
+      savedSuccessfully = true;
+      setItemDraftState(false, false);
       keepSavedItemVisible(itemId, normalizedFolderPath);
       onClose();
       toast('info', offline ? '修改已在本地加密，将在恢复网络后同步' : '已保存');
@@ -348,6 +363,7 @@ export function ItemForm({
     } finally {
       submittingRef.current = false;
       setBusy(false);
+      setItemDraftState(savedSuccessfully ? false : hasChanges, false);
     }
   };
 

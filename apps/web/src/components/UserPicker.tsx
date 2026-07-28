@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { AlertCircle, Loader2, Search, X } from 'lucide-react';
 import type { UserSearchResult } from '@mima/contracts';
 import { useApp } from '../state/app-context.ts';
@@ -36,6 +36,7 @@ export function UserPicker({
   const requestSequence = useRef(0);
   const hydrationSequence = useRef(0);
   const rootRef = useRef<HTMLDivElement>(null);
+  const optionsId = `${useId().replace(/:/g, '')}-options`;
   const excludedIdsKey = excludeIds.join('\u0000');
 
   useEffect(() => {
@@ -116,7 +117,10 @@ export function UserPicker({
           aria-label={label}
           role="combobox"
           aria-expanded={open}
-          aria-controls={`${label.replace(/\s+/g, '-')}-options`}
+          aria-controls={optionsId}
+          aria-activedescendant={open && visible[activeIndex]
+            ? `${optionsId}-${visible[activeIndex]!.id}`
+            : undefined}
           aria-autocomplete="list"
           value={query}
           disabled={disabled}
@@ -169,7 +173,7 @@ export function UserPicker({
       {open && (
         <div
           className={[styles.options, inlineOptions ? styles.inlineOptions : ''].join(' ')}
-          id={`${label.replace(/\s+/g, '-')}-options`}
+          id={optionsId}
           role="listbox"
         >
           {error ? (
@@ -181,6 +185,7 @@ export function UserPicker({
           ) : (
             visible.map((user, index) => (
               <button
+                id={`${optionsId}-${user.id}`}
                 type="button"
                 role="option"
                 aria-selected={index === activeIndex}

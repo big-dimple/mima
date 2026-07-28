@@ -92,6 +92,52 @@ describe('PanelView', () => {
     expect(root.querySelector('.results')?.textContent).toContain('云平台发布凭证');
   });
 
+  it('searches all items even when a matching login is already suggested', () => {
+    const root = document.createElement('div');
+    const model = new PanelModel();
+    model.state.session = extSession();
+    model.state.tabOrigin = 'https://cloud.tencent.com';
+    model.state.tabUrl = 'https://cloud.tencent.com/login';
+    model.setReady([extensionItem({
+      id: 'suggested-login',
+      title: '腾讯云生产入口',
+      origin: 'https://cloud.tencent.com',
+      loginUrl: 'https://cloud.tencent.com/login',
+    })]);
+
+    new PanelView(root, model, actions(), vi.fn()).render();
+    const search = root.querySelector<HTMLInputElement>('[aria-label="搜索已解锁条目"]')!;
+    search.value = '生产入口';
+    search.dispatchEvent(new Event('input'));
+
+    const resultLists = root.querySelectorAll('.results');
+    expect(resultLists[0]?.textContent).toContain('腾讯云生产入口');
+    expect(resultLists[1]?.textContent).toContain('腾讯云生产入口');
+  });
+
+  it('limits site suggestions until the user asks to see the rest', () => {
+    const root = document.createElement('div');
+    const model = new PanelModel();
+    model.state.session = extSession();
+    model.state.tabOrigin = 'https://example.test';
+    model.state.tabUrl = 'https://example.test/login';
+    model.setReady(Array.from({ length: 6 }, (_, index) => extensionItem({
+      id: `login-${index}`,
+      title: `入口 ${index + 1}`,
+      loginUrl: 'https://example.test/login',
+    })));
+
+    new PanelView(root, model, actions(), vi.fn()).render();
+    const matched = root.querySelectorAll('.results')[0]!;
+    expect(matched.querySelectorAll('.item')).toHaveLength(5);
+
+    const showRest = [...root.querySelectorAll<HTMLButtonElement>('button')]
+      .find((control) => control.textContent === '查看其余 1 条匹配项')!;
+    showRest.click();
+    expect(matched.querySelectorAll('.item')).toHaveLength(6);
+    expect(showRest.isConnected).toBe(false);
+  });
+
   it('lists the exact full login URL before same-origin fallbacks', () => {
     const root = document.createElement('div');
     const model = new PanelModel();
@@ -177,13 +223,16 @@ describe('PanelView', () => {
 
   it('requires confirmation before unpairing', async () => {
     const root = document.createElement('div');
+    document.body.appendChild(root);
     const model = new PanelModel();
     const panelActions = actions();
     model.state.session = extSession();
     model.setReady([]);
     new PanelView(root, model, panelActions, vi.fn()).render();
 
-    root.querySelector<HTMLButtonElement>('button[aria-label="解除配对"]')?.click();
+    const trigger = root.querySelector<HTMLButtonElement>('button[aria-label="解除配对"]')!;
+    trigger.focus();
+    trigger.click();
     expect(document.body.textContent).toContain('解除这台扩展的配对');
     expect(document.body.textContent).toContain('扩展授权和离线数据会立即清除');
     expect(document.body.textContent).not.toContain('密文缓存');
@@ -191,6 +240,65 @@ describe('PanelView', () => {
     const cancel = [...document.body.querySelectorAll('button')].find((button) => button.textContent === '取消');
     cancel?.click();
     expect(panelActions.unpair).not.toHaveBeenCalled();
+    expect(document.activeElement).toBe(trigger);
+    root.remove();
+  });
+
+  it('keeps the unpair dialog usable when the operation fails', async () => {
+    const root = document.createElement('div');
+    const model = new PanelModel();
+    const panelActions = actions();
+    panelActions.unpair = vi.fn().mockRejectedValue(new Error('服务暂时不可用'));
+    model.state.session = extSession();
+    model.setReady([]);
+    new PanelView(root, model, panelActions, vi.fn()).render();
+
+    root.querySelector<HTMLButtonElement>('button[aria-label="解除配对"]')!.click();
+    const confirm = [...document.body.querySelectorAll<HTMLButtonElement>('button')]
+      .find((control) => control.textContent === '解除配对')!;
+    confirm.click();
+
+    await vi.waitFor(() => expect(confirm.disabled).toBe(false));
+    expect(document.body.textContent).toContain('服务暂时不可用');
+    expect(document.querySelector('.confirmLayer')).not.toBeNull();
+  });
+
+  it('submits an approved compatibility pairing with Enter', async () => {
+    const root = document.createElement('div');
+    const model = new PanelModel();
+    const panelActions = actions();
+    panelActions.checkPairingApproval = vi.fn().mockResolvedValue('pending');
+    model.state.device = { deviceId: 'device-1', unlockFactorKind: 'web-main-password' } as never;
+    model.setAwaitingApproval({
+      enrollmentId: 'enrollment-1',
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      fingerprint: '1111 2222 3333 4444 5555 6666 7777 8888',
+      sealedApproval: 'sealed-approval',
+    });
+    new PanelView(root, model, panelActions, vi.fn()).render();
+
+    const factor = root.querySelector<HTMLInputElement>('input[type="password"]')!;
+    factor.value = 'main-password';
+    factor.form!.dispatchEvent(new SubmitEvent('submit', { bubbles: true, cancelable: true }));
+
+    await vi.waitFor(() => expect(panelActions.checkPairingApproval).toHaveBeenCalledWith('main-password'));
+  });
+
+  it('uses the same semantic item colors as the workbench', () => {
+    const root = document.createElement('div');
+    const model = new PanelModel();
+    model.state.session = extSession();
+    model.setReady([
+      extensionItem({ id: 'login', kind: 'login' }),
+      extensionItem({ id: 'api', kind: 'api_token', origin: null }),
+      extensionItem({ id: 'note', kind: 'secure_note', origin: null }),
+    ]);
+
+    new PanelView(root, model, actions(), vi.fn()).render();
+
+    expect(root.querySelector('.kindMark-login')).not.toBeNull();
+    expect(root.querySelector('.kindMark-api_token')).not.toBeNull();
+    expect(root.querySelector('.kindMark-secure_note')).not.toBeNull();
   });
 
   it('uses agreed Chinese terms in pairing and lock views', () => {
@@ -338,6 +446,7 @@ function extensionItem(overrides: Partial<import('../src/protocol.ts').Decrypted
     favorite: false,
     sensitivity: 'medium' as const,
     secretState: 'present' as const,
+    canReveal: true,
     version: 1,
     secretVersion: 1,
     keyEpoch: 1,

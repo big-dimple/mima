@@ -1,4 +1,5 @@
 import { Suspense, lazy, useEffect, useRef, useState } from 'react';
+import * as Dialog from '@radix-ui/react-dialog';
 import { ArrowLeft, GripVertical, PanelLeftOpen, RefreshCw, X } from 'lucide-react';
 import { useMeta } from '../state/app-context.ts';
 import type { LocalAccessReason } from '../state/local-access.ts';
@@ -7,7 +8,6 @@ import { Header } from './Header.tsx';
 import { VaultNav } from './VaultNav.tsx';
 import { ItemList } from './ItemList.tsx';
 import { ItemDetail } from './ItemDetail.tsx';
-import { ConfirmDialog } from './ConfirmDialog.tsx';
 import { TourPrompt } from './TourPrompt.tsx';
 import { LoadingState } from './AsyncState.tsx';
 import { GuideDialog } from './GuideDialog.tsx';
@@ -29,9 +29,10 @@ const LAYOUT_KEY = 'mima.layout.v3';
 const PREVIOUS_LAYOUT_KEY = 'mima.layout.v2';
 const LEGACY_LAYOUT_KEY = 'mima.layout.v1';
 const LEGACY_NAV_MIN_WIDTH = 200;
+const PREVIOUS_LIST_MIN_WIDTH = 300;
 const NAV_MIN_WIDTH = 280;
 const NAV_MAX_WIDTH = 640;
-const LIST_MIN_WIDTH = 300;
+const LIST_MIN_WIDTH = 360;
 const LIST_MAX_WIDTH = 520;
 const DETAIL_MIN_WIDTH = 480;
 const SEPARATORS_WIDTH = 24;
@@ -58,6 +59,7 @@ export function Workspace({
   const toast = useUi((s) => s.toast);
   const selectedItemId = useUi((s) => s.selectedItemId);
   const editing = useUi((s) => s.editing);
+  const itemDraftDirty = useUi((s) => s.itemDraftDirty);
   const [preferredLayout, setPreferredLayout] = useState(readLayoutPreference);
   const preferredLayoutRef = useRef(preferredLayout);
   const [viewportWidth, setViewportWidth] = useState(() => typeof window === 'undefined' ? 1440 : window.innerWidth);
@@ -87,9 +89,20 @@ export function Workspace({
 
   useEffect(() => setNavOpen(false), [selectedVaultId]);
 
+  useEffect(() => {
+    if (!itemDraftDirty) return;
+    const warnBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', warnBeforeUnload);
+    return () => window.removeEventListener('beforeunload', warnBeforeUnload);
+  }, [itemDraftDirty]);
+
   // 权限被撤销的库若正被查看，回到"全部"并提示
   useEffect(() => {
     if (lastRevokedVaultId && selectedVaultId === lastRevokedVaultId) {
+      useUi.getState().discardItemDraft();
       selectVault('all');
       toast('warn', '你对当前库的访问权限已被撤销');
     }
@@ -171,12 +184,17 @@ export function Workspace({
             {mode === 'mobile' && (selectedItemId || editing) ? (
               <IconButton label="返回凭证列表" onClick={() => {
                 useUi.getState().selectItem(null);
-                useUi.getState().setEditing(null);
               }}>
                 <ArrowLeft size={17} />
               </IconButton>
             ) : (
-              <IconButton label="打开密码库导航" onClick={() => setNavOpen(true)} tour="open-vault-nav">
+              <IconButton
+                label="打开密码库导航"
+                onClick={() => setNavOpen(true)}
+                tour="open-vault-nav"
+                ariaExpanded={navOpen}
+                ariaHaspopup="dialog"
+              >
                 <PanelLeftOpen size={17} />
               </IconButton>
             )}
@@ -194,21 +212,22 @@ export function Workspace({
               <ItemList />
             )}
           </div>
-          {navOpen && (
-            <div className={styles.drawerLayer}>
-              <button className={styles.drawerBackdrop} aria-label="关闭密码库导航" onClick={() => setNavOpen(false)} />
-              <div className={styles.drawer} role="dialog" aria-modal="true" aria-label="密码库导航">
+          <Dialog.Root open={navOpen} onOpenChange={setNavOpen}>
+            <Dialog.Portal>
+              <Dialog.Overlay className={styles.drawerBackdrop} />
+              <Dialog.Content className={styles.drawer} aria-describedby={undefined}>
                 <div className={styles.drawerHeader}>
-                  <strong>密码库</strong>
-                  <IconButton label="关闭密码库导航" onClick={() => setNavOpen(false)}><X size={16} /></IconButton>
+                  <Dialog.Title>密码库导航</Dialog.Title>
+                  <Dialog.Close asChild>
+                    <IconButton label="关闭密码库导航"><X size={16} /></IconButton>
+                  </Dialog.Close>
                 </div>
                 <VaultNav />
-              </div>
-            </div>
-          )}
+              </Dialog.Content>
+            </Dialog.Portal>
+          </Dialog.Root>
         </div>
       )}
-      <ConfirmDialog />
       <Suspense fallback={<LoadingState variant="overlay" label="正在加载界面…" />}>
         <MembersDialog />
         <AuditDialog />
@@ -311,7 +330,7 @@ function PaneSeparator({
 function viewportMode(): ViewportMode {
   if (typeof window === 'undefined') return 'desktop';
   if (window.innerWidth < 768) return 'mobile';
-  return window.innerWidth < 1120 ? 'tablet' : 'desktop';
+  return window.innerWidth < 1180 ? 'tablet' : 'desktop';
 }
 
 export function readLayoutPreference(): WorkspaceLayout {
@@ -355,9 +374,9 @@ function parseLayout(value: string | null): WorkspaceLayout | null {
 
 export function isPreviousAutomaticLayout(layout: WorkspaceLayout): boolean {
   return (
-    layout.listWidth === LIST_MIN_WIDTH && layout.navWidth >= NAV_MIN_WIDTH && layout.navWidth <= 320
+    layout.listWidth === PREVIOUS_LIST_MIN_WIDTH && layout.navWidth >= NAV_MIN_WIDTH && layout.navWidth <= 320
   ) || (
-    layout.navWidth === 320 && layout.listWidth >= LIST_MIN_WIDTH && layout.listWidth <= 360
+    layout.navWidth === 320 && layout.listWidth >= PREVIOUS_LIST_MIN_WIDTH && layout.listWidth <= 360
   );
 }
 

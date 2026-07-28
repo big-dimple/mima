@@ -127,6 +127,7 @@ export interface DecryptedExtensionItem {
   favorite: boolean;
   sensitivity: 'low' | 'medium' | 'high';
   secretState: 'present' | 'absent';
+  canReveal: boolean;
   version: number;
   secretVersion: number;
   keyEpoch: number;

@@ -44,7 +44,8 @@ const BROADCAST_CHANNEL = 'mima-session';
  * 多标签页：BroadcastChannel 同步锁定/退出；每个标签页必须单独使用主密码解锁。
  */
 export function createAppServices(): AppServices {
-  const api = new ZeroKnowledgeApiClient('');
+  const apiBaseUrl = import.meta.env.VITE_MIMA_API_BASE?.trim() ?? '';
+  const api = new ZeroKnowledgeApiClient(apiBaseUrl);
   const leases = new SecretLeaseStore();
   const store = createMetaStore({
     onItemStale: (itemId) => leases.revoke(itemId),
@@ -117,6 +118,7 @@ export function createAppServices(): AppServices {
     );
   });
   const sync = new EncryptedSyncClient({
+    baseUrl: apiBaseUrl,
     getCursor: () => store.getState().cursor,
     onEvent: (event) => zeroKnowledge.applyEncryptedSyncEvent(event),
   });

@@ -26,6 +26,7 @@ export interface PanelState {
   tabId: number | null;
   search: string;
   offline: boolean;
+  localDataAvailable: boolean;
   error: string | null;
 }
 
@@ -41,6 +42,7 @@ export class PanelModel {
     tabId: null,
     search: '',
     offline: false,
+    localDataAvailable: false,
     error: null,
   };
 
@@ -64,11 +66,12 @@ export class PanelModel {
     this.state.error = null;
   }
 
-  setLocked(message: string | null = null): void {
+  setLocked(message: string | null = null, localDataAvailable = this.state.localDataAvailable): void {
     this.bumpSecurityGeneration();
     this.clearDecryptedState();
     this.state.phase = 'locked';
     this.state.error = message;
+    this.state.localDataAvailable = localDataAvailable;
   }
 
   setUnlocking(): void {
@@ -79,6 +82,7 @@ export class PanelModel {
   setReady(items: DecryptedExtensionItem[], offline = false): void {
     this.state.items = items;
     this.state.offline = offline;
+    this.state.localDataAvailable = true;
     this.state.phase = 'ready';
     this.state.error = null;
   }
@@ -127,6 +131,7 @@ export class PanelModel {
     this.state.tabOrigin = null;
     this.state.tabUrl = null;
     this.state.offline = false;
+    this.state.localDataAvailable = false;
   }
 }
 

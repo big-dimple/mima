@@ -6,6 +6,7 @@ import { LoginScreen } from './components/LoginScreen.tsx';
 import { Workspace } from './components/Workspace.tsx';
 import { SecurityGate } from './components/SecurityGate.tsx';
 import { Toaster } from './components/Toaster.tsx';
+import { ConfirmDialog } from './components/ConfirmDialog.tsx';
 import { ErrorState, LoadingState } from './components/AsyncState.tsx';
 import { useUi } from './state/ui-store.ts';
 import type { LocalAccessReason } from './state/local-access.ts';
@@ -177,6 +178,7 @@ export function App() {
         />
       )}
       <Toaster />
+      <ConfirmDialog />
     </>
   );
 }

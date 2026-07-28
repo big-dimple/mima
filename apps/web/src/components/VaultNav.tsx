@@ -643,6 +643,11 @@ function VaultFolderTree({
   }, [onSelect, selectedPath, unclassified]);
   // 只有选中真实目录（非“全部”/“未分类”）才允许改名或删除。
   const hasSelectedDirectory = Boolean(selectedPath);
+  const deleteDirectoryLabel = !online
+    ? '联网后可删除目录'
+    : hasSelectedDirectory
+      ? '删除当前目录'
+      : '先选择要删除的目录';
 
   return (
     <div className={styles.folderTree} aria-label="目录导航">
@@ -676,7 +681,7 @@ function VaultFolderTree({
               <Pencil size={14} />
             </IconButton>
             <IconButton
-              label="删除当前目录"
+              label={deleteDirectoryLabel}
               onClick={() => selectedPath && onDelete(selectedPath)}
               disabled={!online || !hasSelectedDirectory}
               danger

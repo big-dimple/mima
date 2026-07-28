@@ -1,4 +1,4 @@
-import { act, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createMetaStore } from '@mima/client-core';
 import { ItemList } from '../src/components/ItemList.tsx';
@@ -183,6 +183,48 @@ describe('ItemList encrypted metadata search', () => {
     );
     expect(screen.getByRole('option', { name: /未分类条目/ })).toBeVisible();
     expect(screen.queryByRole('option', { name: /示例云子账号/ })).not.toBeInTheDocument();
+  });
+
+  it('uses one roving tab stop and moves selection with arrow keys', () => {
+    const store = directoryStore();
+    const firstId = '00000000-0000-4000-8000-000000000002';
+    useUi.setState({ selectedVaultId: 'all', selectedItemId: firstId });
+    render(
+      <AppContext.Provider value={{ store } as unknown as AppServices}>
+        <ItemList />
+      </AppContext.Provider>,
+    );
+
+    const options = screen.getAllByRole('option');
+    expect(options.filter((option) => option.tabIndex === 0)).toHaveLength(1);
+    const selected = screen.getByRole('option', { name: /代码仓库/ });
+    expect(selected).toHaveAttribute('aria-selected', 'true');
+
+    fireEvent.keyDown(selected, { key: 'ArrowDown' });
+
+    const next = screen.getByRole('option', { name: /示例云子账号/ });
+    expect(next).toHaveAttribute('aria-selected', 'true');
+    expect(next.tabIndex).toBe(0);
+    expect(selected.tabIndex).toBe(-1);
+  });
+
+  it('distinguishes an empty vault from an empty search result', () => {
+    const store = directoryStore();
+    store.setState({ items: {} });
+    useUi.setState({
+      selectedVaultId: '10000000-0000-4000-8000-000000000001',
+      selectedFolderPath: null,
+      search: '',
+    });
+    const services = { store } as unknown as AppServices;
+    const { rerender } = render(
+      <AppContext.Provider value={services}><ItemList /></AppContext.Provider>,
+    );
+    expect(screen.getByText('这个密码库还没有条目')).toBeVisible();
+
+    act(() => useUi.setState({ search: '不存在' }));
+    rerender(<AppContext.Provider value={services}><ItemList /></AppContext.Provider>);
+    expect(screen.getByText('没有匹配的条目')).toBeVisible();
   });
 });
 

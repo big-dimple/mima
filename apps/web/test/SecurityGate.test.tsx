@@ -1,8 +1,9 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createMetaStore, type LegacyMigrationStatusResponse } from '@mima/client-core';
 import { AdminAccountResetApprovals, SecurityGate } from '../src/components/SecurityGate.tsx';
+import { ConfirmDialog } from '../src/components/ConfirmDialog.tsx';
 import { AppContext, type AppServices } from '../src/state/app-context.ts';
 import { useUi } from '../src/state/ui-store.ts';
 
@@ -16,6 +17,8 @@ const user = {
   groups: [],
   isPlatformAdmin: false,
 };
+
+afterEach(() => useUi.getState().resetWorkspaceUi());
 
 describe('master password browser form contract', () => {
   it('exposes the authenticated account and current password to password managers', async () => {
@@ -381,6 +384,55 @@ describe('legacy migration security gate', () => {
       reason: 'lost_all_devices',
     })));
     expect(recoveryCandidates).toHaveBeenCalled();
+  });
+
+  it('requires the administrator to verify the full reset digest before approval', async () => {
+    const adminUser = {
+      ...user,
+      id: 'u-admin',
+      username: 'admin',
+      isPlatformAdmin: true,
+      isLocalPlatformAdmin: true,
+    };
+    const request = {
+      id: '70000000-0000-4000-8000-000000000001',
+      targetUserId: 'u-applicant',
+      requestDigest: 'FULL_REQUEST_DIGEST_MUST_BE_VERIFIED',
+      status: 'pending',
+      approvalUserIds: [],
+      affectedVaultIds: [],
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+    };
+    const approveAccountCryptoReset = vi.fn().mockResolvedValue(undefined);
+    const store = createMetaStore();
+    store.getState().setUser(adminUser);
+    const services = {
+      store,
+      api: {
+        recoveryRequests: vi.fn().mockResolvedValue([]),
+        recoveryCandidates: vi.fn().mockResolvedValue([]),
+      },
+      zeroKnowledge: {
+        accountCryptoResetRequests: vi.fn().mockResolvedValue([request]),
+        approveAccountCryptoReset,
+      },
+    } as unknown as AppServices;
+    render(
+      <AppContext.Provider value={services}>
+        <AdminAccountResetApprovals />
+        <ConfirmDialog />
+      </AppContext.Provider>,
+    );
+
+    await userEvent.click(await screen.findByRole('button', { name: '核对后批准' }));
+    expect(screen.getByText(/FULL_REQUEST_DIGEST_MUST_BE_VERIFIED/)).toBeVisible();
+    expect(approveAccountCryptoReset).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole('button', { name: '返回核对' }));
+    expect(approveAccountCryptoReset).not.toHaveBeenCalled();
+
+    await userEvent.click(screen.getByRole('button', { name: '核对后批准' }));
+    await userEvent.click(screen.getByRole('button', { name: '摘要一致，批准' }));
+    await waitFor(() => expect(approveAccountCryptoReset).toHaveBeenCalledWith(request));
   });
 });
 

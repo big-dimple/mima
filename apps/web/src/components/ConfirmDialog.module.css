@@ -1,3 +1,7 @@
+.body {
+  white-space: pre-line;
+}
+
 .actions {
   display: flex;
   justify-content: flex-end;

@@ -50,4 +50,37 @@ describe('PairingDialog', () => {
     expect(writeText).toHaveBeenCalledWith('ABCDEFG2');
     expect(screen.getByText(/配对码已复制/)).toBeVisible();
   });
+
+  it('tracks only the generated code and keeps a claimed enrollment after the code timer ends', async () => {
+    const enrollment = {
+      id: '10000000-0000-4000-8000-000000000001',
+      fingerprint: '1111 2222 3333 4444 5555 6666 7777 8888',
+      expiresAt: new Date(Date.now() + 300_000).toISOString(),
+      status: 'pending',
+    };
+    const extensionPairingStatus = vi.fn().mockResolvedValue({
+      status: 'claimed',
+      enrollment,
+    });
+    const services = {
+      api: {
+        createPairingCode: vi.fn().mockResolvedValue({
+          code: 'EXACT222',
+          expiresAt: new Date(Date.now() - 1_000).toISOString(),
+        }),
+        extensionPairingStatus,
+      },
+      zeroKnowledge: { approveExtensionEnrollment: vi.fn() },
+    } as unknown as AppServices;
+
+    render(
+      <AppContext.Provider value={services}>
+        <Tooltip.Provider><PairingDialog /></Tooltip.Provider>
+      </AppContext.Provider>,
+    );
+
+    expect(await screen.findByText(enrollment.fingerprint)).toBeVisible();
+    expect(extensionPairingStatus).toHaveBeenCalledWith('EXACT222');
+    expect(screen.getByRole('timer')).toHaveTextContent('配对码已领取');
+  });
 });

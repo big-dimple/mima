@@ -27,4 +27,51 @@ describe('workspace UI security boundary', () => {
     });
     expect(useUi.getState().expandedTreeNodeIds.size).toBe(0);
   });
+
+  it('keeps an edited item in place until the user explicitly discards its draft', async () => {
+    useUi.setState({
+      selectedVaultId: 'vault-a',
+      selectedItemId: 'item-a',
+      editing: 'item-a',
+      itemDraftDirty: true,
+    });
+
+    useUi.getState().selectVault('vault-b');
+    expect(useUi.getState()).toMatchObject({
+      selectedVaultId: 'vault-a',
+      selectedItemId: 'item-a',
+      editing: 'item-a',
+    });
+    expect(useUi.getState().confirm?.title).toBe('放弃未保存的修改？');
+
+    useUi.getState().closeConfirm(false);
+    await Promise.resolve();
+    expect(useUi.getState().selectedVaultId).toBe('vault-a');
+
+    useUi.getState().selectVault('vault-b');
+    useUi.getState().closeConfirm(true);
+    await Promise.resolve();
+    expect(useUi.getState()).toMatchObject({
+      selectedVaultId: 'vault-b',
+      selectedItemId: null,
+      editing: null,
+      itemDraftDirty: false,
+    });
+  });
+
+  it('blocks navigation while an item save is still running', () => {
+    useUi.setState({
+      selectedVaultId: 'vault-a',
+      selectedItemId: 'item-a',
+      editing: 'item-a',
+      itemDraftDirty: true,
+      itemSavePending: true,
+    });
+
+    useUi.getState().selectItem('item-b');
+
+    expect(useUi.getState()).toMatchObject({ selectedItemId: 'item-a', editing: 'item-a' });
+    expect(useUi.getState().confirm).toBeNull();
+    expect(useUi.getState().toasts.at(-1)?.text).toBe('正在保存这条记录，请稍候');
+  });
 });

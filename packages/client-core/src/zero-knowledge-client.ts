@@ -72,6 +72,10 @@ function isDefinitiveVaultCreationFailure(error: unknown): boolean {
   return error.status >= 400 && error.status < 500 && ![408, 425, 429].includes(error.status);
 }
 
+function isRetryableUnlockTransportFailure(error: unknown): boolean {
+  return error instanceof ApiRequestError && [0, 502, 503, 504].includes(error.status);
+}
+
 export interface IdentityRotationOutcome {
   revokedDeviceCount: number;
   rekeyTaskCount: number;
@@ -1624,8 +1628,16 @@ export class ZeroKnowledgeClient {
   private async finishServerUnlock(): Promise<void> {
     const deviceId = this.keyring.deviceId;
     if (!deviceId) throw new Error('当前设备尚未初始化');
-    const challenge = await this.api.createUnlockChallenge(deviceId);
-    await this.api.completeCryptoUnlock(await this.keyring.signServerChallenge(challenge));
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        const challenge = await this.api.createUnlockChallenge(deviceId);
+        await this.api.completeCryptoUnlock(await this.keyring.signServerChallenge(challenge));
+        return;
+      } catch (error) {
+        if (attempt === 0 && isRetryableUnlockTransportFailure(error)) continue;
+        throw error;
+      }
+    }
   }
 
   private async refreshLockedCryptoContext(): Promise<void> {

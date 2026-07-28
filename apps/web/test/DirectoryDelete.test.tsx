@@ -83,12 +83,12 @@ describe('directory delete', () => {
     renderVaultNav(store, { updateVaultDirectories: vi.fn() });
 
     // owner: 操作条可见，包含“删除当前目录”
-    expect(screen.getByRole('button', { name: '删除当前目录' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '先选择要删除的目录' })).toBeDisabled();
     await userEvent.click(screen.getByRole('button', { name: '目录：工作' }));
     expect(screen.getByRole('button', { name: '删除当前目录' })).toBeEnabled();
     // “全部”和“未分类”不可删除：选中“全部”时删除被禁用
     await userEvent.click(screen.getByRole('button', { name: '目录：全部' }));
-    expect(screen.getByRole('button', { name: '删除当前目录' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '先选择要删除的目录' })).toBeDisabled();
   });
 
   it('refuses a non-empty directory without deleting, moving items, or reporting success', async () => {

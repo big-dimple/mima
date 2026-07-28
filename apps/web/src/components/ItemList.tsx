@@ -42,9 +42,7 @@ export function ItemList() {
   const searchRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
-  // 全部过滤/搜索在客户端内存完成，不请求服务端
-  const filtered = useMemo(() => {
-    const q = ui.search.trim().toLowerCase();
+  const scopedItems = useMemo(() => {
     return Object.values(items)
       .filter((item) => {
         if (ui.selectedVaultId === 'favorites') return item.favorite;
@@ -56,7 +54,13 @@ export function ItemList() {
         if (ui.selectedFolderPath === null) return true;
         if (ui.selectedFolderPath === '') return !item.folderPath;
         return folderContainsPath(ui.selectedFolderPath, item.folderPath);
-      })
+      });
+  }, [items, ui.selectedFolderPath, ui.selectedVaultId]);
+
+  // 全部过滤/搜索在客户端内存完成，不请求服务端
+  const filtered = useMemo(() => {
+    const q = ui.search.trim().toLowerCase();
+    return scopedItems
       .filter((item) => (ui.kindFilter === 'all' ? true : item.kind === ui.kindFilter))
       .filter((item) => (ui.tagFilter ? item.tags.includes(ui.tagFilter) : true))
       .filter((item) => {
@@ -83,7 +87,7 @@ export function ItemList() {
       .sort((a, b) =>
         Number(b.favorite) - Number(a.favorite) || a.title.localeCompare(b.title, 'zh-CN'),
       );
-  }, [items, ui.selectedVaultId, ui.selectedFolderPath, ui.kindFilter, ui.tagFilter, ui.search]);
+  }, [items, scopedItems, ui.kindFilter, ui.tagFilter, ui.search]);
 
   // 键盘：/ 聚焦搜索，↑↓ 选择，Enter 打开
   useEffect(() => {
@@ -117,8 +121,24 @@ export function ItemList() {
     if (filtered.length === 0) return;
     const idx = filtered.findIndex((i) => i.id === ui.selectedItemId);
     const next = idx < 0 ? (delta > 0 ? 0 : filtered.length - 1) : Math.min(filtered.length - 1, Math.max(0, idx + delta));
-    ui.selectItem(filtered[next]!.id);
+    const nextId = filtered[next]!.id;
+    ui.selectItem(nextId);
+    requestAnimationFrame(() => {
+      if (useUi.getState().selectedItemId !== nextId) return;
+      const option = document.getElementById(itemOptionId(nextId));
+      option?.focus();
+      option?.scrollIntoView({ block: 'nearest' });
+    });
   };
+
+  const emptyMessage = emptyItemsMessage({
+    scopedCount: scopedItems.length,
+    search: ui.search,
+    kindFiltered: ui.kindFilter !== 'all',
+    tagFiltered: Boolean(ui.tagFilter),
+    selectedVaultId: ui.selectedVaultId,
+    selectedFolderPath: ui.selectedFolderPath,
+  });
 
   const canCreateHere = useMemo(() => {
     if (ui.selectedVaultId === 'all' || ui.selectedVaultId === 'favorites') return false;
@@ -193,7 +213,7 @@ export function ItemList() {
       <div
         ref={listRef}
         className={styles.list}
-        tabIndex={0}
+        tabIndex={filtered.length === 0 ? 0 : -1}
         role="listbox"
         aria-label="凭证"
         onKeyDown={(e) => {
@@ -208,7 +228,7 @@ export function ItemList() {
       >
         {filtered.length === 0 && (
           <div className={styles.empty}>
-            {Object.keys(items).length === 0 ? '这里还没有条目' : '没有匹配的条目'}
+            {emptyMessage}
           </div>
         )}
         {filtered.map((item) => (
@@ -217,6 +237,7 @@ export function ItemList() {
             item={item}
             vaultName={vaults[item.vaultId]?.name ?? ''}
             selected={ui.selectedItemId === item.id}
+            tabStop={ui.selectedItemId === item.id || (!ui.selectedItemId && filtered[0]?.id === item.id)}
             pending={!!pendingIds[item.id]}
             conflicted={!!conflicts[item.id]}
             showVaultName={ui.selectedVaultId === 'all' || ui.selectedVaultId === 'favorites'}
@@ -237,6 +258,7 @@ function ItemRow({
   item,
   vaultName,
   selected,
+  tabStop,
   pending,
   conflicted,
   showVaultName,
@@ -246,6 +268,7 @@ function ItemRow({
   item: DecryptedItemMeta;
   vaultName: string;
   selected: boolean;
+  tabStop: boolean;
   pending: boolean;
   conflicted: boolean;
   showVaultName: boolean;
@@ -270,8 +293,10 @@ function ItemRow({
 
   return (
     <button
+      id={itemOptionId(item.id)}
       role="option"
       aria-selected={selected}
+      tabIndex={tabStop ? 0 : -1}
       className={[styles.row, selected ? styles.rowSelected : '', canDragThis ? styles.rowDraggable : ''].join(' ')}
       onClick={onSelect}
       draggable={canDragThis}
@@ -300,6 +325,26 @@ function ItemRow({
       {conflicted && <AlertTriangle size={13} className={styles.conflictIcon} aria-label="有新的修改需要处理" />}
     </button>
   );
+}
+
+function itemOptionId(itemId: string): string {
+  return `item-option-${itemId}`;
+}
+
+function emptyItemsMessage(input: {
+  scopedCount: number;
+  search: string;
+  kindFiltered: boolean;
+  tagFiltered: boolean;
+  selectedVaultId: string;
+  selectedFolderPath: string | null;
+}): string {
+  if (input.search.trim() || input.kindFiltered || input.tagFiltered) return '没有匹配的条目';
+  if (input.selectedVaultId === 'favorites') return '还没有收藏条目';
+  if (input.selectedFolderPath === '') return '未分类中还没有条目';
+  if (input.selectedFolderPath) return `“${input.selectedFolderPath}”目录中还没有条目`;
+  if (input.selectedVaultId !== 'all') return '这个密码库还没有条目';
+  return input.scopedCount === 0 ? '这里还没有条目' : '没有匹配的条目';
 }
 
 function safeHost(origin: string): string {

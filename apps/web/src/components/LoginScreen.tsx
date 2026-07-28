@@ -84,7 +84,9 @@ export function LoginScreen({
 
         {config?.loginProvider === 'oidc' || config?.loginProvider === 'feishu' ? (
           <>
-            <p className={styles.hint}>使用公司飞书账号登录</p>
+            <p className={styles.hint}>
+              {config.loginProvider === 'feishu' ? '使用公司飞书账号登录' : '使用组织统一认证登录'}
+            </p>
             {error && <div className={styles.error} role="alert">{error}</div>}
             <a
               className={styles.primaryLink}

@@ -9,13 +9,14 @@ import { fileURLToPath } from 'node:url';
  * 不覆盖手动加载用的 dist 产物。
  */
 export default function globalSetup(): void {
+  if (process.env.MIMA_E2E_SKIP_EXTENSION_BUILD === '1') return;
   const root = dirname(fileURLToPath(import.meta.url));
   const repositoryRoot = join(root, '..');
   const e2eApiHost = process.env.MIMA_E2E_API_HOST ?? '127.0.0.1';
   const apiUrlHost = e2eApiHost.includes(':') ? `[${e2eApiHost}]` : e2eApiHost;
   const apiOrigin = `http://${apiUrlHost}:14274`;
   const apiPermission = `http://${apiUrlHost}/*`;
-  const webOrigin = 'http://[::1]:14273';
+  const webOrigin = `http://${apiUrlHost}:14273`;
   const screenshotDir = process.env.MIMA_E2E_SCREENSHOT_DIR
     ?? join(tmpdir(), 'mima-e2e-screenshots');
   mkdirSync(screenshotDir, { recursive: true });

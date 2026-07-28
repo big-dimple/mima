@@ -23,6 +23,7 @@ export function PairingDialog() {
   const [enrollment, setEnrollment] = useState<ExtensionEnrollment | null>(null);
   const [approving, setApproving] = useState(false);
   const [approved, setApproved] = useState(false);
+  const [pairingExpired, setPairingExpired] = useState(false);
   const openedRef = useRef(false);
   const requestRef = useRef(0);
   const toast = useUi((s) => s.toast);
@@ -38,6 +39,7 @@ export function PairingDialog() {
       setCode(res.code);
       setEnrollment(null);
       setApproved(false);
+      setPairingExpired(false);
       setExpiresAt(nextExpiresAt);
       setRemaining(Math.max(0, Math.ceil((nextExpiresAt - Date.now()) / 1000)));
     } catch (err) {
@@ -62,6 +64,7 @@ export function PairingDialog() {
       setBusy(false);
       setEnrollment(null);
       setApproved(false);
+      setPairingExpired(false);
     }
   }, [open]);
 
@@ -74,14 +77,17 @@ export function PairingDialog() {
   }, [code, expiresAt]);
 
   useEffect(() => {
-    if (!open || !code || remaining <= 0 || approved) return;
+    if (!open || !code || approved || pairingExpired) return;
     let stopped = false;
     const poll = async () => {
       try {
-        const values = await api.extensionEnrollments();
+        const value = await api.extensionPairingStatus(code);
         if (stopped) return;
-        const pending = values.find((value) => value.status === 'pending' && Date.parse(value.expiresAt) > Date.now());
-        if (pending) setEnrollment(pending);
+        if (value.status === 'claimed' && value.enrollment) {
+          setEnrollment(value.enrollment);
+          return;
+        }
+        if (value.status === 'expired') setPairingExpired(true);
       } catch {
         // 配对码仍可显示；下一轮继续等待扩展提交设备公钥。
       }
@@ -92,7 +98,7 @@ export function PairingDialog() {
       stopped = true;
       clearInterval(timer);
     };
-  }, [api, open, code, remaining, approved]);
+  }, [api, open, code, approved, pairingExpired]);
 
   const copyCode = async () => {
     if (!code || remaining <= 0) return;
@@ -154,7 +160,11 @@ export function PairingDialog() {
               <div className={styles.codeDetails}>
                 <span className={styles.code}>{code}</span>
                 <span className={remaining > 0 ? styles.timer : styles.expired} role="timer">
-                  {remaining > 0 ? `${remaining}s 内有效 · 一次性` : '已过期'}
+                  {remaining > 0
+                    ? `${remaining}s 内有效 · 一次性`
+                    : enrollment
+                      ? '配对码已领取，请在设备申请失效前完成核对'
+                      : '已过期'}
                 </span>
               </div>
               <ActionButton

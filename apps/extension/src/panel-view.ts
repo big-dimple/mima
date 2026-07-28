@@ -4,6 +4,7 @@ import {
   KeyRound,
   Lock,
   RefreshCw,
+  Search,
   ShieldAlert,
   Star,
   StickyNote,
@@ -188,7 +189,7 @@ export class PanelView {
       this.render();
       return;
     }
-    const wrap = element('div', 'pairing fingerprintPanel');
+    const wrap = element('form', 'pairing fingerprintPanel') as HTMLFormElement;
     wrap.appendChild(element('h1', undefined, '核对设备指纹'));
     wrap.appendChild(element('p', undefined, '确认工作台显示的指纹与下方完全一致。'));
     const fingerprint = element('code', 'fingerprint', pending.fingerprint);
@@ -206,7 +207,9 @@ export class PanelView {
       factor ? `用${factorLabel}完成配对` : '已确认，检查授权',
       'btn btnPrimary',
     );
-    check.addEventListener('click', () => {
+    wrap.addEventListener('submit', (event) => {
+      event.preventDefault();
+      if (check.disabled) return;
       check.disabled = true;
       check.textContent = '正在检查…';
       errorBox.replaceChildren();
@@ -280,8 +283,12 @@ export class PanelView {
         'fieldHint',
         '保持同一账号工作台已解锁；系统会自动选择可响应的标签页。当前设备仍受信任，不需要重新配对。',
       ));
-      this.root.appendChild(wrap);
-      return;
+      if (!this.model.state.localDataAvailable) {
+        wrap.appendChild(element('p', 'fieldHint', '本机还没有可用的离线数据，请先从已解锁工作台恢复。'));
+        this.root.appendChild(wrap);
+        return;
+      }
+      wrap.appendChild(element('p', 'fieldHint', '工作台暂时不可用时，可用同一主密码打开本机保存的数据。'));
     }
     if (device.webUnlock) {
       const retry = button('重试工作台联动', 'btn btnSecondary');
@@ -294,7 +301,7 @@ export class PanelView {
       wrap.appendChild(retry);
       wrap.appendChild(element('p', 'fieldHint', '工作台未打开或账号不一致时，可在这里输入同一主密码。'));
     }
-    if (!session) {
+    if (!session && !device.webUnlock) {
       wrap.appendChild(element(
         'p',
         'fieldHint',
@@ -303,7 +310,10 @@ export class PanelView {
     }
     const factor = labeledInput(wrap, extensionUnlockLabel(device), '', 'password');
     factor.autocomplete = 'current-password';
-    const submit = button(session ? '用主密码解锁' : '完成设备升级', 'btn btnPrimary');
+    const submit = button(
+      session ? '用主密码解锁' : device.webUnlock ? '使用本机数据' : '完成设备升级',
+      'btn btnPrimary',
+    );
     wrap.appendChild(submit);
     wrap.addEventListener('submit', (event) => {
       event.preventDefault();
@@ -326,7 +336,7 @@ export class PanelView {
 
   private renderMain(): void {
     const session = this.model.state.session;
-    if (!session) {
+    if (!session && !this.model.state.offline) {
       this.model.setLocked('与工作台的连接需要恢复，此扩展仍受信任，无需重新配对');
       this.render();
       return;
@@ -356,7 +366,7 @@ export class PanelView {
       url: this.model.state.tabUrl,
     };
     const matched = this.model.state.items
-      .filter((item) => item.kind === 'login' && item.secretState === 'present')
+      .filter((item) => item.kind === 'login' && item.secretState === 'present' && item.canReveal)
       .map((item) => ({ item, score: extensionItemMatchScore(item, activeSite) }))
       .filter(({ score }) => score > 0)
       .sort((left, right) => (
@@ -365,46 +375,88 @@ export class PanelView {
         || left.item.title.localeCompare(right.item.title, 'zh-CN')
       ));
     const matchedIds = new Set(matched.map(({ item }) => item.id));
+    const searchWrap = element('div', 'searchWrap');
+    const searchIcon = createIconElement(Search);
+    searchIcon.setAttribute('aria-hidden', 'true');
+    const search = element('input', 'search') as HTMLInputElement;
+    search.placeholder = '搜索全部已解锁条目';
+    search.setAttribute('aria-label', '搜索已解锁条目');
+    search.value = this.model.state.search;
+    searchWrap.append(searchIcon, search);
+    this.root.appendChild(searchWrap);
+
     this.root.appendChild(element('h2', 'section', `建议填充（${matched.length}）`));
     if (matched.length === 0) {
       this.root.appendChild(element('div', 'empty', '当前页面暂无可填充条目'));
     } else {
       const matchedList = element('div', 'results');
       matchedList.setAttribute('role', 'list');
-      for (const { item, score } of matched) matchedList.appendChild(this.renderItem(item, score));
+      const visibleMatches = matched.slice(0, SUGGESTION_LIMIT);
+      for (const { item, score } of visibleMatches) matchedList.appendChild(this.renderItem(item, score));
       this.root.appendChild(matchedList);
+      if (matched.length > visibleMatches.length) {
+        const showAllMatches = button(
+          `查看其余 ${matched.length - visibleMatches.length} 条匹配项`,
+          'listMore',
+        );
+        showAllMatches.type = 'button';
+        showAllMatches.addEventListener('click', () => {
+          for (const { item, score } of matched.slice(SUGGESTION_LIMIT)) {
+            matchedList.appendChild(this.renderItem(item, score));
+          }
+          showAllMatches.remove();
+        });
+        this.root.appendChild(showAllMatches);
+      }
     }
 
-    this.root.appendChild(element('h2', 'section', '全部条目'));
-    const search = element('input', 'search') as HTMLInputElement;
-    search.placeholder = '搜索已解锁条目…';
-    search.setAttribute('aria-label', '搜索已解锁条目');
-    search.value = this.model.state.search;
-    this.root.appendChild(search);
+    this.root.appendChild(element('h2', 'section', `全部条目（${this.model.state.items.length}）`));
     const results = element('div', 'results');
     results.setAttribute('role', 'list');
     this.root.appendChild(results);
+    let resultLimit = RESULT_PAGE_SIZE;
 
     const updateResults = () => {
       results.replaceChildren();
       const query = this.model.state.search.trim().toLowerCase();
       const itemById = new Map(this.model.state.items.map((item) => [item.id, item]));
-      const items = this.model.state.items
-        .filter((item) => !matchedIds.has(item.id))
+      const filteredItems = this.model.state.items
+        .filter((item) => query.length > 0 || !matchedIds.has(item.id))
         .filter((item) => {
           if (!query) return true;
           const linkedLogin = item.linkedLoginItemId ? itemById.get(item.linkedLoginItemId) : undefined;
           return searchableItemText(item, linkedLogin).includes(query);
-        })
-        .slice(0, 50);
-      if (items.length === 0) {
-        results.appendChild(element('div', 'empty', '没有匹配的条目'));
+        });
+      const visibleItems = filteredItems.slice(0, resultLimit);
+      if (visibleItems.length === 0) {
+        results.appendChild(element(
+          'div',
+          'empty',
+          query
+            ? '没有匹配的条目'
+            : matched.length > 0 && this.model.state.items.length === matched.length
+              ? '当前页面的匹配条目已显示在上方'
+              : '暂无其他条目',
+        ));
       } else {
-        for (const item of items) results.appendChild(this.renderItem(item, 0));
+        for (const item of visibleItems) results.appendChild(this.renderItem(item, 0));
+        if (visibleItems.length < filteredItems.length) {
+          const showMore = button(
+            `显示更多（还剩 ${filteredItems.length - visibleItems.length} 条）`,
+            'listMore',
+          );
+          showMore.type = 'button';
+          showMore.addEventListener('click', () => {
+            resultLimit += RESULT_PAGE_SIZE;
+            updateResults();
+          });
+          results.appendChild(showMore);
+        }
       }
     };
     search.addEventListener('input', () => {
       this.model.state.search = search.value;
+      resultLimit = RESULT_PAGE_SIZE;
       updateResults();
     });
     updateResults();
@@ -465,6 +517,7 @@ export class PanelView {
     title.appendChild(element('span', 'itemTitleText', item.title));
     title.appendChild(element('span', 'kindBadge', presentation.kindLabel));
     if (item.secretState === 'absent') title.appendChild(element('span', 'kindBadge', '仅入口'));
+    else if (!item.canReveal) title.appendChild(element('span', 'kindBadge', '仅条目信息'));
     if (item.favorite) title.appendChild(iconBadge('收藏', Star, 'favoriteBadge'));
     if (item.sensitivity === 'high') title.appendChild(iconBadge('高敏', ShieldAlert, 'highBadge'));
     body.appendChild(title);
@@ -484,7 +537,7 @@ export class PanelView {
 
     const itemActions = element('div', 'itemActions');
 
-    if (item.secretState === 'absent') {
+    if (item.secretState === 'absent' || !item.canReveal) {
       if (item.kind === 'login' && extensionItemLoginUrls(item).length > 0) {
         const open = button('打开网址', 'btn btnPrimary');
         open.prepend(createIconElement(ExternalLink));
@@ -532,6 +585,7 @@ export class PanelView {
 
   private openUnpairConfirmation(): void {
     document.querySelector('.confirmLayer')?.remove();
+    const returnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const layer = element('div', 'confirmLayer');
     layer.setAttribute('role', 'presentation');
     const dialog = element('div', 'confirmDialog');
@@ -545,21 +599,41 @@ export class PanelView {
     const actions = element('div', 'confirmActions');
     const cancel = button('取消', 'btn btnSecondary');
     const confirm = button('解除配对', 'btn btnDanger');
-    const close = () => layer.remove();
-    cancel.addEventListener('click', close);
+    const close = (restoreFocus = true) => {
+      layer.remove();
+      if (restoreFocus && returnFocus?.isConnected) returnFocus.focus();
+    };
+    cancel.addEventListener('click', () => close());
     confirm.addEventListener('click', () => {
       confirm.disabled = true;
       cancel.disabled = true;
       void this.actions.unpair().then(() => {
-        close();
+        close(false);
         this.render();
+      }).catch((error) => {
+        confirm.disabled = false;
+        cancel.disabled = false;
+        this.showStatus(errorMessage(error, '解除配对失败'), true);
+        cancel.focus();
       });
     });
     layer.addEventListener('click', (event) => {
       if (event.target === layer) close();
     });
     layer.addEventListener('keydown', (event) => {
-      if (event.key === 'Escape') close();
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        close();
+        return;
+      }
+      if (event.key !== 'Tab') return;
+      if (event.shiftKey && document.activeElement === cancel) {
+        event.preventDefault();
+        confirm.focus();
+      } else if (!event.shiftKey && document.activeElement === confirm) {
+        event.preventDefault();
+        cancel.focus();
+      }
     });
     actions.append(cancel, confirm);
     dialog.appendChild(actions);
@@ -642,12 +716,13 @@ function searchableItemText(
     .toLowerCase();
 }
 
-function kindIcon(kind: DecryptedExtensionItem['kind']): SVGElement {
+function kindIcon(kind: DecryptedExtensionItem['kind']): HTMLElement {
   const icon = kind === 'login' ? CircleUserRound : kind === 'api_token' ? KeyRound : StickyNote;
+  const mark = element('span', `kindMark kindMark-${kind}`);
   const svg = createIconElement(icon);
-  svg.classList.add('kindIcon');
   svg.setAttribute('aria-hidden', 'true');
-  return svg;
+  mark.appendChild(svg);
+  return mark;
 }
 
 function iconBadge(label: string, icon: IconNode, className: string): HTMLElement {
@@ -698,3 +773,6 @@ function formatExpiry(value: string): string {
 function errorMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback;
 }
+
+const SUGGESTION_LIMIT = 5;
+const RESULT_PAGE_SIZE = 50;

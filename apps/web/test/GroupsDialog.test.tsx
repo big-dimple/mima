@@ -188,6 +188,24 @@ describe('GroupsDialog', () => {
     expect(name).toHaveValue('本地未保存名称');
     expect(screen.getByRole('button', { name: '加载最新内容' })).toBeVisible();
   });
+
+  it('does not let background search replace a group with an unsaved draft', async () => {
+    const api = {
+      groups: vi.fn().mockResolvedValue([group, secondGroup]),
+      group: vi.fn(async (groupId: string) => groupId === group.id ? detail : secondDetail),
+    };
+    renderDialog(api);
+
+    const name = await screen.findByLabelText('名称');
+    await userEvent.clear(name);
+    await userEvent.type(name, '尚未保存的研发组');
+
+    const search = screen.getByRole('textbox', { name: '搜索用户组' });
+    expect(search).toBeDisabled();
+    expect(search).toHaveAttribute('placeholder', '请先保存或取消当前修改');
+    expect(screen.getByRole('heading', { name: '研发组' })).toBeVisible();
+    expect(name).toHaveValue('尚未保存的研发组');
+  });
 });
 
 function renderDialog(api: Record<string, unknown>) {

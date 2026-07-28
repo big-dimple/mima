@@ -22,6 +22,9 @@ export function registerEncryptedEventRoutes(app: FastifyInstance): void {
     const cursor = Number((req.query as { cursor?: string }).cursor ?? '0') || 0;
     const user = req.user;
     const sessionId = req.sessionRow.id;
+    for (const [name, value] of Object.entries(reply.getHeaders())) {
+      if (value !== undefined) reply.raw.setHeader(name, value);
+    }
     reply.raw.writeHead(200, {
       'content-type': 'text/event-stream',
       'cache-control': 'no-store',
@@ -176,7 +179,7 @@ export function registerEncryptedEventRoutes(app: FastifyInstance): void {
       void sessionValid().then((valid) => {
         if (!valid) close();
         else if (!closed) reply.raw.write(':ping\n\n');
-      });
+      }).catch(close);
     }, 15_000);
     req.raw.on('close', close);
     const backlog = await db.select().from(syncEvents)

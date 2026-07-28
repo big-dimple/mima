@@ -390,6 +390,14 @@ export function AdminAccountResetApprovals({
   };
   useEffect(() => { void load(); }, [currentUserId, recoveryWorkspace]);
   const approve = async (request: AccountCryptoResetRequest) => {
+    const confirmed = await useUi.getState().requestConfirm({
+      title: '批准账户加密身份重置？',
+      body: `申请人：${request.targetUserId}\n请求摘要：${request.requestDigest}\n有效期：${new Date(request.expiresAt).toLocaleString('zh-CN', { hour12: false })}\n批准后将计入双人审批，并允许申请人启用新的加密身份。请先与申请人核对完整摘要。`,
+      confirmText: '摘要一致，批准',
+      cancelText: '返回核对',
+      danger: true,
+    });
+    if (!confirmed) return;
     setBusyId(request.id);
     try {
       await zeroKnowledge.approveAccountCryptoReset(request);

@@ -21,6 +21,7 @@ export class PanelApiError extends Error {
     message: string,
     readonly status: number | null,
     readonly sessionGeneration: number | null = null,
+    readonly code: string | null = null,
   ) {
     super(message);
     this.name = 'PanelApiError';
@@ -111,7 +112,13 @@ export class PanelApi {
       throw new PanelApiError('扩展在线连接需要恢复', 401, sessionGeneration);
     }
     if (response.status === 403 && authenticated) {
-      throw new PanelApiError('当前设备已被撤销或没有访问权限', 403);
+      const body = (await response.json().catch(() => ({}))) as { message?: string; code?: string };
+      throw new PanelApiError(
+        body.message ?? '当前操作没有权限',
+        403,
+        sessionGeneration,
+        body.code ?? null,
+      );
     }
     if (response.status === 426) {
       const body = (await response.json().catch(() => ({}))) as { message?: string };

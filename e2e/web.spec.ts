@@ -1,12 +1,12 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import {
+  E2E_API_ORIGIN,
   ensureLoginItem,
   enterIntentionalText,
   expectNoHorizontalOverflow,
   loginAndUnlock,
   MAIN_PASSWORDS,
 } from './helpers.ts';
-
 const PERSONAL_ITEM = {
   title: 'E2E 本地登录',
   username: 'e2e-user',
@@ -107,6 +107,12 @@ test.describe.serial('严格零知识工作台', () => {
     const title = page.getByLabel('标题 *');
     await enterIntentionalText(title, '不应保存的标题', true);
     await page.getByRole('button', { name: '取消' }).click();
+    const discardDialog = page.getByRole('dialog', { name: '放弃未保存的修改？' });
+    await expect(discardDialog).toBeVisible();
+    await discardDialog.getByRole('button', { name: '继续编辑' }).click();
+    await expect(title).toHaveValue('不应保存的标题');
+    await page.getByRole('button', { name: '取消' }).click();
+    await discardDialog.getByRole('button', { name: '放弃修改' }).click();
     await expect(page.getByRole('heading', { name: loginItem.title })).toBeVisible();
 
     await page.getByRole('button', { name: '编辑', exact: true }).click();
@@ -202,6 +208,7 @@ test.describe.serial('严格零知识工作台', () => {
     await page.getByRole('button', { name: '编辑', exact: true }).click();
     await page.getByLabel('目录（可选）').selectOption(parentPath);
     await page.getByRole('button', { name: '保存', exact: true }).click();
+    await expect(page.getByRole('main', { name: new RegExp(`条目详情.*${escapeRegExp(itemTitle)}`) })).toBeVisible();
     // 确认条目已归入父目录（父目录计数为 1）
     await expect(page.getByRole('button', { name: `目录：${parentPath}`, exact: true })).toContainText('1');
 
@@ -326,8 +333,13 @@ test.describe.serial('严格零知识工作台', () => {
       await openMembers(bob, vaultName);
       const memberRow = bob.getByRole('dialog').getByRole('row', { name: /Carol Wu/ });
       await memberRow.getByRole('button', { name: '移除授权' }).click();
+      await bob.getByRole('dialog', { name: '移除密码库授权？' })
+        .getByRole('button', { name: '确认移除' })
+        .click();
       await expect(bob.getByRole('heading', { name: '密码库正在安全更新' })).toBeVisible();
       await bob.getByRole('button', { name: '完成安全更新' }).click();
+      await expect(dialog.getByRole('row', { name: /Carol Wu/ })).toHaveCount(0, { timeout: 20_000 });
+      await dialog.getByRole('button', { name: '关闭' }).click();
       await expect(bob.getByRole('navigation', { name: '库导航' })).toBeVisible({ timeout: 20_000 });
 
       await expect(carol.getByRole('button', { name: vaultName, exact: true })).toHaveCount(0, { timeout: 15_000 });
@@ -488,8 +500,8 @@ test.describe.serial('严格零知识工作台', () => {
 
       await expect(bob.getByRole('button', { name: vaultName, exact: true })).toBeVisible({ timeout: 15_000 });
       await expect(dave.getByRole('button', { name: vaultName, exact: true })).toHaveCount(0);
-      const unauthorizedProjection = await dave.evaluate(async (targetVaultId) => {
-        const response = await fetch('/api/v2/bootstrap');
+      const unauthorizedProjection = await dave.evaluate(async ({ apiOrigin, targetVaultId }) => {
+        const response = await fetch(`${apiOrigin}/api/v2/bootstrap`, { credentials: 'include' });
         const body = await response.json() as {
           vaults: Array<{ id: string }>;
           envelopes: Array<{ vaultId: string }>;
@@ -498,7 +510,7 @@ test.describe.serial('严格零知识工作台', () => {
           hasVault: body.vaults.some((vault) => vault.id === targetVaultId),
           hasEnvelope: body.envelopes.some((envelope) => envelope.vaultId === targetVaultId),
         };
-      }, vaultId);
+      }, { apiOrigin: E2E_API_ORIGIN, targetVaultId: vaultId });
       expect(unauthorizedProjection).toEqual({ hasVault: false, hasEnvelope: false });
 
       await openMembers(alice, vaultName);
@@ -509,8 +521,14 @@ test.describe.serial('严格零知识工作台', () => {
         name: new RegExp(`${escapeRegExp(groupName)}.*查看`),
       });
       await groupRow.getByRole('button', { name: '移除授权' }).click();
+      await alice.getByRole('dialog', { name: '移除密码库授权？' })
+        .getByRole('button', { name: '确认移除' })
+        .click();
       await expect(alice.getByRole('heading', { name: '密码库正在安全更新' })).toBeVisible();
       await alice.getByRole('button', { name: '完成安全更新' }).click();
+      await expect(cleanupDialog.getByRole('row', { name: new RegExp(escapeRegExp(groupName)) }))
+        .toHaveCount(0, { timeout: 20_000 });
+      await cleanupDialog.getByRole('button', { name: '关闭' }).click();
       await expect(alice.getByRole('navigation', { name: '库导航' })).toBeVisible({ timeout: 20_000 });
       await expect(bob.getByRole('button', { name: vaultName, exact: true })).toHaveCount(0, { timeout: 15_000 });
     } finally {
@@ -520,17 +538,18 @@ test.describe.serial('严格零知识工作台', () => {
 
   test('旧明文接口在严格运行时不可用', async ({ page }) => {
     await loginAndUnlock(page, 'bob');
-    const results = await page.evaluate(async () => {
+    const results = await page.evaluate(async (apiOrigin) => {
       const paths = ['/api/bootstrap', '/api/items/00000000-0000-0000-0000-000000000000/reveal'];
       return Promise.all(paths.map(async (path) => {
-        const response = await fetch(path, {
+        const response = await fetch(`${apiOrigin}${path}`, {
           method: path.endsWith('/reveal') ? 'POST' : 'GET',
+          credentials: 'include',
           headers: path.endsWith('/reveal') ? { 'content-type': 'application/json' } : undefined,
           body: path.endsWith('/reveal') ? JSON.stringify({ purpose: 'view' }) : undefined,
         });
         return { path, status: response.status, body: await response.text() };
       }));
-    });
+    }, E2E_API_ORIGIN);
     expect(results.every((result) => result.status === 404 || result.status === 410)).toBe(true);
     expect(JSON.stringify(results)).not.toContain(PERSONAL_ITEM.password);
   });
@@ -594,7 +613,10 @@ test.describe.serial('严格零知识工作台', () => {
       const response = await revokeResponse;
       expect(response.status(), await response.text()).toBe(200);
 
-      await expect.poll(() => deviceB.evaluate(async () => (await fetch('/api/v2/bootstrap')).status))
+      await expect.poll(() => deviceB.evaluate(
+        async (apiOrigin) => (await fetch(`${apiOrigin}/api/v2/bootstrap`, { credentials: 'include' })).status,
+        E2E_API_ORIGIN,
+      ))
         .toBe(423);
       await expect(deviceA.getByRole('heading', { name: '密码库正在安全更新' })).toBeVisible({ timeout: 15_000 });
       await deviceA.getByRole('button', { name: '完成安全更新' }).click();

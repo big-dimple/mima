@@ -88,6 +88,7 @@ const PairingClaimSchema = z.object({
   }),
   existingDeviceProof: z.string().min(1).optional(),
 });
+const PairingStatusLookupSchema = z.object({ code: z.string().min(6).max(12) });
 const EnrollmentApprovalSchema = z.object({
   approverDeviceId: z.string().uuid(),
   certificate: z.string().min(1),
@@ -220,6 +221,47 @@ export function registerE2eeExtensionRoutes(app: FastifyInstance): void {
       if (isUniqueViolation(error)) return conflict(reply, '该设备已有进行中的配对请求');
       throw error;
     }
+  });
+
+  r.post('/api/v2/extension/pairing/status', {
+    preHandler: [app.requireSession, app.requireCsrf],
+    schema: {
+      tags: ['e2ee-extension'],
+      body: PairingStatusLookupSchema,
+      response: { 200: z.unknown(), '4xx': ZeroKnowledgeApiErrorSchema },
+    },
+  }, async (req) => {
+    const pairing = (await db.select().from(extensionPairingCodes).where(and(
+      eq(extensionPairingCodes.code, req.body.code.toUpperCase()),
+      eq(extensionPairingCodes.userId, req.user.id),
+      eq(extensionPairingCodes.sessionId, req.sessionRow.id),
+    )).limit(1))[0];
+    if (!pairing) return { status: 'expired' as const, enrollment: null };
+
+    if (pairing.enrollmentRequestId) {
+      const enrollment = (await db.select().from(deviceEnrollmentRequests).where(and(
+        eq(deviceEnrollmentRequests.id, pairing.enrollmentRequestId),
+        eq(deviceEnrollmentRequests.userId, req.user.id),
+        eq(deviceEnrollmentRequests.requestedBySessionId, req.sessionRow.id),
+      )).limit(1))[0];
+      if (enrollment) {
+        if (enrollment.status === 'pending' && enrollment.expiresAt <= new Date()) {
+          await db.update(deviceEnrollmentRequests).set({ status: 'expired' }).where(and(
+            eq(deviceEnrollmentRequests.id, enrollment.id),
+            eq(deviceEnrollmentRequests.status, 'pending'),
+          ));
+          return { status: 'expired' as const, enrollment: null };
+        }
+        if (enrollment.status === 'pending' || enrollment.status === 'approved') {
+          return { status: 'claimed' as const, enrollment: enrollmentDto(enrollment) };
+        }
+      }
+      return { status: 'expired' as const, enrollment: null };
+    }
+
+    return pairing.expiresAt > new Date()
+      ? { status: 'waiting' as const, enrollment: null }
+      : { status: 'expired' as const, enrollment: null };
   });
 
   r.get('/api/v2/extension/pairing/:enrollmentId', {
@@ -494,7 +536,9 @@ export function registerE2eeExtensionRoutes(app: FastifyInstance): void {
       getActiveDevice(db, req.user.id, req.body.trustedRequest.deviceId),
       getCryptoProfile(db, req.user.id),
     ]);
-    if (!approver || !target || !profile) return forbidden(reply, '扩展设备未获得当前账号授权');
+    if (!approver || !target || !profile) {
+      return forbidden(reply, '扩展设备未获得当前账号授权', 'extension_device_revoked');
+    }
     const trustedRequest = req.body.trustedRequest;
     const targetEncryptionKey = encodeBase64Url(target.publicEncryptionKey);
     const targetSigningKey = encodeBase64Url(target.publicSigningKey);
@@ -510,7 +554,7 @@ export function registerE2eeExtensionRoutes(app: FastifyInstance): void {
         encryptionPublicKey: targetEncryptionKey,
         signingPublicKey: targetSigningKey,
       })
-    ) return forbidden(reply, '扩展设备未获得当前账号授权');
+    ) return forbidden(reply, '扩展设备未获得当前账号授权', 'extension_device_revoked');
     const unsigned = {
       approverDeviceId: req.body.approverDeviceId,
       trustedRequest,
@@ -551,7 +595,11 @@ export function registerE2eeExtensionRoutes(app: FastifyInstance): void {
       });
     } catch (error) {
       if (error instanceof ExtensionResumeTargetChangedError) {
-        return forbidden(reply, '扩展设备的授权状态已经变化，请刷新工作台后重试');
+        return forbidden(
+          reply,
+          '扩展设备的授权状态已经变化，请刷新工作台后重试',
+          'extension_device_revoked',
+        );
       }
       if (isUniqueViolation(error)) return conflict(reply, '扩展续期请求已经处理，请重试');
       throw error;
@@ -584,7 +632,9 @@ function registerExtensionCryptoRoutes(
       response: { 200: z.object({ id: z.string().uuid(), challenge: z.string(), expiresAt: z.string() }), '4xx': ZeroKnowledgeApiErrorSchema },
     },
   }, async (req, reply) => {
-    if (req.extensionSessionRow.deviceId !== req.body.deviceId) return forbidden(reply, '扩展会话与设备不匹配');
+    if (req.extensionSessionRow.deviceId !== req.body.deviceId) {
+      return forbidden(reply, '扩展会话与设备不匹配', 'extension_session_mismatch');
+    }
     const [device, profile] = await Promise.all([
       getActiveDevice(db, req.user.id, req.body.deviceId),
       getCryptoProfile(db, req.user.id),
@@ -634,7 +684,9 @@ function registerExtensionCryptoRoutes(
       response: { 200: z.object({ unlocked: z.literal(true) }), '4xx': ZeroKnowledgeApiErrorSchema },
     },
   }, async (req, reply) => {
-    if (req.extensionSessionRow.deviceId !== req.body.deviceId) return forbidden(reply, '扩展会话与设备不匹配');
+    if (req.extensionSessionRow.deviceId !== req.body.deviceId) {
+      return forbidden(reply, '扩展会话与设备不匹配', 'extension_session_mismatch');
+    }
     const attemptKey = `extension-unlock:${req.ip}:${req.user.id}:${req.extensionSessionRow.id}`;
     const retryAfter = await attempts.retryAfterSeconds(attemptKey);
     if (retryAfter > 0) {
@@ -712,14 +764,16 @@ function registerExtensionCryptoRoutes(
     reply.header('cache-control', 'no-store');
     if (!supportsCurrentItemMetadata(req.headers[ITEM_METADATA_FORMAT_HEADER])) return extensionUpgradeRequired(reply);
     if (!req.extensionSessionRow.deviceId || req.extensionSessionRow.deviceId !== req.body.deviceId) {
-      return forbidden(reply, '扩展会话与设备不匹配');
+      return forbidden(reply, '扩展会话与设备不匹配', 'extension_session_mismatch');
     }
     const item = (await db.select().from(items).where(eq(items.id, req.params.itemId)).limit(1))[0];
     if (!item || item.deleted) return reply.code(404).send(notFoundBody('条目不存在') as never);
     const access = await getVaultAccess(db, req.user, item.vaultId);
-    if (!access || !canReveal(access.role)) return forbidden(reply, '没有查看密码或敏感内容的权限');
+    if (!access || !canReveal(access.role)) {
+      return forbidden(reply, '你当前只能查看条目信息，不能查看密码或敏感内容', 'extension_access_denied');
+    }
     const device = await getActiveDevice(db, req.user.id, req.body.deviceId);
-    if (!device) return unauthorized(reply, '扩展设备已撤销');
+    if (!device) return forbidden(reply, '扩展设备已撤销', 'extension_device_revoked');
     const secretVersion = req.body.secretVersion ?? item.secretVersion;
     const intent = utf8(canonicalJson({
       deviceId: device.id,
@@ -1048,8 +1102,8 @@ function unauthorized(reply: FastifyReply, message: string) {
   return reply.code(401).send({ statusCode: 401, error: 'Unauthorized', message } as never);
 }
 
-function forbidden(reply: FastifyReply, message: string) {
-  return reply.code(403).send({ statusCode: 403, error: 'Forbidden', message } as never);
+function forbidden(reply: FastifyReply, message: string, code?: string) {
+  return reply.code(403).send({ statusCode: 403, error: 'Forbidden', message, ...(code ? { code } : {}) } as never);
 }
 
 function conflict(reply: FastifyReply, message: string) {

@@ -123,13 +123,21 @@ function ItemView({ item }: { item: DecryptedItemMeta }) {
 
   const copyAuxiliary = async () => {
     if (!auxiliary || !presentation.copyAuxiliaryLabel) return;
-    await copyWithTimedClear(auxiliary);
-    toast('info', `${presentation.auxiliaryLabel}已复制`);
+    try {
+      await copyWithTimedClear(auxiliary);
+      toast('info', `${presentation.auxiliaryLabel}已复制`);
+    } catch {
+      toast('error', `无法复制${presentation.auxiliaryLabel}，请检查浏览器剪贴板权限`);
+    }
   };
 
   const copyWebsiteUrl = async (websiteUrl: string) => {
-    await copyWithTimedClear(websiteUrl);
-    toast('info', '网址已复制');
+    try {
+      await copyWithTimedClear(websiteUrl);
+      toast('info', '网址已复制');
+    } catch {
+      toast('error', '无法复制网址，请检查浏览器剪贴板权限');
+    }
   };
 
   const refreshServerVersion = async () => {

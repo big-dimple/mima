@@ -174,10 +174,14 @@ async function openEventStream(target: TestSession): Promise<{
   waitFor: (predicate: (event: Record<string, unknown>) => boolean) => Promise<Record<string, unknown>>;
   close: () => Promise<void>;
 }> {
+  const trustedOrigin = app.ctx.webOrigins[0];
+  if (!trustedOrigin) throw new Error('test requires one trusted web origin');
   const response = await fetch(`${origin}/api/v2/events?cursor=0`, {
-    headers: { cookie: target.cookie },
+    headers: { cookie: target.cookie, origin: trustedOrigin },
   });
   expect(response.status).toBe(200);
+  expect(response.headers.get('access-control-allow-origin')).toBe(trustedOrigin);
+  expect(response.headers.get('access-control-allow-credentials')).toBe('true');
   const reader = response.body!.getReader();
   const decoder = new TextDecoder();
   let buffer = '';

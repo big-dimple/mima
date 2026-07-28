@@ -89,6 +89,7 @@ import { CSRF_HEADER } from '@mima/contracts';
 import type {
   ApproveExtensionEnrollmentRequest,
   ExtensionEnrollment,
+  ExtensionPairingEnrollmentStatus,
   RekeyVaultCommitRequest,
   ResumeExtensionSessionRequest,
 } from './e2ee-keyring.ts';
@@ -150,17 +151,24 @@ export class ApiClient {
     const headers: Record<string, string> = {};
     if (body !== undefined) headers['content-type'] = 'application/json';
     if (this.csrfToken && method !== 'GET') headers[CSRF_HEADER] = this.csrfToken;
-    let res: Response;
-    try {
-      res = await fetch(`${this.baseUrl}${path}`, {
-        method,
-        headers,
-        credentials: 'include',
-        body: body === undefined ? undefined : JSON.stringify(body),
-      });
-    } catch (err) {
-      throw new ApiRequestError(0, { message: err instanceof Error ? err.message : '网络错误' });
+    let res: Response | undefined;
+    const attempts = method === 'GET' ? 2 : 1;
+    for (let attempt = 0; attempt < attempts; attempt += 1) {
+      try {
+        res = await fetch(`${this.baseUrl}${path}`, {
+          method,
+          headers,
+          credentials: 'include',
+          body: body === undefined ? undefined : JSON.stringify(body),
+        });
+      } catch (err) {
+        if (attempt + 1 < attempts) continue;
+        throw new ApiRequestError(0, { message: err instanceof Error ? err.message : '网络错误' });
+      }
+      if (attempt + 1 < attempts && [502, 503, 504].includes(res.status)) continue;
+      break;
     }
+    if (!res) throw new ApiRequestError(0, { message: '网络错误' });
     if (!res.ok) {
       let parsed: Partial<ApiError> = {};
       try {
@@ -644,6 +652,11 @@ export class ApiClient {
   createPairingCode(): Promise<PairingCodeResponse> {
     return this.request('POST', '/api/v2/extension/pairing');
   }
+  extensionPairingStatus(code: string): Promise<ExtensionPairingEnrollmentStatus> {
+    return this.request<unknown>('POST', '/api/v2/extension/pairing/status', { code }).then(
+      normalizeExtensionPairingStatus,
+    );
+  }
   extensionEnrollments(): Promise<ExtensionEnrollment[]> {
     return this.request<unknown[]>('GET', '/api/v2/extension/enrollments').then(
       (values) => values.map(normalizeExtensionEnrollment),
@@ -703,6 +716,19 @@ function normalizeExtensionEnrollment(value: unknown): ExtensionEnrollment {
     joinChannelPublicKey: stringField(record, 'joinChannelPublicKey'),
     status: stringField(record, 'status') as ExtensionEnrollment['status'],
     expiresAt: stringField(record, 'expiresAt'),
+  };
+}
+
+function normalizeExtensionPairingStatus(value: unknown): ExtensionPairingEnrollmentStatus {
+  if (typeof value !== 'object' || value === null) throw new Error('扩展配对状态格式不正确');
+  const record = value as Record<string, unknown>;
+  const status = stringField(record, 'status');
+  if (status !== 'waiting' && status !== 'claimed' && status !== 'expired') {
+    throw new Error('扩展配对状态不受支持');
+  }
+  return {
+    status,
+    enrollment: record.enrollment === null ? null : normalizeExtensionEnrollment(record.enrollment),
   };
 }
 

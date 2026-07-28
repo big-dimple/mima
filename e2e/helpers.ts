@@ -1,5 +1,10 @@
 import { expect, type Locator, type Page } from '@playwright/test';
 
+const E2E_API_HOST = process.env.MIMA_E2E_API_HOST ?? '127.0.0.1';
+const E2E_API_URL_HOST = E2E_API_HOST.includes(':') ? `[${E2E_API_HOST}]` : E2E_API_HOST;
+
+export const E2E_API_ORIGIN = `http://${E2E_API_URL_HOST}:14274`;
+
 export const MAIN_PASSWORDS = {
   alice: 'Alice-e2e-main-password-2026',
   bob: 'Bob-e2e-main-password-2026',
@@ -87,10 +92,10 @@ async function throwVisibleError(errorAlert: Locator, success: Locator[]): Promi
     if (await locator.isVisible()) return;
   }
   if (await errorAlert.isVisible()) {
-    const bootstrapStatus = await errorAlert.page().evaluate(async () => {
-      const response = await fetch('/api/v2/bootstrap');
+    const bootstrapStatus = await errorAlert.page().evaluate(async (apiOrigin) => {
+      const response = await fetch(`${apiOrigin}/api/v2/bootstrap`, { credentials: 'include' });
       return response.status;
-    }).catch(() => 0);
+    }, E2E_API_ORIGIN).catch(() => 0);
     throw new Error(`${await errorAlert.innerText()}\n严格 bootstrap 状态：${bootstrapStatus}`);
   }
 }
@@ -118,9 +123,6 @@ export async function ensureLoginItem(
     useCurrentVault?: boolean;
   },
 ): Promise<void> {
-  const existing = page.getByRole('option', { name: new RegExp(escapeRegExp(input.title)) });
-  if (await existing.count()) return;
-
   if (!input.useCurrentVault) {
     const navigation = page.getByRole('navigation', { name: '库导航' });
     const personalVault = navigation.locator('button[title$="个人密码库"]').first();
@@ -135,6 +137,8 @@ export async function ensureLoginItem(
     await expect(personalVault).toHaveAttribute('aria-current', 'page');
     await expect(personalVault).toHaveAttribute('data-tree-expanded', 'true');
   }
+  const existing = page.getByRole('option', { name: new RegExp(escapeRegExp(input.title)) });
+  if (await existing.count()) return;
   const createButton = page.getByRole('button', { name: '新建', exact: true });
   await expect(createButton).toBeEnabled();
   await createButton.click();
