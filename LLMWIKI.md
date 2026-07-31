@@ -271,7 +271,7 @@ pnpm test:e2e
 - `integration`：真实 PostgreSQL、API 权限、事务和迁移。
 - `e2e`：真实 Web/API/数据库/扩展浏览器流程。
 
-修改多标签扩展解锁、Service Worker、浏览器 autofill、拖拽或响应式布局时，单元测试不足；必须增加对应多上下文或 Playwright 场景。
+修改多标签扩展解锁、Service Worker、浏览器 autofill、拖拽或响应式布局时，单元测试不足；必须增加对应多上下文或 Playwright 场景。扩展唤醒链路至少要故意丢弃一次 `unlocked=true` 工作台状态，并证明健康的已解锁工作台会以更高状态代次权威重放，且不要求刷新工作台或重新配对。
 
 WSL 镜像网络若重置 IPv4 localhost，可用 `MIMA_E2E_API_HOST=::1` 让 API 与 Vite proxy 走 IPv6 回环；数据库可通过 `MIMA_E2E_DATABASE_URL` 或 `MIMA_INTEGRATION_DATABASE_URL` 指向独立测试实例。不要为绕过本机网络问题而放宽 Demo 到非回环地址。
 
