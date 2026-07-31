@@ -390,6 +390,54 @@ test.describe.serial('浏览器扩展零知识链路', () => {
     context.off('response', captureResume);
   });
 
+  test('已解锁通知丢失后由扩展唤醒重放状态，不要求刷新工作台', async () => {
+    await Promise.all([
+      web.close(),
+      standbyWeb.close(),
+      staleWeb.close(),
+    ]);
+    web = await context.newPage();
+    await web.addInitScript(() => {
+      const runtime = globalThis.chrome?.runtime;
+      if (!runtime?.connect) return;
+      const connect = runtime.connect.bind(runtime);
+      Object.defineProperty(runtime, 'connect', {
+        configurable: true,
+        value: (...args: Parameters<typeof chrome.runtime.connect>) => {
+          const port = connect(...args);
+          const postMessage = port.postMessage.bind(port);
+          port.postMessage = (message: unknown) => {
+            const state = message as { kind?: string; unlocked?: boolean };
+            const target = window as typeof window & { droppedUnlockedState?: boolean };
+            if (
+              !target.droppedUnlockedState
+              && state.kind === 'workbench_state'
+              && state.unlocked === true
+            ) {
+              target.droppedUnlockedState = true;
+              return;
+            }
+            postMessage(message);
+          };
+          return port;
+        },
+      });
+    });
+    await loginAndUnlock(web, 'bob');
+    await expect(web.getByRole('region', { name: '凭证列表' })).toBeVisible();
+    await expect.poll(() => web.evaluate(() => (
+      (window as typeof window & { droppedUnlockedState?: boolean }).droppedUnlockedState === true
+    ))).toBe(true);
+
+    await panel.evaluate(async () => chrome.storage.session.clear());
+    await panel.reload();
+
+    await expect(panel.getByLabel('搜索已解锁条目')).toBeVisible({ timeout: 15_000 });
+    await expect(panel.getByRole('button', { name: '从已解锁工作台恢复' })).toHaveCount(0);
+    await expect(panel.getByRole('button', { name: '重试工作台联动' })).toHaveCount(0);
+    await expect(web.getByRole('region', { name: '凭证列表' })).toBeVisible();
+  });
+
   test('工作台锁定撤销旧会话后扩展自动完成二次恢复', async () => {
     const resumeResponses: number[] = [];
     const challengeResponses: number[] = [];

@@ -24,7 +24,7 @@ export class WorkbenchExtensionBridge {
   private stopped = false;
   private readonly endpointId = crypto.randomUUID();
   private readonly wakeListener = () => {
-    this.updatePresence();
+    this.updatePresence(true);
     if (document.visibilityState !== 'visible') {
       this.reconnect();
       return;
@@ -251,10 +251,14 @@ export class WorkbenchExtensionBridge {
     this.pendingProbe = null;
   }
 
-  private updatePresence(): void {
+  private updatePresence(forceReplay = false): void {
     const visibility = document.visibilityState === 'visible' ? 'visible' as const : 'hidden' as const;
     const focused = document.hasFocus();
-    if (this.state.visibility === visibility && this.state.focused === focused) return;
+    if (
+      !forceReplay
+      && this.state.visibility === visibility
+      && this.state.focused === focused
+    ) return;
     this.state = {
       ...this.state,
       visibility,

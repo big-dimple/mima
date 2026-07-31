@@ -174,6 +174,32 @@ describe('WorkbenchExtensionBridge', () => {
     bridge.stop();
   });
 
+  it('replays the authoritative unlock state when a healthy workbench is awakened', async () => {
+    vi.useFakeTimers();
+    const port = new FakePort();
+    vi.stubGlobal('chrome', { runtime: { connect: vi.fn().mockReturnValue(port) } });
+    const bridge = new WorkbenchExtensionBridge(vi.fn());
+    bridge.start();
+    bridge.setState('user-1', true);
+
+    window.dispatchEvent(new CustomEvent(EXTENSION_WORKBENCH_WAKE_EVENT));
+    const stateMessages = port.messages.filter((message) => (
+      message
+      && typeof message === 'object'
+      && 'kind' in message
+      && message.kind === 'workbench_state'
+    ));
+
+    expect(stateMessages).toHaveLength(3);
+    expect(stateMessages.at(-1)).toEqual(expect.objectContaining({
+      accountId: 'user-1',
+      unlocked: true,
+      stateGeneration: 2,
+      protocolVersion: 2,
+    }));
+    bridge.stop();
+  });
+
   it('reconnects a hidden workbench immediately without relying on throttled page timers', () => {
     vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
     const first = new FakePort();
@@ -222,7 +248,7 @@ describe('WorkbenchExtensionBridge', () => {
       kind: 'workbench_state',
       accountId: 'user-1',
       unlocked: true,
-      stateGeneration: 1,
+      stateGeneration: 2,
       protocolVersion: 2,
     }));
     bridge.stop();
