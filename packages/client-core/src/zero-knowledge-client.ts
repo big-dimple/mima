@@ -76,6 +76,16 @@ function isRetryableUnlockTransportFailure(error: unknown): boolean {
   return error instanceof ApiRequestError && [0, 502, 503, 504].includes(error.status);
 }
 
+function isRetryableVaultInitializationFailure(error: unknown): boolean {
+  return error instanceof ApiRequestError && [0, 408, 425, 429, 502, 503, 504].includes(error.status);
+}
+
+function isConvergentVaultInitializationFailure(error: unknown): boolean {
+  return error instanceof ApiRequestError && [404, 409].includes(error.status);
+}
+
+const DEFAULT_PERSONAL_VAULT_NAME = '我的密码库';
+
 export interface IdentityRotationOutcome {
   revokedDeviceCount: number;
   rekeyTaskCount: number;
@@ -107,6 +117,10 @@ export class ZeroKnowledgeClient {
   private preparedLegacyMigrations = new Map<string, string>();
   private online = true;
   private sync: EncryptedSyncClient | null = null;
+  private refreshInFlight: Promise<void> | null = null;
+  private automaticEnvelopeGeneration = 0;
+  private automaticEnvelopeRequests = new Set<string>();
+  private automaticEnvelopeWorkers = new Map<string, Promise<void>>();
   private readonly onDeviceRevoked?: (deviceId: string) => void;
 
   constructor(options: ZeroKnowledgeClientOptions) {
@@ -161,6 +175,7 @@ export class ZeroKnowledgeClient {
   }
 
   private handleKeyringFatal(): void {
+    this.invalidateAutomaticEnvelopeDelivery();
     this.sync?.stop();
     this.outbox.setOnline(false);
     this.leases.revokeAll();
@@ -172,6 +187,7 @@ export class ZeroKnowledgeClient {
   }
 
   async prepare(session: SessionInfo): Promise<SecurityPhase> {
+    this.invalidateAutomaticEnvelopeDelivery();
     this.api.setCsrfToken(session.csrfToken);
     this.store.getState().setUser(session.user);
     this.online = true;
@@ -253,7 +269,7 @@ export class ZeroKnowledgeClient {
         cachedAt: new Date().toISOString(),
       });
       await this.finishServerUnlock();
-      this.bootstrap = await this.api.encryptedBootstrap();
+      this.bootstrap = await this.loadUnlockedBootstrap();
       await this.applyUnlockedBootstrap(this.bootstrap);
     } catch (error) {
       await this.keyring.lock();
@@ -395,7 +411,7 @@ export class ZeroKnowledgeClient {
       }
       if (this.online) {
         await this.finishServerUnlock();
-        this.bootstrap = await this.api.encryptedBootstrap();
+        this.bootstrap = await this.loadUnlockedBootstrap();
         this.contents = {};
       } else {
         const cached = await this.storage.getAccount(this.profile.userId);
@@ -414,21 +430,35 @@ export class ZeroKnowledgeClient {
     }
   }
 
-  async refresh(): Promise<void> {
+  async refresh(scheduleAutomaticEnvelopeDelivery = true): Promise<void> {
     if (!this.online || !this.keyring.isUnlocked) return;
-    const bootstrap = await this.api.encryptedBootstrap();
-    this.adoptCompatibleProfile(bootstrap.profile);
-    const normalizedBootstrap = this.profile
-      && bootstrap.profile?.userId === this.profile.userId
-      && this.profile.profileVersion >= bootstrap.profile.profileVersion
-      ? { ...bootstrap, profile: this.profile }
-      : bootstrap;
-    this.bootstrap = normalizedBootstrap;
-    await this.applyUnlockedBootstrap(normalizedBootstrap);
+    if (this.refreshInFlight) {
+      await this.refreshInFlight;
+      if (scheduleAutomaticEnvelopeDelivery) this.scheduleAutomaticEnvelopeDelivery();
+      return;
+    }
+    const refresh = (async () => {
+      const bootstrap = await this.loadUnlockedBootstrap();
+      this.adoptCompatibleProfile(bootstrap.profile);
+      const normalizedBootstrap = this.profile
+        && bootstrap.profile?.userId === this.profile.userId
+        && this.profile.profileVersion >= bootstrap.profile.profileVersion
+        ? { ...bootstrap, profile: this.profile }
+        : bootstrap;
+      this.bootstrap = normalizedBootstrap;
+      await this.applyUnlockedBootstrap(normalizedBootstrap, scheduleAutomaticEnvelopeDelivery);
+    })();
+    this.refreshInFlight = refresh;
+    try {
+      await refresh;
+    } finally {
+      if (this.refreshInFlight === refresh) this.refreshInFlight = null;
+    }
   }
 
   async lock(notifyRemoteServer = true): Promise<void> {
     const notifyServer = notifyRemoteServer && this.online && this.store.getState().user !== null;
+    this.invalidateAutomaticEnvelopeDelivery();
     this.sync?.stop();
     this.outbox.setOnline(false);
     this.leases.revokeAll();
@@ -455,6 +485,7 @@ export class ZeroKnowledgeClient {
   }
 
   async handleSessionGone(): Promise<void> {
+    this.invalidateAutomaticEnvelopeDelivery();
     this.sync?.stop();
     this.outbox.setOnline(false);
     this.leases.revokeAll();
@@ -468,6 +499,7 @@ export class ZeroKnowledgeClient {
 
   setOnline(online: boolean): void {
     if (!online) {
+      this.invalidateAutomaticEnvelopeDelivery();
       this.online = false;
       this.outbox.setOnline(false);
       this.sync?.stop();
@@ -643,6 +675,68 @@ export class ZeroKnowledgeClient {
     await this.refresh();
   }
 
+  private async loadUnlockedBootstrap(): Promise<EncryptedBootstrapResponse> {
+    const bootstrap = await this.api.encryptedBootstrap();
+    return this.initializeDefaultPersonalVault(bootstrap);
+  }
+
+  private async initializeDefaultPersonalVault(
+    bootstrap: EncryptedBootstrapResponse,
+  ): Promise<EncryptedBootstrapResponse> {
+    if (!this.online || !this.keyring.isUnlocked || !this.profile) return bootstrap;
+    const user = this.requireUser();
+    const personalVault = bootstrap.vaults.find((vault) =>
+      vault.kind === 'personal'
+      && vault.ownerUserId === user.id
+      && (vault.crypto.status === 'legacy' || vault.crypto.status === 'preparing'));
+    if (!personalVault) return bootstrap;
+
+    const migration = await this.api.legacyMigrationStatus(personalVault.id);
+    if (migration.status !== 'pending' || !migration.emptyVaultInitializationAllowed || !migration.materials) {
+      return bootstrap;
+    }
+
+    const recoveryKey = bootstrap.recoveryKey?.status === 'active' ? bootstrap.recoveryKey : null;
+    const request = await this.keyring.initializeVault(
+      user.id,
+      personalVault.id,
+      DEFAULT_PERSONAL_VAULT_NAME,
+      this.profile,
+      recoveryKey,
+      personalVault.crypto.status === 'legacy' ? 'legacy' : 'preparing',
+      bootstrap.devices,
+      migration.materials,
+    );
+
+    let failure: unknown = null;
+    let reconcile = false;
+    try {
+      await this.api.initializeVaultCrypto(personalVault.id, request);
+    } catch (error) {
+      failure = error;
+      reconcile = isConvergentVaultInitializationFailure(error);
+      if (isRetryableVaultInitializationFailure(error)) {
+        reconcile = true;
+        try {
+          await this.api.initializeVaultCrypto(personalVault.id, request);
+          failure = null;
+        } catch (retryError) {
+          failure = retryError;
+        }
+      }
+    }
+
+    if (failure === null) return this.api.encryptedBootstrap();
+    await this.keyring.dropVault(personalVault.id);
+    if (reconcile || isConvergentVaultInitializationFailure(failure)) {
+      const latest = await this.api.encryptedBootstrap();
+      const completed = latest.vaults.some((vault) =>
+        vault.id === personalVault.id && vault.crypto.status === 'e2ee');
+      if (completed) return latest;
+    }
+    throw failure;
+  }
+
   async deleteUninitializedVault(vaultId: string): Promise<void> {
     if (!this.online) throw new Error('清理未初始化密码库需要连接服务器');
     const user = this.requireUser();
@@ -779,6 +873,7 @@ export class ZeroKnowledgeClient {
     });
     const result = await this.api.setEncryptedMembership(vaultId, request);
     if (refreshAfter) await this.refresh();
+    else this.scheduleAutomaticEnvelopeDelivery([vaultId]);
     return result;
   }
 
@@ -831,21 +926,30 @@ export class ZeroKnowledgeClient {
   }
 
   listEnvelopeTasks(vaultId: string): Promise<VaultEnvelopeTask[]> {
-    if (!this.online) throw new Error('查看待开通访问需要联网，请检查网络后重试');
+    if (!this.online) throw new Error('查看团队访问准备状态需要联网，请检查网络后重试');
     return this.api.vaultEnvelopeTasks(vaultId);
   }
 
-  async completeEnvelopeTask(task: VaultEnvelopeTask): Promise<void> {
-    if (!this.online) throw new Error('开通访问需要联网，请检查网络后重试');
+  async completeEnvelopeTask(
+    task: VaultEnvelopeTask,
+    refreshAfter = true,
+    expectedAutomaticGeneration?: number,
+  ): Promise<void> {
+    if (!this.online) throw new Error('自动准备团队访问需要联网，请检查网络后重试');
     const user = this.requireUser();
     if (!this.profile) throw new Error('当前账号安全信息不完整，请刷新后重试');
     const request = await this.keyring.prepareEnvelopeTaskCompletion(user.id, this.profile, task);
+    if (
+      expectedAutomaticGeneration !== undefined &&
+      (expectedAutomaticGeneration !== this.automaticEnvelopeGeneration || !this.keyring.isUnlocked)
+    ) return;
     await this.api.completeVaultEnvelopeTask(task, request);
-    await this.refresh();
+    if (refreshAfter) await this.refresh();
   }
 
   async transferVaultOwnership(vaultId: string, newOwnerUserId: string): Promise<VaultOwnershipTransfer> {
     if (!this.online) throw new Error('所有权转移需要连接服务器');
+    await this.waitForAutomaticEnvelopeDelivery(vaultId);
     const user = this.requireUser();
     const request = await this.keyring.prepareOwnershipTransfer(
       user.id,
@@ -1473,6 +1577,7 @@ export class ZeroKnowledgeClient {
         return;
       }
       case 'vault.crypto_changed': {
+        const pendingTeamAccess = Boolean(state.pendingVaultAccessIds[event.state.vaultId]);
         state.advanceCursor(event.cursor);
         state.setVaultCryptoState(event.state);
         if (this.bootstrap) {
@@ -1486,7 +1591,7 @@ export class ZeroKnowledgeClient {
               : this.bootstrap.headers.filter((header) => header.vaultId !== event.state.vaultId),
           };
         }
-        if (event.state.status === 'rekey_required') {
+        if (event.state.status === 'rekey_required' && !pendingTeamAccess) {
           this.setPhase('rekey-blocked');
           this.outbox.setOnline(false);
           return;
@@ -1608,7 +1713,9 @@ export class ZeroKnowledgeClient {
           };
         }
         const currentState = this.store.getState();
-        const phases = Object.values(currentState.vaultCrypto);
+        const phases = Object.entries(currentState.vaultCrypto)
+          .filter(([vaultId]) => !currentState.pendingVaultAccessIds[vaultId])
+          .map(([, crypto]) => crypto);
         currentState.setConnection('online');
         if (phases.some((crypto) => crypto.status === 'rekey_required')) {
           this.setPhase('rekey-blocked');
@@ -1621,6 +1728,7 @@ export class ZeroKnowledgeClient {
           this.outbox.setOnline(true);
         }
         await this.persistSnapshot();
+        this.scheduleAutomaticEnvelopeDelivery();
       }
     }
   }
@@ -1652,7 +1760,10 @@ export class ZeroKnowledgeClient {
       : null;
   }
 
-  private async applyUnlockedBootstrap(bootstrap: EncryptedBootstrapResponse): Promise<void> {
+  private async applyUnlockedBootstrap(
+    bootstrap: EncryptedBootstrapResponse,
+    scheduleAutomaticEnvelopeDelivery = true,
+  ): Promise<void> {
     const signerIds = [...new Set(bootstrap.envelopes.map((envelope) => envelope.signerUserId))];
     const embeddedProfiles = (bootstrap as EncryptedBootstrapResponse & {
       signerProfiles?: Array<{ userId: string; keyVersion: number; signingPublicKey: string }>;
@@ -1668,12 +1779,15 @@ export class ZeroKnowledgeClient {
       ])),
     );
     for (const state of Object.values(projection.vaultCrypto)) {
+      if (projection.pendingVaultAccessIds?.[state.vaultId]) continue;
       const taskId = (state as typeof state & { rekeyTaskId?: string | null }).rekeyTaskId;
       if (taskId) this.rekeyTasks.set(state.vaultId, taskId);
     }
     this.store.getState().applyDecryptedBootstrap(projection);
     this.outbox.replayConflicts();
-    const states = Object.values(projection.vaultCrypto);
+    const states = Object.entries(projection.vaultCrypto)
+      .filter(([vaultId]) => !projection.pendingVaultAccessIds?.[vaultId])
+      .map(([, state]) => state);
     const phase = states.some((state) => state.recoveryRequired || state.status === 'rekey_required')
       ? 'rekey-blocked'
       : states.some((state) => state.status !== 'e2ee')
@@ -1689,6 +1803,113 @@ export class ZeroKnowledgeClient {
       this.sync.stop();
       this.sync.start();
     }
+    if (this.online && scheduleAutomaticEnvelopeDelivery) this.scheduleAutomaticEnvelopeDelivery();
+  }
+
+  private invalidateAutomaticEnvelopeDelivery(): void {
+    this.automaticEnvelopeGeneration += 1;
+    this.automaticEnvelopeRequests.clear();
+  }
+
+  private automaticEnvelopeVaultIds(requestedVaultIds?: Iterable<string>): string[] {
+    const bootstrap = this.bootstrap;
+    const user = this.store.getState().user;
+    if (!bootstrap || !user || !this.online || !this.keyring.isUnlocked) return [];
+    const requested = requestedVaultIds ? new Set(requestedVaultIds) : null;
+    return bootstrap.vaults
+      .filter((vault) => vault.kind === 'team' && (!requested || requested.has(vault.id)))
+      .filter((vault) => bootstrap.memberships.some((membership) =>
+        membership.vaultId === vault.id &&
+        membership.subjectKind === 'user' &&
+        membership.subjectId === user.id &&
+        membership.role === 'owner'))
+      .filter((vault) => bootstrap.envelopes.some((envelope) =>
+        envelope.vaultId === vault.id && envelope.capability === 'full'))
+      .map((vault) => vault.id);
+  }
+
+  private scheduleAutomaticEnvelopeDelivery(requestedVaultIds?: Iterable<string>): void {
+    for (const vaultId of this.automaticEnvelopeVaultIds(requestedVaultIds)) {
+      this.automaticEnvelopeRequests.add(vaultId);
+      if (this.automaticEnvelopeWorkers.has(vaultId)) continue;
+      this.startAutomaticEnvelopeWorker(vaultId);
+    }
+  }
+
+  private startAutomaticEnvelopeWorker(vaultId: string): void {
+    const generation = this.automaticEnvelopeGeneration;
+    const worker = this.runAutomaticEnvelopeWorker(vaultId, generation)
+      .catch(() => undefined)
+      .finally(() => {
+        if (this.automaticEnvelopeWorkers.get(vaultId) !== worker) return;
+        this.automaticEnvelopeWorkers.delete(vaultId);
+        if (
+          this.automaticEnvelopeRequests.has(vaultId) &&
+          this.automaticEnvelopeVaultIds([vaultId]).length > 0
+        ) this.startAutomaticEnvelopeWorker(vaultId);
+      });
+    this.automaticEnvelopeWorkers.set(vaultId, worker);
+  }
+
+  private async runAutomaticEnvelopeWorker(vaultId: string, generation: number): Promise<void> {
+    while (
+      generation === this.automaticEnvelopeGeneration &&
+      this.online &&
+      this.keyring.isUnlocked &&
+      this.automaticEnvelopeRequests.delete(vaultId)
+    ) {
+      const continueImmediately = await this.deliverPendingVaultEnvelopes(vaultId, generation);
+      if (!continueImmediately) {
+        if (generation === this.automaticEnvelopeGeneration) {
+          this.automaticEnvelopeRequests.delete(vaultId);
+        }
+        return;
+      }
+    }
+  }
+
+  private async deliverPendingVaultEnvelopes(vaultId: string, generation: number): Promise<boolean> {
+    let refreshRequired = false;
+    try {
+      const [tasks, transfer] = await Promise.all([
+        this.api.vaultEnvelopeTasks(vaultId),
+        this.api.ownershipTransfer(vaultId),
+      ]);
+      for (const task of tasks) {
+        if (
+          generation !== this.automaticEnvelopeGeneration ||
+          !this.online ||
+          !this.keyring.isUnlocked
+        ) return false;
+        if (
+          task.status !== 'pending' ||
+          !task.recipientProfile ||
+          task.expectedProfileGeneration !== task.recipientProfile.keyVersion ||
+          transfer?.envelopeTaskId === task.id
+        ) continue;
+        try {
+          await this.completeEnvelopeTask(task, false, generation);
+          refreshRequired = true;
+        } catch (error) {
+          if (error instanceof ApiRequestError && (error.status === 404 || error.status === 409)) {
+            refreshRequired = true;
+          }
+          if (refreshRequired) await this.refresh(false).catch(() => undefined);
+          return false;
+        }
+      }
+      if (refreshRequired) await this.refresh(false);
+      return true;
+    } catch {
+      if (refreshRequired) await this.refresh(false).catch(() => undefined);
+      return false;
+    }
+  }
+
+  private async waitForAutomaticEnvelopeDelivery(vaultId: string): Promise<void> {
+    this.scheduleAutomaticEnvelopeDelivery([vaultId]);
+    const worker = this.automaticEnvelopeWorkers.get(vaultId);
+    if (worker) await worker;
   }
 
   private async persistSnapshot(): Promise<void> {
@@ -1918,7 +2139,10 @@ export class ZeroKnowledgeClient {
   }
 
   private reconcileSecurityPhaseFromProjection(): void {
-    const states = Object.values(this.store.getState().vaultCrypto);
+    const currentState = this.store.getState();
+    const states = Object.entries(currentState.vaultCrypto)
+      .filter(([vaultId]) => !currentState.pendingVaultAccessIds[vaultId])
+      .map(([, state]) => state);
     if (states.some((state) => state.recoveryRequired || state.status === 'rekey_required')) {
       this.setPhase('rekey-blocked');
       return;

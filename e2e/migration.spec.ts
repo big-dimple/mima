@@ -28,11 +28,8 @@ test.describe.serial('旧格式密码库零知识迁移', () => {
       await recipientContext.close();
     }
     await loginAndUnlock(page, 'erin', { expectWorkspace: false });
-    await expect(page.getByRole('heading', { name: '准备你的密码库' })).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByRole('heading', { name: '正在准备工作台' })).toBeVisible({ timeout: 30_000 });
     const vaultIds = await loadErinVaultIds();
-
-    await page.getByLabel('密码库名称').fill('Erin 个人密码库');
-    await page.getByRole('button', { name: '创建并进入工作台' }).click();
 
     const migration = migrationRow(page, vaultIds.legacy);
     await expect(migration.getByText('尚未开始')).toBeVisible();

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
-import { AlertCircle, Info, Plus, Search, Trash2, X } from 'lucide-react';
+import { AlertCircle, Plus, Search, Trash2, X } from 'lucide-react';
 import type { CustomGroup, CustomGroupDetail, UserSearchResult } from '@mima/contracts';
 import { ApiRequestError } from '@mima/client-core';
 import { useApp } from '../state/app-context.ts';
@@ -322,12 +322,6 @@ export function GroupsDialog() {
                   <Plus size={15} aria-hidden /> 新建用户组
                 </button>
               )}
-              <div className={styles.statusHelp} data-testid="group-status-help">
-                <Info size={14} aria-hidden />
-                <span>
-                  <strong>人数</strong>是组内同事数。<strong>待开通</strong>表示同事已加入组，但还打不开某个已授权的密码库；同一人有两个库没开通，就会显示 2 项。由对应密码库的拥有者在“管理成员”中开通。
-                </span>
-              </div>
               <div className={styles.groupList} data-testid="groups-dialog-list">
                 {listError ? (
                   <button className={styles.retry} onClick={() => void loadGroups()}>
@@ -347,7 +341,6 @@ export function GroupsDialog() {
                       <span>{group.name}</span>
                       <small className={styles.groupMeta}>
                         {group.memberCount} 人
-                        {(group.pendingEnvelopeCount ?? 0) > 0 ? ` · ${group.pendingEnvelopeCount} 项待开通` : ''}
                       </small>
                     </button>
                   ))

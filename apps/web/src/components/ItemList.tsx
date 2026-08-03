@@ -35,6 +35,7 @@ export function ItemList() {
   const items = useMeta((s) => s.items);
   const vaults = useMeta((s) => s.vaults);
   const memberships = useMeta((s) => s.memberships);
+  const pendingVaultAccessIds = useMeta((s) => s.pendingVaultAccessIds);
   const pendingIds = useMeta((s) => s.pendingItemIds);
   const conflicts = useMeta((s) => s.conflicts);
   const user = useMeta((s) => s.user)!;
@@ -143,25 +144,36 @@ export function ItemList() {
   const canCreateHere = useMemo(() => {
     if (ui.selectedVaultId === 'all' || ui.selectedVaultId === 'favorites') return false;
     const vault = vaults[ui.selectedVaultId];
-    if (!vault) return false;
+    if (!vault || pendingVaultAccessIds[vault.id]) return false;
     const role = vault.kind === 'personal'
       ? 'owner'
       : resolveEffectiveRole(memberships[vault.id] ?? [], { userId: user.id, groups: user.groups });
     return canEditItems(role);
-  }, [ui.selectedVaultId, vaults, memberships, user]);
+  }, [ui.selectedVaultId, vaults, memberships, pendingVaultAccessIds, user]);
 
   // 仅在选中具体密码库、用户可编辑、视口同时显示左右栏且为细指针时启用原生拖拽。
   const canDragItems = useMemo(() => {
     if (ui.selectedVaultId === 'all' || ui.selectedVaultId === 'favorites') return false;
     const vault = vaults[ui.selectedVaultId];
-    if (!vault) return false;
+    if (!vault || pendingVaultAccessIds[vault.id]) return false;
     const role = vault.kind === 'personal'
       ? 'owner'
       : resolveEffectiveRole(memberships[vault.id] ?? [], { userId: user.id, groups: user.groups });
     return canEditItems(role);
-  }, [ui.selectedVaultId, vaults, memberships, user]);
+  }, [ui.selectedVaultId, vaults, memberships, pendingVaultAccessIds, user]);
   const finePointer = useDragEnvironment();
   const dragEnabled = canDragItems && finePointer;
+  const selectedVaultPending = ui.selectedVaultId !== 'all' &&
+    ui.selectedVaultId !== 'favorites' &&
+    Boolean(pendingVaultAccessIds[ui.selectedVaultId]);
+
+  if (selectedVaultPending) {
+    return (
+      <section className={styles.pane} aria-label="凭证列表">
+        <div className={styles.empty} role="status">正在自动准备团队访问</div>
+      </section>
+    );
+  }
 
   return (
     <section className={styles.pane} aria-label="凭证列表">

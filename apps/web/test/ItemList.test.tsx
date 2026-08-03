@@ -226,6 +226,51 @@ describe('ItemList encrypted metadata search', () => {
     rerender(<AppContext.Provider value={services}><ItemList /></AppContext.Provider>);
     expect(screen.getByText('没有匹配的条目')).toBeVisible();
   });
+
+  it('shows only the automatic preparation state for an authorized vault without keys', () => {
+    const store = createMetaStore();
+    const vaultId = '10000000-0000-4000-8000-000000000009';
+    store.getState().applyDecryptedBootstrap({
+      user: {
+        id: 'user-1', username: 'bob', displayName: 'Bob Li', email: 'bob@example.test', groups: [], isPlatformAdmin: false,
+      },
+      vaults: [{
+        id: vaultId,
+        kind: 'team',
+        name: '正在自动准备团队访问',
+        ownerUserId: null,
+        projectContext: { kind: 'root' },
+        createdAt: '2026-07-20T00:00:00.000Z',
+        updatedAt: '2026-07-20T00:00:00.000Z',
+      }],
+      memberships: [{
+        id: '20000000-0000-4000-8000-000000000009',
+        vaultId,
+        subjectKind: 'user',
+        subjectId: 'user-1',
+        role: 'viewer',
+        createdAt: '2026-07-20T00:00:00.000Z',
+      }],
+      items: [],
+      cursor: 1,
+      vaultCrypto: {},
+      pendingVaultAccessIds: { [vaultId]: true },
+      vaultDirectories: {},
+      encryptedItems: {},
+    });
+    useUi.setState({ selectedVaultId: vaultId, selectedFolderPath: null });
+
+    render(
+      <AppContext.Provider value={{ store } as unknown as AppServices}>
+        <ItemList />
+      </AppContext.Provider>,
+    );
+
+    expect(screen.getByRole('status')).toHaveTextContent('正在自动准备团队访问');
+    expect(screen.queryByRole('textbox', { name: '搜索条目' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '新建' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('option')).not.toBeInTheDocument();
+  });
 });
 
 function directoryStore() {

@@ -89,6 +89,7 @@ export interface DecryptedBootstrapProjection {
   items: DecryptedItemMeta[];
   cursor: number;
   vaultCrypto: Record<string, VaultCryptoState>;
+  pendingVaultAccessIds?: Record<string, true>;
   vaultDirectories: Record<string, VaultDirectoryEntry[]>;
   encryptedItems: Record<string, EncryptedItemMetadata>;
 }

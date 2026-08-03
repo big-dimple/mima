@@ -17,7 +17,7 @@ afterEach(() => {
 });
 
 describe('MembersDialog project grants', () => {
-  it('shows pending access as plain-language status and keeps non-actions out of buttons', async () => {
+  it('keeps envelope delivery internal and exposes no manual provisioning controls', async () => {
     const store = createMetaStore();
     store.getState().applyDecryptedBootstrap({
       user: {
@@ -40,12 +40,6 @@ describe('MembersDialog project grants', () => {
       vaultDirectories: {},
       encryptedItems: {},
     });
-    const carolTask = envelopeTask('task-carol', 'u-carol', true);
-    const daveTask = envelopeTask('task-dave', 'u-dave', false);
-    const listEnvelopeTasks = vi.fn()
-      .mockResolvedValueOnce([carolTask, daveTask])
-      .mockResolvedValue([daveTask]);
-    const completeEnvelopeTask = vi.fn(async () => undefined);
     const services = {
       store,
       api: {
@@ -60,9 +54,7 @@ describe('MembersDialog project grants', () => {
         groups: vi.fn(async () => []),
       },
       zeroKnowledge: {
-        listEnvelopeTasks,
         getVaultOwnershipTransfer: vi.fn(async () => null),
-        completeEnvelopeTask,
       },
     } as unknown as AppServices;
     useUi.getState().openMembers(rootVaultId);
@@ -75,16 +67,11 @@ describe('MembersDialog project grants', () => {
       </AppContext.Provider>,
     );
 
-    expect(await screen.findByText('这些同事已经获得权限，但还打不开当前密码库。由你在此开通即可，不需要对方领取文件。')).toBeVisible();
-    expect(await screen.findByRole('row', { name: /Carol.*1 项待开通/ })).toBeVisible();
-    expect(await screen.findByRole('row', { name: /Dave.*等待对方设置主密码/ })).toBeVisible();
-    expect(screen.queryByRole('button', { name: '等待对方设置主密码' })).not.toBeInTheDocument();
-    expect(screen.getAllByText('等待对方设置主密码').some((node) => node.tagName === 'SPAN')).toBe(true);
-    expect(screen.getAllByRole('button', { name: '开通', exact: true })).toHaveLength(1);
-
-    await userEvent.click(screen.getByRole('button', { name: '开通', exact: true }));
-    await waitFor(() => expect(completeEnvelopeTask).toHaveBeenCalledWith(carolTask));
-    expect(await screen.findByRole('row', { name: /Carol.*已开通/ })).toBeVisible();
+    expect(await screen.findByRole('row', { name: /Carol.*查看/ })).toBeVisible();
+    expect(await screen.findByRole('row', { name: /Dave.*查看/ })).toBeVisible();
+    expect(screen.queryByRole('columnheader', { name: '访问状态' })).not.toBeInTheDocument();
+    expect(screen.queryByText(/待开通|等待对方设置主密码/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '开通', exact: true })).not.toBeInTheDocument();
   });
 
   it('keeps successful projects and retries only failed grants', async () => {
@@ -182,7 +169,7 @@ describe('MembersDialog project grants', () => {
       false,
     );
     expect(await screen.findByText('该项目由其他拥有者管理')).toBeVisible();
-    expect(screen.getByText('授权完成')).toBeVisible();
+    expect(screen.getByText('授权完成，访问将自动准备')).toBeVisible();
 
     secondProjectFails = false;
     await userEvent.click(screen.getByRole('button', { name: '仅重试失败项' }));
@@ -395,28 +382,4 @@ function deferred<T>() {
     reject = rejectPromise;
   });
   return { promise, resolve, reject };
-}
-
-function envelopeTask(id: string, recipientUserId: string, ready: boolean) {
-  return {
-    id,
-    vaultId: rootVaultId,
-    keyEpoch: 1,
-    authorizationKind: 'direct' as const,
-    authorizationRef: recipientUserId,
-    recipientUserId,
-    capability: 'full' as const,
-    expectedProfileGeneration: ready ? 1 : null,
-    status: 'pending' as const,
-    completedEnvelopeId: null,
-    recipientProfile: ready ? {
-      keyVersion: 1,
-      encryptionPublicKey: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
-      signingPublicKey: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
-    } : null,
-    createdAt: '2026-07-20T00:00:00.000Z',
-    updatedAt: '2026-07-20T00:00:00.000Z',
-    completedAt: null,
-    cancelledAt: null,
-  };
 }

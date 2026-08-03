@@ -53,7 +53,7 @@ async function loginAndUnlock(page: Page): Promise<void> {
   const loginInput = page.getByLabel('用户名');
   const setupHeading = page.getByRole('heading', { name: '创建主密码' });
   const lockedHeading = page.getByRole('heading', { name: '解锁你的密码库' });
-  const migrationHeading = page.getByRole('heading', { name: '准备你的密码库' });
+  const migrationHeading = page.getByRole('heading', { name: '正在准备工作台' });
   const rekeyHeading = page.getByRole('heading', { name: '密码库正在安全更新' });
   const workspace = page.getByRole('region', { name: '凭证列表' });
   const errorAlert = page.getByRole('region', { name: '通知' }).getByRole('alert').last();
@@ -108,7 +108,7 @@ async function loginAndUnlock(page: Page): Promise<void> {
 
 async function createLoginItem(page: Page): Promise<void> {
   const navigation = page.getByRole('navigation', { name: '库导航' });
-  const personalVault = navigation.locator('button[title$="个人密码库"]').first();
+  const personalVault = navigation.locator('#personal-vaults button[data-tree-row="true"]').first();
   await personalVault.waitFor({ state: 'visible', timeout: 15_000 });
   if (
     await personalVault.getAttribute('aria-current') !== 'page'

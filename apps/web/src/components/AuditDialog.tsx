@@ -97,7 +97,7 @@ const ACTION_LABELS: Record<string, string> = {
   'vault.create_pending_e2ee': '创建待初始化密码库',
   'vault.e2ee.initialize': '初始化密码库加密',
   'vault.e2ee.rekey': '更新密码库访问密钥',
-  'vault.envelope_task.complete': '完成成员访问开通',
+  'vault.envelope_task.complete': '自动交付成员访问',
   'vault.ownership_transfer.request': '发起密码库所有权转移',
   'vault.ownership_transfer.accept': '接收密码库所有权',
   'vault.project.create': '创建项目',

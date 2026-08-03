@@ -88,6 +88,7 @@ import {
 import {
   getVaultAccess,
   listAccessibleVaults,
+  listAuthorizedVaults,
   listPersonalVaultRecoveryCandidates,
   listVaultMemberships,
 } from '../services/access.ts';
@@ -640,27 +641,39 @@ export function registerE2eeVaultRoutes(app: FastifyInstance): void {
     },
   }, async (req, reply) => {
     reply.header('cache-control', 'no-store');
-    const [profile, accessible, recoveryCandidateRows] = await Promise.all([
+    const [profile, accessible, authorized, recoveryCandidateRows] = await Promise.all([
       getCryptoProfile(db, req.user.id),
       listAccessibleVaults(db, req.user),
+      listAuthorizedVaults(db, req.user),
       listPersonalVaultRecoveryCandidates(db, req.user.id),
     ]);
     const accessibleVaultIds = new Set(accessible.map((access) => access.vault.id));
+    const pendingTeamAccess = authorized.filter((access) =>
+      access.vault.kind === 'team' && !accessibleVaultIds.has(access.vault.id));
+    const pendingTeamVaultIds = new Set(pendingTeamAccess.map((access) => access.vault.id));
     const recoveryCandidates = recoveryCandidateRows.filter((candidate) =>
       !accessibleVaultIds.has(candidate.vault.id));
     const recoveryByVault = new Map(recoveryCandidates.map((candidate) => [candidate.vault.id, candidate]));
     const visible = [
       ...accessible,
+      ...pendingTeamAccess,
       ...recoveryCandidates.map((candidate) => ({ vault: candidate.vault, role: 'owner' as const })),
     ];
     const vaultIds = visible.map((access) => access.vault.id);
+    const visibleVaultIds = new Set(vaultIds);
     const contentVaultIds = [...accessibleVaultIds];
+    const headerVaultIds = [
+      ...accessibleVaultIds,
+      ...recoveryCandidates.map((candidate) => candidate.vault.id),
+    ];
     const devices = await db.select().from(userDevices).where(eq(userDevices.userId, req.user.id));
     const activeDeviceIds = devices.filter((device) => device.status === 'active').map((device) => device.id);
     const [states, memberships, headers, currentItems, migrationJobs, rekeyJobs, cursorRows, recoveryRows] = await Promise.all([
       vaultIds.length ? db.select().from(vaultCryptoStates).where(inArray(vaultCryptoStates.vaultId, vaultIds)) : [],
       Promise.all(vaultIds.map((vaultId) => listVaultMemberships(db, vaultId))).then((rows) => rows.flat()),
-      vaultIds.length ? db.select().from(encryptedVaultHeaders).where(inArray(encryptedVaultHeaders.vaultId, vaultIds)) : [],
+      headerVaultIds.length
+        ? db.select().from(encryptedVaultHeaders).where(inArray(encryptedVaultHeaders.vaultId, headerVaultIds))
+        : [],
       contentVaultIds.length ? db.select({ item: items, metadata: encryptedItemMetadataVersions })
         .from(items)
         .innerJoin(encryptedItemMetadataVersions, and(
@@ -716,6 +729,7 @@ export function registerE2eeVaultRoutes(app: FastifyInstance): void {
         const migration = latestMigration(migrationJobs.filter((job) => job.vaultId === vault.id));
         const rekey = activeRekey(rekeyJobs.filter((job) => job.vaultId === vault.id));
         const header = activeHeaderByVault.get(vault.id) ?? null;
+        const crypto = toVaultCryptoState(state, header, migration, rekey, recoveryByVault.has(vault.id));
         return {
           id: vault.id,
           kind: vault.kind,
@@ -725,14 +739,16 @@ export function registerE2eeVaultRoutes(app: FastifyInstance): void {
               ? { kind: 'root' as const }
               : {
                   kind: 'project' as const,
-                  visibleParentVaultId: accessibleVaultIds.has(vault.parentVaultId)
+                  visibleParentVaultId: visibleVaultIds.has(vault.parentVaultId)
                     ? vault.parentVaultId
                     : null,
                 },
           } : {}),
           createdAt: vault.createdAt.toISOString(),
           updatedAt: vault.updatedAt.toISOString(),
-          crypto: toVaultCryptoState(state, header, migration, rekey, recoveryByVault.has(vault.id)),
+          crypto: pendingTeamVaultIds.has(vault.id)
+            ? { ...crypto, rekeyTaskId: null, encryptedHeader: null }
+            : crypto,
         };
       }),
       memberships: memberships.map(toMembershipDto),
@@ -1192,7 +1208,7 @@ function registerEncryptedMembershipRoutes(app: FastifyInstance): void {
         return conflict(reply, '成员权限刚被其他人更新，请刷新成员列表，确认最新状态后再操作');
       }
       if (error instanceof MembershipEnvelopeError || isUniqueViolation(error)) {
-        return conflict(reply, '成员访问开通不完整，请刷新成员列表后重试');
+        return conflict(reply, '成员自动访问交付信息不完整，请刷新后重试');
       }
       if (error instanceof MembershipGrantModeError) {
         return codedConflict(
@@ -3279,7 +3295,7 @@ async function assertDirectOwnerRemains(db: DbOrTx, vaultId: string) {
       envelope.recipientKeyFingerprint === publicKeyFingerprint(encodeBase64Url(profile.publicEncryptionKey)));
   });
   if (!ready) {
-    throw new OwnerInvariantError('移除或降权前，请先为另一位拥有者开通访问，并确认对方可以打开当前密码库');
+    throw new OwnerInvariantError('系统正在自动准备另一位拥有者的访问；确认其可以打开当前密码库前，不能移除或降权唯一可用拥有者');
   }
 }
 

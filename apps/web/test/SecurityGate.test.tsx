@@ -66,6 +66,7 @@ describe('master password browser form contract', () => {
     expect(screen.getByLabelText('账号')).toHaveValue(user.username);
     expect(screen.getByLabelText('主密码（本机解密）')).toHaveAttribute('autocomplete', 'new-password');
     expect(screen.getByLabelText('再次输入主密码（本机解密）')).toHaveAttribute('name', 'password-confirmation');
+    expect(screen.getByText(/包括平台管理员也不能从平台直接查看/)).toBeVisible();
   });
 });
 
@@ -221,6 +222,57 @@ describe('legacy migration security gate', () => {
     await userEvent.click(initialize);
     await waitFor(() => expect(initializePendingVault).toHaveBeenCalledWith(vaultId, '我的密码'));
     expect(useUi.getState().selectedVaultId).toBe(vaultId);
+  });
+
+  it('never asks for a name when an empty personal vault is being prepared', async () => {
+    const store = createMetaStore();
+    store.getState().applyDecryptedBootstrap({
+      user,
+      vaults: [{
+        id: vaultId,
+        kind: 'personal',
+        name: '个人库',
+        ownerUserId: user.id,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      }],
+      memberships: [],
+      items: [],
+      cursor: 0,
+      vaultCrypto: {
+        [vaultId]: {
+          vaultId,
+          status: 'legacy',
+          activeEpoch: 0,
+          pendingEpoch: null,
+          rekeyTaskId: null,
+          encryptedHeader: null,
+          migrationJobId: null,
+          updatedAt: new Date().toISOString(),
+        },
+      },
+      encryptedItems: {},
+      vaultDirectories: {},
+    });
+    const services = {
+      store,
+      zeroKnowledge: {
+        legacyMigrationStatus: vi.fn().mockResolvedValue(migrationStatus('pending', true, false)),
+        hasPreparedLegacyMigration: vi.fn(() => false),
+        refresh: vi.fn(),
+        logout: vi.fn(),
+      },
+    } as unknown as AppServices;
+
+    render(
+      <AppContext.Provider value={services}>
+        <SecurityGate phase="migration-required" user={user} onLoggedOut={vi.fn()} />
+      </AppContext.Provider>,
+    );
+
+    expect(await screen.findByText('正在自动准备“我的密码库”')).toBeVisible();
+    expect(screen.queryByLabelText('密码库名称')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '创建并进入工作台' })).not.toBeInTheDocument();
   });
 
   it('shows an honest enterprise-recovery path without a doomed rekey action', async () => {

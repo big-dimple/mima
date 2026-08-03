@@ -44,6 +44,7 @@ export function VaultNav() {
   const vaults = useMeta((s) => s.vaults);
   const memberships = useMeta((s) => s.memberships);
   const items = useMeta((s) => s.items);
+  const pendingVaultAccessIds = useMeta((s) => s.pendingVaultAccessIds);
   const vaultDirectories = useMeta((s) => s.vaultDirectories);
   const connection = useMeta((s) => s.connection);
   const { zeroKnowledge } = useApp();
@@ -90,7 +91,9 @@ export function VaultNav() {
   );
 
   const roleOf = (vault: Vault): MembershipRole | null =>
-    vault.kind === 'personal'
+    pendingVaultAccessIds[vault.id]
+      ? null
+      : vault.kind === 'personal'
       ? 'owner'
       : resolveEffectiveRole(memberships[vault.id] ?? [], { userId: user.id, groups: user.groups });
 

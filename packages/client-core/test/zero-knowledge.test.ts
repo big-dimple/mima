@@ -5,7 +5,12 @@ import type {
   EncryptedBootstrapResponse,
   EnterpriseRecoveryKey,
   EnterpriseRecoveryRequest,
+  InitializeVaultCryptoRequest,
+  LegacyMigrationStatusResponse,
   UserCryptoProfile,
+  VaultCryptoState,
+  VaultEnvelopeTask,
+  VaultOwnershipTransfer,
 } from '@mima/contracts';
 import {
   createUnsignedVaultKeyGrant,
@@ -133,6 +138,118 @@ function emptyBootstrap(profile: UserCryptoProfile, device: CryptoDevice): Encry
   };
 }
 
+function pendingPersonalBootstrap(
+  profile: UserCryptoProfile,
+  device: CryptoDevice,
+  vaultId: string,
+): EncryptedBootstrapResponse {
+  const now = new Date().toISOString();
+  return {
+    ...emptyBootstrap(profile, device),
+    vaults: [{
+      id: vaultId,
+      kind: 'personal',
+      ownerUserId: accountId,
+      createdAt: now,
+      updatedAt: now,
+      crypto: {
+        vaultId,
+        status: 'legacy',
+        activeEpoch: 0,
+        accessGeneration: 0,
+        pendingEpoch: null,
+        rekeyTaskId: null,
+        encryptedHeader: null,
+        migrationJobId: null,
+        updatedAt: now,
+      },
+    }],
+  };
+}
+
+function initializedPersonalBootstrap(
+  pending: EncryptedBootstrapResponse,
+  request: InitializeVaultCryptoRequest,
+): EncryptedBootstrapResponse {
+  const now = new Date().toISOString();
+  return {
+    ...pending,
+    vaults: pending.vaults.map((vault) => ({
+      ...vault,
+      crypto: {
+        ...vault.crypto,
+        status: 'e2ee',
+        activeEpoch: 1,
+        accessGeneration: 1,
+        encryptedHeader: request.header.blob,
+        updatedAt: now,
+      },
+    })),
+    envelopes: request.envelopes.map((envelope) => ({
+      ...envelope,
+      id: crypto.randomUUID(),
+      createdAt: now,
+    })),
+    headers: [{
+      ...request.header,
+      updatedAt: now,
+      updatedBy: accountId,
+    }],
+    signerProfiles: pending.profile ? [{
+      userId: pending.profile.userId,
+      keyVersion: pending.profile.keyVersion,
+      encryptionPublicKey: pending.profile.encryptionPublicKey,
+      signingPublicKey: pending.profile.signingPublicKey,
+    }] : [],
+  };
+}
+
+function personalMigrationStatus(profile: UserCryptoProfile): LegacyMigrationStatusResponse {
+  return {
+    status: 'pending',
+    job: null,
+    emptyVaultInitializationAllowed: true,
+    materials: {
+      recipients: [{
+        userId: accountId,
+        role: 'owner',
+        capability: 'full',
+        keyVersion: profile.keyVersion,
+        encryptionPublicKey: profile.encryptionPublicKey,
+        signingPublicKey: profile.signingPublicKey,
+      }],
+      devices: [],
+      recoveryKey: null,
+    },
+  };
+}
+
+function envelopeTask(
+  vaultId: string,
+  id: string,
+  recipientUserId: string,
+  recipientProfile: VaultEnvelopeTask['recipientProfile'],
+): VaultEnvelopeTask {
+  const now = new Date().toISOString();
+  return {
+    id,
+    vaultId,
+    keyEpoch: 1,
+    authorizationKind: 'custom_group',
+    authorizationRef: '8cdb666e-b338-4e78-8086-75979f06f73d',
+    recipientUserId,
+    capability: 'full',
+    expectedProfileGeneration: recipientProfile?.keyVersion ?? null,
+    status: 'pending',
+    completedEnvelopeId: null,
+    recipientProfile,
+    createdAt: now,
+    updatedAt: now,
+    completedAt: null,
+    cancelledAt: null,
+  };
+}
+
 type RewrapRequest = Parameters<ApiClient['rewrapCryptoProfile']>[0];
 
 function profileAfterRewrap(profile: UserCryptoProfile, request: RewrapRequest): UserCryptoProfile {
@@ -183,6 +300,312 @@ function createZeroKnowledgeClient(
 }
 
 describe('zero-knowledge client key lifecycle', () => {
+  it('automatically completes eligible tasks serially and retries transport failures after reconnect', async () => {
+    const { profile, device } = await setupAccount();
+    const vaultId = 'c34ea9a3-9c26-4bca-9801-bc7c4d6eb356';
+    const now = new Date().toISOString();
+    const bootstrap: EncryptedBootstrapResponse = {
+      ...emptyBootstrap(profile, device),
+      vaults: [{
+        id: vaultId,
+        kind: 'team',
+        ownerUserId: null,
+        projectContext: { kind: 'root' },
+        createdAt: now,
+        updatedAt: now,
+        crypto: {
+          vaultId,
+          status: 'e2ee',
+          activeEpoch: 1,
+          accessGeneration: 4,
+          pendingEpoch: null,
+          rekeyTaskId: null,
+          encryptedHeader: null,
+          migrationJobId: null,
+          updatedAt: now,
+        },
+      }],
+      memberships: [{
+        id: '4c9f2769-8de5-4a04-84cb-8412ceebbd19',
+        vaultId,
+        subjectKind: 'user',
+        subjectId: accountId,
+        role: 'owner',
+        createdAt: now,
+      }],
+      envelopes: [{
+        id: '6ecdd77d-4e28-4dc8-ab98-f90bd17682a7',
+        vaultId,
+        epoch: 1,
+        recipientKind: 'user',
+        recipientId: accountId,
+        recipientKeyVersion: 1,
+        capability: 'full',
+        sealedKeyBundle: 'owner-envelope',
+        signerUserId: accountId,
+        signerKeyVersion: 1,
+        signature: 'owner-signature',
+        createdAt: now,
+      }],
+      signerProfiles: [{
+        userId: accountId,
+        keyVersion: profile.keyVersion,
+        encryptionPublicKey: profile.encryptionPublicKey,
+        signingPublicKey: profile.signingPublicKey,
+      }],
+    };
+    const recipientProfile = {
+      keyVersion: 1,
+      encryptionPublicKey: 'recipient-encryption-key',
+      signingPublicKey: 'recipient-signing-key',
+    };
+    const eligibleTasks = [
+      envelopeTask(vaultId, '47faf6e0-90fa-48fd-a2fd-1818b38700a6', 'user:first', recipientProfile),
+      envelopeTask(vaultId, '1554f637-cfbc-4770-8fe5-00b51cd60758', 'user:second', recipientProfile),
+    ];
+    const transferTask = envelopeTask(
+      vaultId,
+      'd08fe7f6-234b-4fce-af90-4bc5cdbe2eb7',
+      'user:transfer',
+      recipientProfile,
+    );
+    const waitingForPassword = envelopeTask(
+      vaultId,
+      'e996fe2e-4d21-449a-846f-8307cb8db4ec',
+      'user:waiting',
+      null,
+    );
+    let activeCompletions = 0;
+    let maxActiveCompletions = 0;
+    const completeVaultEnvelopeTask = vi.fn(async (task: VaultEnvelopeTask) => {
+      activeCompletions += 1;
+      maxActiveCompletions = Math.max(maxActiveCompletions, activeCompletions);
+      await Promise.resolve();
+      activeCompletions -= 1;
+      return task;
+    });
+    const vaultEnvelopeTasks = vi.fn()
+      .mockResolvedValueOnce([...eligibleTasks, transferTask, waitingForPassword])
+      .mockResolvedValue([]);
+    const encryptedBootstrap = vi.fn().mockResolvedValue(bootstrap);
+    const api = {
+      setEncryptedMembership: vi.fn().mockResolvedValue({
+        ok: true,
+        accessGeneration: 4,
+        rekeyRequired: false,
+        retainedAccess: true,
+        rekeyTask: null,
+        envelopeTasks: { pending: 3, completed: 0, withoutProfile: 1 },
+      }),
+      vaultEnvelopeTasks,
+      ownershipTransfer: vi.fn().mockResolvedValue({ envelopeTaskId: transferTask.id } as VaultOwnershipTransfer),
+      completeVaultEnvelopeTask,
+      encryptedBootstrap,
+    } as unknown as ApiClient;
+    const projection = {
+      user,
+      vaults: [{
+        id: vaultId,
+        kind: 'team' as const,
+        name: 'Automatic delivery',
+        ownerUserId: null,
+        projectContext: { kind: 'root' as const },
+        createdAt: now,
+        updatedAt: now,
+      }],
+      memberships: bootstrap.memberships,
+      items: [],
+      cursor: 0,
+      vaultCrypto: { [vaultId]: bootstrap.vaults[0]!.crypto },
+      pendingVaultAccessIds: {},
+      vaultDirectories: {},
+      encryptedItems: {},
+    };
+    const keyring = {
+      isUnlocked: true,
+      deviceId,
+      currentGeneration: 1,
+      prepareMembershipSet: vi.fn().mockResolvedValue({}),
+      prepareEnvelopeTaskCompletion: vi.fn().mockResolvedValue({}),
+      decryptBootstrap: vi.fn().mockResolvedValue(projection),
+    };
+    const store = createMetaStore();
+    store.getState().applyDecryptedBootstrap(projection);
+    const storage = new MemoryEncryptedStorage();
+    const zeroKnowledge = new ZeroKnowledgeClient({
+      api,
+      store,
+      leases: new SecretLeaseStore(),
+      keyring: keyring as never,
+      storage,
+      outbox: new EncryptedCommandOutbox(api, storage),
+    });
+    const privateState = zeroKnowledge as unknown as {
+      bootstrap: EncryptedBootstrapResponse;
+      profile: UserCryptoProfile;
+      automaticEnvelopeWorkers: Map<string, Promise<void>>;
+    };
+    privateState.bootstrap = bootstrap;
+    privateState.profile = profile;
+
+    await zeroKnowledge.setVaultMembership(
+      vaultId,
+      'custom_group',
+      '8cdb666e-b338-4e78-8086-75979f06f73d',
+      'viewer',
+      'replace',
+      false,
+    );
+
+    await vi.waitFor(() => expect(completeVaultEnvelopeTask).toHaveBeenCalledTimes(2));
+    expect(completeVaultEnvelopeTask.mock.calls.map(([task]) => task.id)).toEqual(
+      eligibleTasks.map((task) => task.id),
+    );
+    expect(maxActiveCompletions).toBe(1);
+    expect(encryptedBootstrap).toHaveBeenCalledTimes(1);
+
+    const retryTask = envelopeTask(
+      vaultId,
+      '7f599bb2-5e1d-4e1a-aa06-0f63ae3e3dd4',
+      'user:retry',
+      recipientProfile,
+    );
+    completeVaultEnvelopeTask.mockReset()
+      .mockRejectedValueOnce(new Error('network unavailable'))
+      .mockResolvedValue(retryTask);
+    vaultEnvelopeTasks.mockReset().mockResolvedValue([retryTask]);
+    encryptedBootstrap.mockClear();
+
+    await zeroKnowledge.setVaultMembership(
+      vaultId,
+      'custom_group',
+      '8cdb666e-b338-4e78-8086-75979f06f73d',
+      'viewer',
+      'replace',
+      false,
+    );
+    await vi.waitFor(() => expect(completeVaultEnvelopeTask).toHaveBeenCalledTimes(1));
+
+    zeroKnowledge.setOnline(false);
+    zeroKnowledge.setOnline(true);
+    await vi.waitFor(() => expect(completeVaultEnvelopeTask).toHaveBeenCalledTimes(2));
+    expect(completeVaultEnvelopeTask.mock.calls.map(([task]) => task.id)).toEqual([
+      retryTask.id,
+      retryTask.id,
+    ]);
+    expect(encryptedBootstrap).toHaveBeenCalledTimes(2);
+
+    await vi.waitFor(() => expect(privateState.automaticEnvelopeWorkers.size).toBe(0));
+    const slowTask = envelopeTask(
+      vaultId,
+      '72a23f75-c43a-47f8-a832-71c21b3d34c6',
+      'user:slow-reconnect',
+      recipientProfile,
+    );
+    let releaseSlowCompletion!: () => void;
+    const slowCompletion = new Promise<void>((resolve) => {
+      releaseSlowCompletion = resolve;
+    });
+    completeVaultEnvelopeTask.mockReset()
+      .mockImplementationOnce(async () => {
+        await slowCompletion;
+        return slowTask;
+      })
+      .mockResolvedValue(slowTask);
+    vaultEnvelopeTasks.mockReset().mockResolvedValue([slowTask]);
+    encryptedBootstrap.mockClear();
+
+    await zeroKnowledge.setVaultMembership(
+      vaultId,
+      'custom_group',
+      '8cdb666e-b338-4e78-8086-75979f06f73d',
+      'viewer',
+      'replace',
+      false,
+    );
+    await vi.waitFor(() => expect(completeVaultEnvelopeTask).toHaveBeenCalledTimes(1));
+    zeroKnowledge.setOnline(false);
+    zeroKnowledge.setOnline(true);
+    await vi.waitFor(() => expect(encryptedBootstrap).toHaveBeenCalledTimes(1));
+    releaseSlowCompletion();
+
+    await vi.waitFor(() => expect(completeVaultEnvelopeTask).toHaveBeenCalledTimes(2));
+    expect(completeVaultEnvelopeTask.mock.calls.map(([task]) => task.id)).toEqual([
+      slowTask.id,
+      slowTask.id,
+    ]);
+  });
+
+  it('keeps a rekeying team vault awaiting its envelope out of the actionable rekey phase', async () => {
+    const { keyring, profile, device } = await setupAccount();
+    const vaultId = '941af248-bc7c-45eb-a747-e8caa61a5dcc';
+    const now = new Date().toISOString();
+    const cryptoState: VaultCryptoState = {
+      vaultId,
+      status: 'rekey_required',
+      activeEpoch: 1,
+      accessGeneration: 3,
+      pendingEpoch: 2,
+      rekeyTaskId: null,
+      encryptedHeader: null,
+      migrationJobId: null,
+      recoveryRequired: false,
+      recoveryReason: null,
+      updatedAt: now,
+    };
+    const bootstrap: EncryptedBootstrapResponse = {
+      ...emptyBootstrap(profile, device),
+      vaults: [{
+        id: vaultId,
+        kind: 'team',
+        ownerUserId: null,
+        projectContext: { kind: 'root' },
+        createdAt: now,
+        updatedAt: now,
+        crypto: cryptoState,
+      }],
+      memberships: [{
+        id: 'c303797d-d275-4218-a7d3-65db687720d6',
+        vaultId,
+        subjectKind: 'user',
+        subjectId: accountId,
+        role: 'viewer',
+        createdAt: now,
+      }],
+    };
+    const encryptedBootstrap = vi.fn()
+      .mockResolvedValueOnce(bootstrap)
+      .mockResolvedValue({ ...bootstrap, cursor: 1 });
+    const api = { encryptedBootstrap } as unknown as ApiClient;
+    const store = createMetaStore();
+    const zeroKnowledge = new ZeroKnowledgeClient({
+      api,
+      store,
+      leases: new SecretLeaseStore(),
+      keyring,
+      storage: new MemoryEncryptedStorage(),
+      outbox: new EncryptedCommandOutbox(api, new MemoryEncryptedStorage()),
+    });
+
+    try {
+      await zeroKnowledge.refresh();
+      expect(store.getState().pendingVaultAccessIds).toEqual({ [vaultId]: true });
+      expect(store.getState().vaults[vaultId]?.name).toBe('正在自动准备团队访问');
+      expect(zeroKnowledge.phase).toBe('unlocked-online');
+
+      await zeroKnowledge.applyEncryptedSyncEvent({
+        type: 'vault.crypto_changed',
+        cursor: 1,
+        state: cryptoState,
+        header: null,
+      });
+      expect(zeroKnowledge.phase).toBe('unlocked-online');
+      expect(encryptedBootstrap).toHaveBeenCalledTimes(2);
+    } finally {
+      await keyring.lock();
+    }
+  });
+
   it('rejects a wrong main password and destroys all key references on lock', async () => {
     const { keyring, setup, profile, device } = await setupAccount();
     await keyring.lock();
@@ -321,6 +744,105 @@ describe('zero-knowledge client key lifecycle', () => {
     expect(createChallenge).toHaveBeenCalledTimes(2);
     expect(completeUnlock).toHaveBeenCalledTimes(2);
     expect(client.phase).toBe('unlocked-online');
+  });
+
+  it('automatically initializes the personal vault with an encrypted default name and retries the same request', async () => {
+    const { keyring, profile, device } = await setupAccount();
+    const storage = new MemoryEncryptedStorage();
+    const store = createMetaStore();
+    const vaultId = '61bca90f-8a9e-438e-bc19-3ec750d16a93';
+    const pending = pendingPersonalBootstrap(profile, device, vaultId);
+    let initialization: InitializeVaultCryptoRequest | null = null;
+    let bootstrapReads = 0;
+    const encryptedBootstrap = vi.fn(async () => {
+      bootstrapReads += 1;
+      return bootstrapReads <= 2 || !initialization
+        ? pending
+        : initializedPersonalBootstrap(pending, initialization);
+    });
+    const initializeVaultCrypto = vi.fn(async (_vaultId: string, request: InitializeVaultCryptoRequest) => {
+      initialization = request;
+      if (initializeVaultCrypto.mock.calls.length === 1) {
+        throw new ApiRequestError(0, { message: 'response lost' });
+      }
+      return pending.vaults[0]!.crypto;
+    });
+    const api = {
+      setCsrfToken: vi.fn(),
+      encryptedBootstrap,
+      accountCryptoResetRequests: vi.fn().mockResolvedValue([]),
+      legacyMigrationStatus: vi.fn().mockResolvedValue(personalMigrationStatus(profile)),
+      initializeVaultCrypto,
+    } as unknown as ApiClient;
+    const client = new ZeroKnowledgeClient({
+      api,
+      store,
+      leases: new SecretLeaseStore(),
+      keyring,
+      storage,
+      outbox: new EncryptedCommandOutbox(api, storage),
+    });
+
+    try {
+      await client.prepare({ user, csrfToken: 'csrf-test', locked: false });
+      await client.refresh();
+
+      expect(initializeVaultCrypto).toHaveBeenCalledTimes(2);
+      expect(initializeVaultCrypto.mock.calls[1]?.[1]).toEqual(initializeVaultCrypto.mock.calls[0]?.[1]);
+      expect(JSON.stringify(initialization)).not.toContain('我的密码库');
+      expect(store.getState().vaults[vaultId]?.name).toBe('我的密码库');
+      expect(client.phase).toBe('unlocked-online');
+    } finally {
+      await keyring.lock();
+    }
+  });
+
+  it('discards temporary personal-vault keys and converges when another device wins initialization', async () => {
+    const { keyring, profile, device } = await setupAccount();
+    const storage = new MemoryEncryptedStorage();
+    const store = createMetaStore();
+    const vaultId = '31b4fc18-eedb-40ab-89bb-3b0747102ff7';
+    const pending = pendingPersonalBootstrap(profile, device, vaultId);
+    let initialization: InitializeVaultCryptoRequest | null = null;
+    let bootstrapReads = 0;
+    const encryptedBootstrap = vi.fn(async () => {
+      bootstrapReads += 1;
+      return bootstrapReads <= 2 || !initialization
+        ? pending
+        : initializedPersonalBootstrap(pending, initialization);
+    });
+    const initializeVaultCrypto = vi.fn(async (_vaultId: string, request: InitializeVaultCryptoRequest) => {
+      initialization = request;
+      throw new ApiRequestError(409, { message: 'already initialized' });
+    });
+    const dropVault = vi.spyOn(keyring, 'dropVault');
+    const api = {
+      setCsrfToken: vi.fn(),
+      encryptedBootstrap,
+      accountCryptoResetRequests: vi.fn().mockResolvedValue([]),
+      legacyMigrationStatus: vi.fn().mockResolvedValue(personalMigrationStatus(profile)),
+      initializeVaultCrypto,
+    } as unknown as ApiClient;
+    const client = new ZeroKnowledgeClient({
+      api,
+      store,
+      leases: new SecretLeaseStore(),
+      keyring,
+      storage,
+      outbox: new EncryptedCommandOutbox(api, storage),
+    });
+
+    try {
+      await client.prepare({ user, csrfToken: 'csrf-test', locked: false });
+      await client.refresh();
+
+      expect(initializeVaultCrypto).toHaveBeenCalledOnce();
+      expect(dropVault).toHaveBeenCalledWith(vaultId);
+      expect(store.getState().vaults[vaultId]?.name).toBe('我的密码库');
+      expect(client.phase).toBe('unlocked-online');
+    } finally {
+      await keyring.lock();
+    }
   });
 
   it('creates a team vault without recovery and retries the same atomic request after network uncertainty', async () => {

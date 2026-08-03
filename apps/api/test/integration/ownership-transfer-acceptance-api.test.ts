@@ -115,8 +115,14 @@ describe('signed ownership transfer acceptance', () => {
 
     await setMember(vaultId, target.userId, 'viewer');
     const transferGeneration = await accessGeneration(vaultId);
+    const preparing = await createTransfer(vaultId, target.userId, transferGeneration);
+    expect(preparing.statusCode).toBe(409);
+    expect(preparing.json()).toMatchObject({
+      message: '系统正在自动准备新拥有者的密码库访问，请稍后重试',
+    });
+    await completePendingTask(vaultId, target.userId);
     let transfer = await expectCreatedTransfer(vaultId, target.userId, transferGeneration);
-    expect(transfer.envelopeReady).toBe(false);
+    expect(transfer.envelopeReady).toBe(true);
     expect(await accessGeneration(vaultId)).toBe(transferGeneration);
 
     const declineRequest = await targetKeyring.prepareOwnershipTransferCancellation(
@@ -153,23 +159,9 @@ describe('signed ownership transfer acceptance', () => {
     expect(transfer.status).toBe('pending');
   });
 
-  it('never finalizes on owner envelope completion and accepts only from an active target device with verified keys', async () => {
+  it('never finalizes after automatic envelope delivery and accepts only from an active target device with verified keys', async () => {
     const vaultId = await initializeTeamVault('接受签名转移');
     await setMember(vaultId, target.userId, 'viewer');
-    const transfer = await expectCreatedTransfer(vaultId, target.userId, await accessGeneration(vaultId));
-
-    await expect(targetKeyring.prepareOwnershipTransferAcceptance(target.userId, transfer))
-      .rejects.toThrow('尚未向你开通访问');
-
-    const prematureRequest = await signAcceptanceWithoutVaultKeys(transfer);
-    const premature = await app.inject({
-      method: 'POST',
-      url: `/api/v2/vaults/${vaultId}/ownership-transfer/accept`,
-      ...authed(target),
-      payload: prematureRequest,
-    });
-    expect(premature.statusCode).toBe(409);
-
     const task = await pendingTask(vaultId, target.userId);
     const unrelatedCiphertext = randomBytes(96);
     const unrelatedEnvelope = (await app.ctx.db.insert(vaultKeyEnvelopes).values({
@@ -228,6 +220,9 @@ describe('signed ownership transfer acceptance', () => {
     });
     await app.ctx.db.delete(vaultKeyEnvelopes).where(eq(vaultKeyEnvelopes.id, unrelatedEnvelope.id));
 
+    await loadTargetVaultKeys();
+    const transfer = await expectCreatedTransfer(vaultId, target.userId, await accessGeneration(vaultId));
+
     const storedPending = (await app.ctx.db.select().from(vaultOwnershipTransferRequests).where(
       eq(vaultOwnershipTransferRequests.id, transfer.id),
     ))[0]!;
@@ -236,7 +231,6 @@ describe('signed ownership transfer acceptance', () => {
     await expectMembership(vaultId, owner.userId, 'owner');
     await expectMembership(vaultId, target.userId, 'viewer');
 
-    await loadTargetVaultKeys();
     const readyResponse = await app.inject({
       method: 'GET',
       url: `/api/v2/vaults/${vaultId}/ownership-transfer`,
@@ -444,6 +438,19 @@ async function pendingTask(vaultId: string, userId: string): Promise<VaultEnvelo
   const task = (response.json() as VaultEnvelopeTask[]).find((candidate) => candidate.recipientUserId === userId);
   expect(task).toBeDefined();
   return task!;
+}
+
+async function completePendingTask(vaultId: string, userId: string): Promise<VaultEnvelopeTask> {
+  const task = await pendingTask(vaultId, userId);
+  const request = await ownerKeyring.prepareEnvelopeTaskCompletion(owner.userId, ownerProfile, task);
+  const response = await app.inject({
+    method: 'POST',
+    url: `/api/v2/vaults/${vaultId}/envelope-tasks/${task.id}/complete`,
+    ...authed(owner),
+    payload: request,
+  });
+  expect(response.statusCode, response.body).toBe(200);
+  return response.json() as VaultEnvelopeTask;
 }
 
 async function signAcceptanceWithoutVaultKeys(

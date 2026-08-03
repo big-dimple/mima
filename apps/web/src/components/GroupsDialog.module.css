@@ -104,27 +104,6 @@
   overflow-y: auto;
 }
 
-.statusHelp {
-  display: flex;
-  align-items: flex-start;
-  gap: 6px;
-  padding: 0 4px;
-  color: var(--muted);
-  font-size: 12px;
-  line-height: 1.5;
-}
-
-.statusHelp svg {
-  flex: 0 0 auto;
-  margin-top: 2px;
-  color: var(--accent);
-}
-
-.statusHelp strong {
-  color: var(--text);
-  font-weight: 600;
-}
-
 .groupButton,
 .groupActive,
 .retry {

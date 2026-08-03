@@ -1193,12 +1193,24 @@ export class E2eeKeyring {
     }
     const vaults = [];
     const vaultCrypto: DecryptedBootstrapProjection['vaultCrypto'] = {};
+    const pendingVaultAccessIds: Record<string, true> = {};
     const vaultDirectories: DecryptedBootstrapProjection['vaultDirectories'] = {};
     for (const record of bootstrap.vaults) {
       vaultCrypto[record.id] = record.crypto;
       const keys = this.vaultKeys.get(record.id);
       const header = headers.get(record.id);
-      let name = record.crypto.recoveryRequired ? '需要企业恢复' : '等待访问开通';
+      const pendingTeamAccess = record.kind === 'team' &&
+        !keys &&
+        !record.crypto.recoveryRequired &&
+        record.crypto.activeEpoch > 0 &&
+        record.crypto.encryptedHeader === null &&
+        (record.crypto.status === 'e2ee' || record.crypto.status === 'rekey_required');
+      let name = record.crypto.recoveryRequired
+        ? '需要企业恢复'
+        : pendingTeamAccess
+          ? '正在自动准备团队访问'
+          : '密码库尚未就绪';
+      if (pendingTeamAccess) pendingVaultAccessIds[record.id] = true;
       if (keys && header) {
         let value: JsonValue;
         try {
@@ -1265,6 +1277,7 @@ export class E2eeKeyring {
       items,
       cursor: bootstrap.cursor,
       vaultCrypto,
+      pendingVaultAccessIds,
       vaultDirectories,
       encryptedItems,
     };
@@ -1942,7 +1955,7 @@ export class E2eeKeyring {
         input.subjectKind !== 'user' ||
         input.role === 'auditor' ||
         input.distribution.recipientProfile.userId !== input.subjectId
-      ) throw new Error('成员访问开通信息与当前权限不一致，请刷新成员列表后重试');
+      ) throw new Error('成员自动访问交付信息与当前权限不一致，请刷新后重试');
       const keys = this.requireFullVaultKeys(vaultId);
       envelopes.push(await createVaultKeyGrant(
         keys,
@@ -2052,10 +2065,10 @@ export class E2eeKeyring {
   ): Promise<CompleteVaultEnvelopeTaskRequest> {
     const account = this.requireAccount();
     const device = this.requireDevice(account);
-    if (task.status !== 'pending') throw new Error('这项访问开通已经处理，请刷新成员列表');
+    if (task.status !== 'pending') throw new Error('这项团队访问已经自动处理');
     if (!task.recipientProfile) throw new Error('对方尚未设置主密码');
     if (task.expectedProfileGeneration !== task.recipientProfile.keyVersion) {
-      throw new Error('对方的账号安全信息已更新，请刷新成员列表后重试');
+      throw new Error('对方的账号安全信息已更新，系统将按最新信息自动重试');
     }
     const keys = this.requireFullVaultKeys(task.vaultId);
     const envelope = await createVaultKeyGrant(
@@ -2112,7 +2125,7 @@ export class E2eeKeyring {
     userId: string,
     transfer: VaultOwnershipTransfer,
   ): Promise<AcceptVaultOwnershipTransferRequest> {
-    if (!transfer.envelopeReady) throw new Error('当前密码库尚未向你开通访问');
+    if (!transfer.envelopeReady) throw new Error('系统正在自动准备当前密码库访问，请稍后重试');
     const keys = this.requireFullVaultKeys(transfer.vaultId);
     const device = this.requireDevice(this.requireAccount());
     if (transfer.status !== 'pending' || !transfer.acceptanceRequired) {
@@ -2619,7 +2632,7 @@ export class E2eeKeyring {
 
   private requireVaultKeys(vaultId: string): VaultKeys {
     const keys = this.vaultKeys.get(vaultId);
-    if (!keys) throw new Error('当前设备还不能打开此密码库，请刷新状态；若仍无效，请联系拥有者开通访问');
+    if (!keys) throw new Error('系统正在自动准备团队访问，请稍后重试');
     return keys;
   }
 

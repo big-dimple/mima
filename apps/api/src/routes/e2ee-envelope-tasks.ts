@@ -45,6 +45,7 @@ import {
   ensureMembershipRekeyTask,
   isEnvelopeTaskAuthorizationActive,
 } from '../services/vault-envelope-tasks.ts';
+import { lockRecipientSets } from '../services/recipient-set-lock.ts';
 
 const VaultParams = z.object({ vaultId: z.string().uuid() });
 const TaskParams = VaultParams.extend({ taskId: z.string().uuid() });
@@ -66,7 +67,7 @@ export function registerE2eeEnvelopeTaskRoutes(app: FastifyInstance): void {
     },
   }, async (req, reply) => {
     const access = await getVaultAccess(db, req.user, req.params.vaultId);
-    if (access?.role !== 'owner') return forbidden(reply, '只有密码库拥有者可以查看待开通访问');
+    if (access?.role !== 'owner') return forbidden(reply, '只有密码库拥有者可以查看团队访问交付状态');
     const status = req.query.status;
     const rows = await db.select().from(vaultEnvelopeTasks).where(and(
       eq(vaultEnvelopeTasks.vaultId, req.params.vaultId),
@@ -149,6 +150,7 @@ export function registerE2eeEnvelopeTaskRoutes(app: FastifyInstance): void {
 
     try {
       const result = await runCommand(db, bus, audit, req.user.id, req.body.idempotencyKey, async (tx, collect) => {
+        await lockRecipientSets(tx, [req.body.newOwnerUserId]);
         const lockedActor = (await tx.select().from(userDevices).where(and(
           eq(userDevices.id, actor.id),
           eq(userDevices.userId, req.user.id),
@@ -160,7 +162,11 @@ export function registerE2eeEnvelopeTaskRoutes(app: FastifyInstance): void {
           'vault.ownership-transfer.create',
           { userId: req.user.id, vaultId: req.params.vaultId, request: unsigned },
         )) throw new TaskConflictError('当前设备已失效，或转移信息已经变化，请刷新页面后重试');
-        const lockedTargetProfile = (await tx.select({ userId: userCryptoProfiles.userId })
+        const lockedTargetProfile = (await tx.select({
+          userId: userCryptoProfiles.userId,
+          cryptoGeneration: userCryptoProfiles.cryptoGeneration,
+          publicEncryptionKey: userCryptoProfiles.publicEncryptionKey,
+        })
           .from(userCryptoProfiles)
           .where(eq(userCryptoProfiles.userId, req.body.newOwnerUserId))
           .for('share')
@@ -210,7 +216,7 @@ export function registerE2eeEnvelopeTaskRoutes(app: FastifyInstance): void {
           eq(vaultMemberships.subjectId, req.body.newOwnerUserId),
         )).limit(1))[0];
         if (targetMembership?.role !== 'viewer' && targetMembership?.role !== 'editor') {
-          throw new TaskConflictError('请先把对方作为可查看或可编辑成员加入密码库，并开通访问');
+          throw new TaskConflictError('请先把对方作为可查看或可编辑成员加入密码库');
         }
         await ensureEnvelopeTasks(tx, {
           vaultId: state.vaultId,
@@ -227,8 +233,32 @@ export function registerE2eeEnvelopeTaskRoutes(app: FastifyInstance): void {
           eq(vaultEnvelopeTasks.authorizationRef, req.body.newOwnerUserId),
           eq(vaultEnvelopeTasks.recipientUserId, req.body.newOwnerUserId),
           eq(vaultEnvelopeTasks.capability, 'full'),
+          eq(vaultEnvelopeTasks.expectedProfileGeneration, lockedTargetProfile.cryptoGeneration),
+          eq(vaultEnvelopeTasks.status, 'completed'),
         )).orderBy(desc(vaultEnvelopeTasks.createdAt)).limit(1))[0];
-        if (!envelopeTask) throw new TaskConflictError('暂时无法为新拥有者开通访问，请刷新后重试');
+        if (!envelopeTask?.completedEnvelopeId) {
+          throw new TaskConflictError('系统正在自动准备新拥有者的密码库访问，请稍后重试');
+        }
+        const targetFingerprint = publicKeyFingerprint(
+          encodeBase64Url(lockedTargetProfile.publicEncryptionKey),
+        );
+        const completedEnvelope = (await tx.select({ id: vaultKeyEnvelopes.id })
+          .from(vaultKeyEnvelopes).where(and(
+            eq(vaultKeyEnvelopes.id, envelopeTask.completedEnvelopeId),
+            eq(vaultKeyEnvelopes.vaultId, state.vaultId),
+            eq(vaultKeyEnvelopes.keyEpoch, state.activeEpoch),
+            eq(vaultKeyEnvelopes.recipientKind, 'user'),
+            eq(vaultKeyEnvelopes.recipientUserId, req.body.newOwnerUserId),
+            eq(vaultKeyEnvelopes.recipientKeyFingerprint, targetFingerprint),
+            eq(vaultKeyEnvelopes.envelopeVersion, lockedTargetProfile.cryptoGeneration),
+            eq(vaultKeyEnvelopes.accessScope, 'full'),
+            eq(vaultKeyEnvelopes.authorizationKind, 'direct'),
+            eq(vaultKeyEnvelopes.authorizationRef, req.body.newOwnerUserId),
+            eq(vaultKeyEnvelopes.status, 'active'),
+          )).for('share').limit(1))[0];
+        if (!completedEnvelope) {
+          throw new TaskConflictError('系统正在自动准备新拥有者的密码库访问，请稍后重试');
+        }
 
         const transfer = (await tx.insert(vaultOwnershipTransferRequests).values({
           vaultId: state.vaultId,
@@ -381,7 +411,7 @@ export function registerE2eeEnvelopeTaskRoutes(app: FastifyInstance): void {
           eq(vaultKeyEnvelopes.authorizationRef, transfer.toOwnerUserId),
           eq(vaultKeyEnvelopes.status, 'active'),
         )).for('share').limit(1))[0];
-        if (!completedEnvelope) throw new TaskConflictError('你尚未开通当前密码库，请联系原拥有者处理');
+        if (!completedEnvelope) throw new TaskConflictError('系统正在自动准备当前密码库访问，请稍后重试');
         const evidence = acceptanceEvidence(
           transfer,
           actor.id,
@@ -604,7 +634,7 @@ export function registerE2eeEnvelopeTaskRoutes(app: FastifyInstance): void {
     },
   }, async (req, reply) => {
     const access = await getVaultAccess(db, req.user, req.params.vaultId);
-    if (access?.role !== 'owner') return forbidden(reply, '只有密码库拥有者可以开通访问');
+    if (access?.role !== 'owner') return forbidden(reply, '只有已解锁的密码库拥有者可以完成自动访问交付');
     const [actor, signerProfile, taskSnapshots] = await Promise.all([
       getActiveDevice(db, req.user.id, req.body.actorDeviceId),
       getCryptoProfile(db, req.user.id),
@@ -618,7 +648,7 @@ export function registerE2eeEnvelopeTaskRoutes(app: FastifyInstance): void {
     }
     const taskSnapshot = taskSnapshots[0];
     if (!taskSnapshot) {
-      return reply.code(404).send({ statusCode: 404, error: 'Not Found', message: '这项访问开通已经不存在，请刷新成员列表' } as never);
+      return reply.code(404).send({ statusCode: 404, error: 'Not Found', message: '这项自动访问交付任务已经不存在' } as never);
     }
     const unsigned = without(req.body, 'signature');
     if (!await verifyCommandSignature(
@@ -639,7 +669,7 @@ export function registerE2eeEnvelopeTaskRoutes(app: FastifyInstance): void {
       ciphertext = decodeBase64Url(req.body.envelope.sealedKeyBundle, { min: 49, max: 10_000 });
       envelopeSignature = decodeBase64Url(req.body.envelope.signature, { exact: 64 });
     } catch {
-      return badRequest(reply, '访问开通数据校验失败，请刷新页面后重试');
+      return badRequest(reply, '自动访问交付数据校验失败，请刷新页面后重试');
     }
 
     try {
@@ -714,7 +744,7 @@ export function registerE2eeEnvelopeTaskRoutes(app: FastifyInstance): void {
           await tx.update(vaultEnvelopeTasks).set({
             status: 'cancelled', cancelledAt: new Date(), updatedAt: new Date(),
           }).where(eq(vaultEnvelopeTasks.id, task.id));
-          throw new TaskConflictError('成员权限已经变化，这项开通已取消');
+          return { statusCode: 409, response: { taskId: task.id } };
         }
         const recipientProfile = lockedRecipientProfile;
         if (
@@ -777,7 +807,7 @@ export function registerE2eeEnvelopeTaskRoutes(app: FastifyInstance): void {
           eq(vaultEnvelopeTasks.id, task.id),
           eq(vaultEnvelopeTasks.status, 'pending'),
         )).returning())[0];
-        if (!completed) throw new TaskConflictError('这项访问开通已由其他设备处理，请刷新成员列表');
+        if (!completed) throw new TaskConflictError('这项自动访问交付已由其他拥有者处理');
         const ownershipTransfer = (await tx.select().from(vaultOwnershipTransferRequests).where(and(
           eq(vaultOwnershipTransferRequests.envelopeTaskId, task.id),
           eq(vaultOwnershipTransferRequests.status, 'pending'),
@@ -812,6 +842,9 @@ export function registerE2eeEnvelopeTaskRoutes(app: FastifyInstance): void {
         });
         return { statusCode: 200, response: { taskId: completed.id } };
       });
+      if (result.statusCode === 409) {
+        return conflict(reply, '成员权限已经变化，这项自动交付已取消');
+      }
       const row = (await db.select().from(vaultEnvelopeTasks).where(
         eq(vaultEnvelopeTasks.id, result.response.taskId),
       ).limit(1))[0]!;
@@ -820,10 +853,10 @@ export function registerE2eeEnvelopeTaskRoutes(app: FastifyInstance): void {
       return reply.code(200).send(dto!);
     } catch (error) {
       if (error instanceof TaskNotFoundError) {
-        return reply.code(404).send({ statusCode: 404, error: 'Not Found', message: '这项访问开通已经不存在，请刷新成员列表' } as never);
+        return reply.code(404).send({ statusCode: 404, error: 'Not Found', message: '这项自动访问交付任务已经不存在' } as never);
       }
       if (error instanceof TaskConflictError || isUniqueViolation(error)) {
-        return conflict(reply, error instanceof Error ? error.message : '这项访问开通已经变化，请刷新成员列表');
+        return conflict(reply, error instanceof Error ? error.message : '这项自动访问交付已经变化');
       }
       throw error;
     }
@@ -890,7 +923,7 @@ async function finalizeOwnershipTransfer(
     task.capability !== 'full' ||
     task.authorizationKind !== 'direct' ||
     task.authorizationRef !== transfer.toOwnerUserId
-  ) throw new TaskConflictError('新拥有者还未开通当前密码库');
+  ) throw new TaskConflictError('系统仍在准备新拥有者的当前密码库访问');
   const completedEnvelope = await db.select({ id: vaultKeyEnvelopes.id }).from(vaultKeyEnvelopes).where(and(
       eq(vaultKeyEnvelopes.id, task.completedEnvelopeId),
       eq(vaultKeyEnvelopes.vaultId, transfer.vaultId),
@@ -912,7 +945,7 @@ async function finalizeOwnershipTransfer(
       eq(vaultMemberships.subjectId, transfer.fromOwnerUserId),
       eq(vaultMemberships.role, 'owner'),
     )).for('update').limit(1);
-  if (!completedEnvelope[0]) throw new TaskConflictError('新拥有者的密码库访问已经失效，请重新开通');
+  if (!completedEnvelope[0]) throw new TaskConflictError('新拥有者的密码库访问已经失效，请重新发起自动准备');
   if (!activeTarget[0]) throw new TaskConflictError('新拥有者已经停用');
   if (!currentOwner[0]) throw new TaskConflictError('发起用户已经不是密码库拥有者');
   await db.insert(vaultMemberships).values({
@@ -1084,7 +1117,7 @@ async function transferDto(
   const task = (await db.select().from(vaultEnvelopeTasks).where(
     eq(vaultEnvelopeTasks.id, transfer.envelopeTaskId),
   ).limit(1))[0];
-  if (!task) throw new TaskConflictError('所有权转移所需的访问开通记录不存在，请重新发起');
+  if (!task) throw new TaskConflictError('所有权转移所需的自动访问交付记录不存在，请重新发起');
   const epoch = (await db.select({
     keyPossessionPublicKey: vaultKeyEpochs.keyPossessionPublicKey,
   }).from(vaultKeyEpochs).where(and(

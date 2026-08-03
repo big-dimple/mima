@@ -29,8 +29,8 @@ export interface PersonalVaultRecoveryCandidate {
   targetDevice: typeof userDevices.$inferSelect;
 }
 
-/** 解析用户对单个库的生效角色。个人库：仅属主本人，角色恒为 owner。 */
-export async function getVaultAccess(
+/** 解析用户对单个库的实时授权，不以当前密钥信封是否已经生成作为前提。 */
+export async function getVaultAuthorization(
   db: DbOrTx,
   user: SessionUser,
   vaultId: string,
@@ -39,8 +39,7 @@ export async function getVaultAccess(
   const vault = vaultRows[0];
   if (!vault) return null;
   if (vault.kind === 'personal') {
-    const role = vault.ownerUserId === user.id ? 'owner' : null;
-    return { vault, role: await requireCurrentEnvelope(db, vault.id, user.id, role) };
+    return { vault, role: vault.ownerUserId === user.id ? 'owner' : null };
   }
   const memberships = await db
     .select()
@@ -67,11 +66,11 @@ export async function getVaultAccess(
     ],
     { userId: user.id, groups: [...user.groups, ...customGroupIds] },
   );
-  return { vault, role: await requireCurrentEnvelope(db, vault.id, user.id, role) };
+  return { vault, role };
 }
 
-/** 列出用户可见的全部库（含生效角色）。platform-admin 额外可见团队库元信息由路由自行决定。 */
-export async function listAccessibleVaults(db: DbOrTx, user: SessionUser): Promise<VaultAccess[]> {
+/** 列出用户实时获权的全部库；调用方不得据此开放密文内容读取。 */
+export async function listAuthorizedVaults(db: DbOrTx, user: SessionUser): Promise<VaultAccess[]> {
   const allVaults = await db.select().from(vaults);
   const teamIds = allVaults.filter((v) => v.kind === 'team').map((v) => v.id);
   const allMemberships = teamIds.length
@@ -96,10 +95,7 @@ export async function listAccessibleVaults(db: DbOrTx, user: SessionUser): Promi
   const result: VaultAccess[] = [];
   for (const vault of allVaults) {
     if (vault.kind === 'personal') {
-      if (vault.ownerUserId === user.id) {
-        const role = await requireCurrentEnvelope(db, vault.id, user.id, 'owner');
-        if (role) result.push({ vault, role });
-      }
+      if (vault.ownerUserId === user.id) result.push({ vault, role: 'owner' });
       continue;
     }
     const customRoles = allCustomRoles
@@ -109,10 +105,42 @@ export async function listAccessibleVaults(db: DbOrTx, user: SessionUser): Promi
       [...(byVault.get(vault.id) ?? []), ...customRoles],
       { userId: user.id, groups: [...user.groups, ...customGroupIds] },
     );
-    if (role) {
-      const envelopeRole = await requireCurrentEnvelope(db, vault.id, user.id, role);
-      if (envelopeRole) result.push({ vault, role: envelopeRole });
-    }
+    if (role) result.push({ vault, role });
+  }
+  return result;
+}
+
+/** 解析用户对单个库的可用访问；E2EE 库必须同时存在当前代、当前能力信封。 */
+export async function getVaultAccess(
+  db: DbOrTx,
+  user: SessionUser,
+  vaultId: string,
+): Promise<VaultAccess | null> {
+  const authorization = await getVaultAuthorization(db, user, vaultId);
+  if (!authorization) return null;
+  return {
+    vault: authorization.vault,
+    role: await requireCurrentEnvelope(
+      db,
+      authorization.vault.id,
+      user.id,
+      authorization.role,
+    ),
+  };
+}
+
+/** 列出已有当前信封、可以实际读取相应密文内容的全部库。 */
+export async function listAccessibleVaults(db: DbOrTx, user: SessionUser): Promise<VaultAccess[]> {
+  const authorized = await listAuthorizedVaults(db, user);
+  const result: VaultAccess[] = [];
+  for (const authorization of authorized) {
+    const role = await requireCurrentEnvelope(
+      db,
+      authorization.vault.id,
+      user.id,
+      authorization.role,
+    );
+    if (role) result.push({ vault: authorization.vault, role });
   }
   return result;
 }

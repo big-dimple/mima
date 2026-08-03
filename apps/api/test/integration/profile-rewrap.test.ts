@@ -1,9 +1,21 @@
+import { randomBytes } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { and, eq } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import type { UnlockChallenge, UserCryptoProfile } from '@mima/contracts';
 import { E2eeKeyring } from '../../../../packages/client-core/src/e2ee-keyring.ts';
-import { auditEvents, syncEvents, userCryptoProfiles } from '../../src/db/schema.ts';
+import {
+  auditEvents,
+  encryptedVaultHeaders,
+  syncEvents,
+  userCryptoProfiles,
+  userDevices,
+  vaultCryptoStates,
+  vaultEnvelopeTasks,
+  vaultKeyEpochs,
+  vaultMemberships,
+  vaults,
+} from '../../src/db/schema.ts';
 import type { SyncEventRow } from '../../src/services/bus.ts';
 import { verifyAuditChain } from '../../src/services/audit.ts';
 import {
@@ -166,6 +178,149 @@ describe('main-password profile rewrap', () => {
       headId: expect.any(Number),
       anchorId: expect.any(Number),
     });
+    await keyring.lock();
+  });
+
+  it('rebuilds pending vault delivery and publishes an automatic retry event after first setup', async () => {
+    const recipient = await login(app, 'dave');
+    const vault = (await app.ctx.db.insert(vaults).values({
+      kind: 'team',
+      name: '',
+      ownerUserId: null,
+    }).returning())[0]!;
+    await app.ctx.db.insert(vaultMemberships).values({
+      vaultId: vault.id,
+      subjectKind: 'user',
+      subjectId: recipient.userId,
+      role: 'viewer',
+    });
+    const creatorDeviceId = crypto.randomUUID();
+    await app.ctx.db.insert(userDevices).values({
+      id: creatorDeviceId,
+      userId: recipient.userId,
+      deviceType: 'web',
+      status: 'active',
+      trustMethod: 'master_password',
+      keyFingerprint: randomBytes(32).toString('base64url'),
+      publicEncryptionKey: randomBytes(32),
+      publicSigningKey: randomBytes(32),
+      certificatePayload: randomBytes(96),
+      certificateSignature: randomBytes(64),
+      activatedAt: new Date(),
+      lastSeenAt: new Date(),
+    });
+    await app.ctx.db.insert(vaultKeyEpochs).values({
+      vaultId: vault.id,
+      epoch: 1,
+      status: 'active',
+      reason: 'initial',
+      metadataKeyCommitment: randomBytes(32),
+      contentKeyCommitment: randomBytes(32),
+      recipientSetDigest: randomBytes(32),
+      createdByUserId: recipient.userId,
+      createdByDeviceId: creatorDeviceId,
+      activatedAt: new Date(),
+    });
+    await app.ctx.db.insert(encryptedVaultHeaders).values({
+      vaultId: vault.id,
+      headerVersion: 1,
+      keyEpoch: 1,
+      ciphertext: randomBytes(64),
+      nonce: randomBytes(24),
+      ciphertextDigest: randomBytes(32),
+      createdByDeviceId: creatorDeviceId,
+      signature: randomBytes(64),
+    });
+    await app.ctx.db.update(vaultCryptoStates).set({
+      storageMode: 'e2ee',
+      writeState: 'open',
+      activeEpoch: 1,
+      activeHeaderVersion: 1,
+      accessGeneration: 1,
+      rowVersion: 2,
+      cutoverAt: new Date(),
+      legacyReadDisabledAt: new Date(),
+    }).where(eq(vaultCryptoStates.vaultId, vault.id));
+    const originalTask = (await app.ctx.db.insert(vaultEnvelopeTasks).values({
+      vaultId: vault.id,
+      keyEpoch: 1,
+      authorizationKind: 'direct',
+      authorizationRef: recipient.userId,
+      recipientUserId: recipient.userId,
+      capability: 'full',
+      expectedProfileGeneration: null,
+    }).returning())[0]!;
+    const keyring = new E2eeKeyring();
+    const setup = await keyring.setup('recipient correct horse battery staple', {
+      accountId: recipient.userId,
+      deviceId: crypto.randomUUID(),
+      deviceName: 'Recipient browser',
+      platform: 'integration:test',
+    });
+    const published: SyncEventRow[] = [];
+    const unsubscribe = app.ctx.bus.subscribe((row) => published.push(row));
+    const create = await app.inject({
+      method: 'POST',
+      url: '/api/v2/crypto/profile',
+      ...authed(recipient),
+      payload: setup.request,
+    });
+    unsubscribe();
+    expect(create.statusCode, create.body).toBe(201);
+
+    const tasks = await app.ctx.db.select().from(vaultEnvelopeTasks).where(and(
+      eq(vaultEnvelopeTasks.vaultId, vault.id),
+      eq(vaultEnvelopeTasks.recipientUserId, recipient.userId),
+    ));
+    expect(tasks).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: originalTask.id, status: 'cancelled' }),
+      expect.objectContaining({
+        status: 'pending',
+        expectedProfileGeneration: 1,
+        authorizationKind: 'direct',
+        authorizationRef: recipient.userId,
+      }),
+    ]));
+    expect(published).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        type: 'vault.crypto_changed',
+        vaultId: vault.id,
+        payload: { recipientProfileChanged: true },
+      }),
+    ]));
+
+    const bootstrap = await app.inject({
+      method: 'GET',
+      url: '/api/v2/bootstrap',
+      ...authed(recipient),
+    });
+    expect(bootstrap.statusCode, bootstrap.body).toBe(200);
+    const body = bootstrap.json() as {
+      vaults: Array<{ id: string; kind: string }>;
+      envelopes: Array<{ vaultId: string }>;
+      headers: Array<{ vaultId: string }>;
+      items: Array<{ vaultId: string }>;
+    };
+    expect(body.vaults).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: vault.id, kind: 'team' }),
+    ]));
+    expect(body.envelopes.some((envelope) => envelope.vaultId === vault.id)).toBe(false);
+    expect(body.headers.some((header) => header.vaultId === vault.id)).toBe(false);
+    expect(body.items.some((item) => item.vaultId === vault.id)).toBe(false);
+
+    const stream = await openEventStream(recipient);
+    const event = await stream.waitFor((candidate) =>
+      candidate.type === 'vault.crypto_changed' &&
+      (candidate.state as { vaultId?: string } | undefined)?.vaultId === vault.id);
+    expect(event).toMatchObject({
+      type: 'vault.crypto_changed',
+      header: null,
+      state: {
+        vaultId: vault.id,
+        encryptedHeader: null,
+      },
+    });
+    await stream.close();
     await keyring.lock();
   });
 });

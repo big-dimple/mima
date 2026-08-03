@@ -111,7 +111,10 @@ describe('vault envelope task persistence', () => {
     expect(pending[0]!.expectedProfileGeneration).toBeNull();
 
     await app.ctx.db.insert(userCryptoProfiles).values(profile(recipient.userId));
-    await app.ctx.db.transaction((tx) => reconcilePendingEnvelopeTasksForProfile(tx, recipient.userId, 1));
+    const reconciliation = await app.ctx.db.transaction(
+      (tx) => reconcilePendingEnvelopeTasksForProfile(tx, recipient.userId, 1),
+    );
+    expect(reconciliation).toEqual({ rebuilt: 1, vaultIds: [vaultId] });
     await Promise.all([
       ensureEnvelopeTasks(app.ctx.db, {
         vaultId, keyEpoch: 1, authorizationKind: 'direct', authorizationRef: recipient.userId,

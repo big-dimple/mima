@@ -127,6 +127,7 @@ export function registerE2eeCryptoRoutes(app: FastifyInstance): void {
         : null;
       const now = new Date();
       const committed = await db.transaction(async (tx) => {
+        await lockRecipientSets(tx, [req.user.id]);
         const profile = (
           await tx.insert(userCryptoProfiles).values({
             userId: req.user.id,
@@ -160,7 +161,16 @@ export function registerE2eeCryptoRoutes(app: FastifyInstance): void {
           activatedAt: now,
           lastSeenAt: now,
         });
-        await reconcilePendingEnvelopeTasksForProfile(tx, req.user.id, 1, now);
+        const reconciliation = await reconcilePendingEnvelopeTasksForProfile(tx, req.user.id, 1, now);
+        const events: Awaited<ReturnType<typeof recordSyncEvent>>[] = [];
+        for (const vaultId of reconciliation.vaultIds) {
+          events.push(await recordSyncEvent(tx, {
+            type: 'vault.crypto_changed',
+            vaultId,
+            itemId: null,
+            payload: { recipientProfileChanged: true },
+          }));
+        }
         await tx.update(sessions).set({
           locked: false,
           unlockedDeviceId: req.body.device.id,
@@ -173,8 +183,9 @@ export function registerE2eeCryptoRoutes(app: FastifyInstance): void {
           success: true,
           details: {},
         });
-        return { profile, auditHead };
+        return { profile, events, auditHead };
       });
+      bus.publish(committed.events);
       recordAnchor(audit, committed.auditHead);
       reply.header('cache-control', 'no-store');
       return reply.code(201).send(toCryptoProfileDto(committed.profile));
@@ -420,7 +431,7 @@ export function registerE2eeCryptoRoutes(app: FastifyInstance): void {
             inArray(vaultKeyEnvelopes.status, ['active', 'pending']),
           ));
         }
-        await reconcilePendingEnvelopeTasksForProfile(
+        const envelopeTaskReconciliation = await reconcilePendingEnvelopeTasksForProfile(
           tx,
           req.user.id,
           req.body.newKeyVersion,
@@ -517,6 +528,15 @@ export function registerE2eeCryptoRoutes(app: FastifyInstance): void {
               payload: { pendingEpoch: task.toEpoch, taskId: task.id },
             }));
           }
+        }
+        for (const vaultId of envelopeTaskReconciliation.vaultIds) {
+          if (rekeyTasks.some((task) => task.vaultId === vaultId)) continue;
+          collect(await recordSyncEvent(tx, {
+            type: 'vault.crypto_changed',
+            vaultId,
+            itemId: null,
+            payload: { recipientProfileChanged: true },
+          }));
         }
         for (const revoked of revokedDevices) {
           collect(await recordSyncEvent(tx, {

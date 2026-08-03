@@ -37,9 +37,9 @@ export function GuideDialog({
             <h3 className={styles.sectionTitle}><ListChecks size={16} aria-hidden /> 先用起来</h3>
             <ol className={styles.list}>
               <li><strong>登录并解锁：</strong>通过平台官网、飞书或任何中间平台登录，再设置一个只在当前设备解密的主密码。</li>
-              <li><strong>先用个人库：</strong>个人密码库已自动准备好；点库名旁的铅笔改名，然后新建第一条记录。</li>
+              <li><strong>先用个人库：</strong>“我的密码库”已自动准备好；按首次引导新建第一条记录，也可以随时点铅笔改名。</li>
               <li><strong>再建团队库：</strong>点“团队”右侧的加号，填写名称即可创建，默认由你担任拥有者。</li>
-              <li><strong>添加同事：</strong>点团队库旁的成员按钮设置查看、编辑或审计权限。同事需要先登录一次并设置主密码，之后由密码库拥有者完成访问开通。</li>
+              <li><strong>添加同事：</strong>点团队库旁的成员按钮设置查看、编辑或审计权限。授权保存后无需再次操作；同事设置主密码后，系统会自动准备团队访问。</li>
               <li><strong>离开前锁定：</strong>点顶栏的锁定按钮；回来输入主密码即可继续。</li>
             </ol>
           </section>

@@ -36,11 +36,13 @@ The service should not receive:
 
 - master passwords or password-derived keys;
 - user/device private keys or active vault/content keys;
-- plaintext titles, accounts, URLs, notes, folders, tags or credentials;
+- plaintext vault names, titles, accounts, URLs, notes, folders, tags or credentials;
 - plaintext search indexes;
 - enterprise recovery shares.
 
 The Web E2EE model still trusts the JavaScript currently served to the browser. It does not protect against a malicious build, XSS, a compromised endpoint, a malicious browser extension, keylogging, screen capture, browser vulnerabilities or an authorized user exporting data. Weak master passwords may be guessed offline. Revocation cannot erase content a former member already viewed or copied.
+
+Platform administrators are inside the service trust boundary for operations but do not receive vault keys through that role. They cannot directly inspect master passwords, vault names or vault contents from the platform.
 
 ## Non-negotiable invariants
 
@@ -48,6 +50,8 @@ The Web E2EE model still trusts the JavaScript currently served to the browser. 
 - Group membership never grants `platform-admin`; the role requires an explicit local assignment.
 - A platform administrator does not automatically receive vault keys.
 - User groups express authorization sets and never own a shared group key.
+- Saving a user or group authorization is the complete product action. Only an unlocked owner client may generate the recipient's individual envelope in the background; the server never generates or holds a vault key, and ownership transfer still requires explicit acceptance.
+- If no owner client is unlocked, envelope delivery waits safely and resumes on the next owner unlock, reconnect or relevant crypto event without asking an administrator to approve the authorization again.
 - Locking destroys decrypted projections, search indexes and active key material; failures remain locked.
 - The API validates authorization, versions, signatures and ciphertext structure but does not implement client decryption.
 - Existing database migrations are immutable and protected by `apps/api/src/db/migration-lock.json`.

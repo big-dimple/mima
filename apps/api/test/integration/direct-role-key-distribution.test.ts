@@ -411,7 +411,7 @@ describe('direct membership key capability override', () => {
     });
     expect(blocked.statusCode, blocked.body).toBe(409);
     expect(blocked.json()).toMatchObject({
-      message: '移除或降权前，请先为另一位拥有者开通访问，并确认对方可以打开当前密码库',
+      message: '系统正在自动准备另一位拥有者的访问；确认其可以打开当前密码库前，不能移除或降权唯一可用拥有者',
     });
     expect((await app.ctx.db.select().from(vaultMemberships).where(and(
       eq(vaultMemberships.vaultId, vaultId),

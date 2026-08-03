@@ -493,7 +493,7 @@ export function registerE2eeAccountResetRoutes(app: FastifyInstance): void {
             inArray(vaultKeyEnvelopes.status, ['active', 'pending']),
           ));
         }
-        await reconcilePendingEnvelopeTasksForProfile(
+        const envelopeTaskReconciliation = await reconcilePendingEnvelopeTasksForProfile(
           tx,
           req.user.id,
           reset.newCryptoGeneration,
@@ -616,6 +616,15 @@ export function registerE2eeAccountResetRoutes(app: FastifyInstance): void {
               payload: { pendingEpoch: task.toEpoch, taskId: task.id },
             }));
           }
+        }
+        for (const vaultId of envelopeTaskReconciliation.vaultIds) {
+          if (rekeyTasks.some((task) => task.vaultId === vaultId)) continue;
+          collect(await recordSyncEvent(tx, {
+            type: 'vault.crypto_changed',
+            vaultId,
+            itemId: null,
+            payload: { recipientProfileChanged: true },
+          }));
         }
 
         const activatedReset = (await tx.update(accountCryptoResetRequests).set({

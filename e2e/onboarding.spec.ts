@@ -44,11 +44,12 @@ test.describe.serial('新手导览', () => {
     await dialog.getByRole('button', { name: '知道了' }).click();
   });
 
-  test('首次进入询问，完整导览后只持久化非敏感完成状态', async ({ page }) => {
+  test('首次进入直接开始，完整导览后只持久化非敏感完成状态', async ({ page }) => {
     await loginAndUnlock(page, 'bob', { skipGuide: false });
-    const prompt = page.getByRole('complementary', { name: '新手引导邀请' });
-    await expect(prompt).toBeVisible();
-    await prompt.getByRole('button', { name: '开始引导' }).click();
+    await expect(page.getByRole('complementary', { name: '新手引导邀请' })).toHaveCount(0);
+    await expect(page.getByRole('dialog', { name: '引导：选择密码库' })).toBeVisible();
+    expect(JSON.parse(await page.evaluate(() => localStorage.getItem('mima.guide.v1') ?? '{}')))
+      .toEqual({ promptShown: true, tourCompleted: false });
 
     const stepTitles = [
       '选择密码库',
@@ -89,16 +90,16 @@ test.describe.serial('新手导览', () => {
     await page.getByRole('button', { name: '跳过引导' }).click();
   });
 
-  test('暂不需要后不再打扰，也不伪装成已完成', async ({ page }) => {
+  test('跳过后不再自动启动，也不伪装成已完成', async ({ page }) => {
     await loginAndUnlock(page, 'carol', { skipGuide: false });
-    const prompt = page.getByRole('complementary', { name: '新手引导邀请' });
-    await expect(prompt).toBeVisible();
-    await prompt.getByRole('button', { name: '暂不需要' }).click();
+    const firstStep = page.getByRole('dialog', { name: '引导：选择密码库' });
+    await expect(firstStep).toBeVisible();
+    await firstStep.getByRole('button', { name: '跳过引导' }).click();
     const stored = await page.evaluate(() => localStorage.getItem('mima.guide.v1'));
     expect(JSON.parse(stored ?? '{}')).toEqual({ promptShown: true, tourCompleted: false });
     await page.reload();
     await unlockAfterReload(page, 'carol');
-    await expect(page.getByRole('complementary', { name: '新手引导邀请' })).toHaveCount(0);
+    await expect(page.getByRole('dialog', { name: '引导：选择密码库' })).toHaveCount(0);
   });
 });
 

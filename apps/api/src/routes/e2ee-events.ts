@@ -10,7 +10,9 @@ import {
 } from '../db/schema.ts';
 import {
   getVaultAccess,
+  getVaultAuthorization,
   listAccessibleVaults,
+  listAuthorizedVaults,
   listPersonalVaultRecoveryCandidates,
 } from '../services/access.ts';
 import type { SyncEventRow } from '../services/bus.ts';
@@ -35,12 +37,16 @@ export function registerEncryptedEventRoutes(app: FastifyInstance): void {
     reply.raw.write(':connected\n\n');
     let closed = false;
     let lastSent = cursor;
-    const [initialAccessible, initialRecoveryCandidates] = await Promise.all([
+    const [initialAccessible, initialAuthorized, initialRecoveryCandidates] = await Promise.all([
       listAccessibleVaults(db, user),
+      listAuthorizedVaults(db, user),
       listPersonalVaultRecoveryCandidates(db, user.id),
     ]);
     const known = new Set([
       ...initialAccessible.map((access) => access.vault.id),
+      ...initialAuthorized
+        .filter((access) => access.vault.kind === 'team')
+        .map((access) => access.vault.id),
       ...initialRecoveryCandidates.map((candidate) => candidate.vault.id),
     ]);
     const send = (event: EncryptedSyncEvent) => {
@@ -83,12 +89,16 @@ export function registerEncryptedEventRoutes(app: FastifyInstance): void {
         lastSent = Math.max(lastSent, row.id);
         return;
       }
-      const access = await getVaultAccess(db, user, row.vaultId);
+      const [access, authorization] = await Promise.all([
+        getVaultAccess(db, user, row.vaultId),
+        getVaultAuthorization(db, user, row.vaultId),
+      ]);
       const hasAccess = Boolean(access?.role);
+      const waitingForEnvelope = !hasAccess && authorization?.vault.kind === 'team' && Boolean(authorization.role);
       const recoveryRequired = !hasAccess && known.has(row.vaultId) &&
         (await listPersonalVaultRecoveryCandidates(db, user.id))
         .some((candidate) => candidate.vault.id === row.vaultId);
-      if (!hasAccess && !recoveryRequired) {
+      if (!hasAccess && !waitingForEnvelope && !recoveryRequired) {
         if (known.delete(row.vaultId)) send({ type: 'vault.revoked', cursor: row.id, vaultId: row.vaultId });
         else send({ type: 'sync.cursor', cursor: row.id });
         lastSent = Math.max(lastSent, row.id);
@@ -102,7 +112,7 @@ export function registerEncryptedEventRoutes(app: FastifyInstance): void {
         if (hasAccess) send({ type: 'item.deleted', cursor: row.id, vaultId: row.vaultId, itemId: row.itemId! });
         else send({ type: 'sync.cursor', cursor: row.id });
       } else if (row.type === 'vault.rekey_required' || row.payload.rekeyRequired === true) {
-        if (recoveryRequired) {
+        if (!hasAccess) {
           send({ type: 'sync.cursor', cursor: row.id });
           lastSent = Math.max(lastSent, row.id);
           return;
@@ -139,6 +149,7 @@ export function registerEncryptedEventRoutes(app: FastifyInstance): void {
               inArray(vaultRekeyJobs.status, ['pending', 'distributing', 'rewrapping', 'verifying', 'ready']),
             )).limit(1))[0]
           : null;
+        const canReceiveHeader = hasAccess || recoveryRequired;
         if (!state) send({ type: 'sync.cursor', cursor: row.id });
         else send({
           type: 'vault.crypto_changed',
@@ -150,14 +161,14 @@ export function registerEncryptedEventRoutes(app: FastifyInstance): void {
               : (state.writeState === 'frozen' ? 'frozen' : 'legacy'),
             activeEpoch: state.activeEpoch ?? 0,
             pendingEpoch: rekey?.toEpoch ?? null,
-            rekeyTaskId: recoveryRequired ? null : rekey?.id ?? null,
-            encryptedHeader: header ? encodeCipherBlob(header.nonce, header.ciphertext) : null,
+            rekeyTaskId: hasAccess && !recoveryRequired ? rekey?.id ?? null : null,
+            encryptedHeader: canReceiveHeader && header ? encodeCipherBlob(header.nonce, header.ciphertext) : null,
             migrationJobId: null,
             recoveryRequired,
             recoveryReason: recoveryRequired ? 'missing_current_full_envelope' : null,
             updatedAt: state.updatedAt.toISOString(),
           },
-          header: header ? {
+          header: canReceiveHeader && header ? {
             vaultId: header.vaultId,
             version: header.headerVersion,
             keyEpoch: header.keyEpoch,
@@ -188,17 +199,22 @@ export function registerEncryptedEventRoutes(app: FastifyInstance): void {
     while (buffer.length > 0) await deliver(buffer.shift()!);
     if (closed) return;
     ready = true;
-    const [authoritative, authoritativeRecoveryCandidates] = await Promise.all([
+    const [authoritative, authoritativeAuthorizations, authoritativeRecoveryCandidates] = await Promise.all([
       listAccessibleVaults(db, user),
+      listAuthorizedVaults(db, user),
       listPersonalVaultRecoveryCandidates(db, user.id),
+    ]);
+    const authoritativeVaultIds = new Set([
+      ...authoritative.map((access) => access.vault.id),
+      ...authoritativeAuthorizations
+        .filter((access) => access.vault.kind === 'team')
+        .map((access) => access.vault.id),
+      ...authoritativeRecoveryCandidates.map((candidate) => candidate.vault.id),
     ]);
     send({
       type: 'sync.ready',
       cursor: lastSent,
-      vaultIds: [
-        ...authoritative.map((access) => access.vault.id),
-        ...authoritativeRecoveryCandidates.map((candidate) => candidate.vault.id),
-      ],
+      vaultIds: [...authoritativeVaultIds],
     });
   });
 }

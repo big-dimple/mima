@@ -179,7 +179,7 @@ export function EnterpriseRecoveryRequestPanel({
       {!error && !loading && requests?.length === 0 && (
         <div className={styles.empty}>{recoveryRequired
           ? '管理员发起请求并完成两人审批后，这里会提供离线恢复包。'
-          : '当前没有需要你处理的恢复请求。仍有所有者能打开密码库时，应优先由所有者重新开通访问。'}</div>
+          : '当前没有需要你处理的恢复请求。仍有拥有者能打开密码库时，系统会在其下次解锁后自动恢复你的访问。'}</div>
       )}
       {requests && requests.length > 0 && (
         <form className={styles.requestForm} onSubmit={submit}>

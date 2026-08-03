@@ -220,16 +220,23 @@ export async function reconcilePendingEnvelopeTasksForProfile(
   userId: string,
   newGeneration: number,
   now = new Date(),
-): Promise<number> {
+): Promise<{ rebuilt: number; vaultIds: string[] }> {
   const pending = await db.select().from(vaultEnvelopeTasks).where(and(
     eq(vaultEnvelopeTasks.recipientUserId, userId),
     eq(vaultEnvelopeTasks.status, 'pending'),
   ));
   let rebuilt = 0;
+  const vaultIds = new Set<string>();
   for (const task of pending) {
-    await db.update(vaultEnvelopeTasks).set({
-      status: 'cancelled', cancelledAt: now, updatedAt: now,
-    }).where(eq(vaultEnvelopeTasks.id, task.id));
+    await cancelEnvelopeTasks(db, {
+      vaultId: task.vaultId,
+      authorizationKind: task.authorizationKind,
+      authorizationRef: task.authorizationRef,
+      recipientUserIds: [task.recipientUserId],
+      keyEpoch: task.keyEpoch,
+      capability: task.capability,
+      now,
+    });
     if (!await isEnvelopeTaskAuthorizationActive(db, task)) continue;
     await db.insert(vaultEnvelopeTasks).values({
       vaultId: task.vaultId,
@@ -242,32 +249,10 @@ export async function reconcilePendingEnvelopeTasksForProfile(
       status: 'pending',
       updatedAt: now,
     }).onConflictDoNothing();
-    const replacement = (await db.select({ id: vaultEnvelopeTasks.id }).from(vaultEnvelopeTasks).where(and(
-      eq(vaultEnvelopeTasks.vaultId, task.vaultId),
-      eq(vaultEnvelopeTasks.keyEpoch, task.keyEpoch),
-      eq(vaultEnvelopeTasks.authorizationKind, task.authorizationKind),
-      eq(vaultEnvelopeTasks.authorizationRef, task.authorizationRef),
-      eq(vaultEnvelopeTasks.recipientUserId, task.recipientUserId),
-      eq(vaultEnvelopeTasks.capability, task.capability),
-      eq(vaultEnvelopeTasks.status, 'pending'),
-    )).limit(1))[0];
-    if (replacement) {
-      await db.update(vaultOwnershipTransferRequests).set({
-        envelopeTaskId: replacement.id,
-        acceptanceIdempotencyKey: null,
-        acceptedByDeviceId: null,
-        acceptanceDigest: null,
-        acceptanceSignature: null,
-        acceptedAt: null,
-        updatedAt: now,
-      }).where(and(
-        eq(vaultOwnershipTransferRequests.envelopeTaskId, task.id),
-        eq(vaultOwnershipTransferRequests.status, 'pending'),
-      ));
-    }
+    vaultIds.add(task.vaultId);
     rebuilt += 1;
   }
-  return rebuilt;
+  return { rebuilt, vaultIds: [...vaultIds] };
 }
 
 export async function isEnvelopeTaskAuthorizationActive(
@@ -279,7 +264,7 @@ export async function isEnvelopeTaskAuthorizationActive(
     eq(vaultCryptoStates.vaultId, task.vaultId),
     eq(vaultCryptoStates.storageMode, 'e2ee'),
   )).limit(1))[0];
-  if (!state?.activeEpoch || state.activeEpoch !== task.keyEpoch || state.writeState !== 'open') return false;
+  if (!state?.activeEpoch || state.activeEpoch !== task.keyEpoch) return false;
 
   const effectiveCapability = await resolveAuthorizedVaultCapability(
     db,

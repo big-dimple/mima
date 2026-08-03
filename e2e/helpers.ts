@@ -35,9 +35,13 @@ export async function loginAndUnlock(
   const recordPageError = (error: Error) => {
     apiEvidence.push(`PAGEERROR ${error.name}: ${error.message}`);
   };
+  const recordConsoleError = (message: import('@playwright/test').ConsoleMessage) => {
+    if (message.type() === 'error') apiEvidence.push(`CONSOLE ${message.text()}`);
+  };
   page.on('response', recordResponse);
   page.on('requestfailed', recordFailure);
   page.on('pageerror', recordPageError);
+  page.on('console', recordConsoleError);
   if (options.skipGuide !== false) {
     await page.addInitScript(() => {
       localStorage.setItem(
@@ -52,7 +56,7 @@ export async function loginAndUnlock(
   const workspace = page.getByRole('region', { name: '凭证列表' });
   const setupHeading = page.getByRole('heading', { name: '创建主密码' });
   const lockedHeading = page.getByRole('heading', { name: '解锁你的密码库' });
-  const prepareHeading = page.getByRole('heading', { name: '准备你的密码库' });
+  const prepareHeading = page.getByRole('heading', { name: '正在准备工作台' });
   const rekeyHeading = page.getByRole('heading', { name: '密码库正在安全更新' });
   const errorAlert = page.getByRole('region', { name: '通知' }).getByRole('alert').last();
   await waitForAnyVisible([
@@ -90,6 +94,7 @@ export async function loginAndUnlock(
   page.off('response', recordResponse);
   page.off('requestfailed', recordFailure);
   page.off('pageerror', recordPageError);
+  page.off('console', recordConsoleError);
 }
 
 async function waitForAnyVisible(locators: Locator[], timeout: number): Promise<void> {
@@ -139,7 +144,7 @@ async function throwVisibleError(errorAlert: Locator, success: Locator[]): Promi
 }
 
 export async function initializeEmptyVaultIfNeeded(page: Page, name: string): Promise<void> {
-  const prepareHeading = page.getByRole('heading', { name: '准备你的密码库' });
+  const prepareHeading = page.getByRole('heading', { name: '正在准备工作台' });
   const workspace = page.getByRole('region', { name: '凭证列表' });
   await expect(prepareHeading.or(workspace)).toBeVisible({ timeout: 30_000 });
   if (await workspace.isVisible()) return;
@@ -163,7 +168,7 @@ export async function ensureLoginItem(
 ): Promise<void> {
   if (!input.useCurrentVault) {
     const navigation = page.getByRole('navigation', { name: '库导航' });
-    const personalVault = navigation.locator('button[title$="个人密码库"]').first();
+    const personalVault = navigation.locator('#personal-vaults button[data-tree-row="true"]').first();
     const availableLabels = await navigation.locator('button[aria-label]').evaluateAll((buttons) =>
       buttons.map((button) => button.getAttribute('aria-label')),
     );

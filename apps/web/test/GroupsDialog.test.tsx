@@ -62,7 +62,7 @@ describe('GroupsDialog', () => {
     expect(header.compareDocumentPosition(layout) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  it('explains member counts and pending access in plain language', async () => {
+  it('shows only member counts and keeps envelope delivery internal', async () => {
     const pendingGroup = { ...group, memberCount: 4, pendingEnvelopeCount: 2 };
     const api = {
       groups: vi.fn().mockResolvedValue([pendingGroup]),
@@ -70,11 +70,9 @@ describe('GroupsDialog', () => {
     };
     renderDialog(api);
 
-    expect(await screen.findByText('4 人 · 2 项待开通')).toBeVisible();
-    const help = screen.getByTestId('group-status-help');
-    expect(help).toHaveTextContent('人数是组内同事数');
-    expect(help).toHaveTextContent('同一人有两个库没开通，就会显示 2 项');
-    expect(help).toHaveTextContent('由对应密码库的拥有者在“管理成员”中开通');
+    expect(await screen.findByText('4 人')).toBeVisible();
+    expect(screen.queryByText(/待开通/)).not.toBeInTheDocument();
+    expect(screen.queryByTestId('group-status-help')).not.toBeInTheDocument();
   });
 
   it('moves selection with filtered results and clears stale details', async () => {

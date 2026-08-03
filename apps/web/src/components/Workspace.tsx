@@ -8,12 +8,12 @@ import { Header } from './Header.tsx';
 import { VaultNav } from './VaultNav.tsx';
 import { ItemList } from './ItemList.tsx';
 import { ItemDetail } from './ItemDetail.tsx';
-import { TourPrompt } from './TourPrompt.tsx';
 import { LoadingState } from './AsyncState.tsx';
 import { GuideDialog } from './GuideDialog.tsx';
 import { IconButton } from './IconButton.tsx';
 import { LegacyKeyRetirementBanner } from './LegacyKeyRetirementBanner.tsx';
 import { RecoveryCoverageBanner } from './RecoveryCoverageBanner.tsx';
+import { consumeAutomaticGuideStart } from '../utils/guide-storage.ts';
 import styles from './Workspace.module.css';
 
 const MembersDialog = lazy(() => import('./MembersDialog.tsx').then((m) => ({ default: m.MembersDialog })));
@@ -70,6 +70,10 @@ export function Workspace({
   useEffect(() => {
     preferredLayoutRef.current = preferredLayout;
   }, [preferredLayout]);
+
+  useEffect(() => {
+    if (consumeAutomaticGuideStart()) startTour();
+  }, [startTour]);
 
   useEffect(() => {
     const onResize = () => {
@@ -239,7 +243,6 @@ export function Workspace({
         <GuideDialog open={guideOpen} onClose={() => setGuideOpen(false)} onStartTour={startTour} />
         <OnboardingTour />
       </Suspense>
-      <TourPrompt />
     </div>
   );
 }

@@ -43,6 +43,7 @@ export interface MetaState {
   /** 权限被撤销的库（用于 UI 提示后清理）。 */
   lastRevokedVaultId: string | null;
   vaultCrypto: DecryptedBootstrapProjection['vaultCrypto'];
+  pendingVaultAccessIds: Record<string, true>;
   vaultDirectories: Record<string, VaultDirectoryEntry[]>;
 }
 
@@ -82,6 +83,7 @@ const initialState: MetaState = {
   conflicts: {},
   lastRevokedVaultId: null,
   vaultCrypto: {},
+  pendingVaultAccessIds: {},
   vaultDirectories: {},
 };
 
@@ -109,6 +111,7 @@ export function createMetaStore(hooks?: {
         }])),
         memberships: groupMemberships(data.memberships),
         pendingItemIds: {},
+        pendingVaultAccessIds: {},
         vaultDirectories: {},
       }),
 
@@ -128,6 +131,7 @@ export function createMetaStore(hooks?: {
           pendingItemIds: {},
           conflicts,
           vaultCrypto: data.vaultCrypto,
+          pendingVaultAccessIds: data.pendingVaultAccessIds ?? {},
           vaultDirectories: data.vaultDirectories,
         };
       }),
@@ -207,6 +211,8 @@ export function createMetaStore(hooks?: {
           delete memberships[event.vaultId];
           const vaultCrypto = { ...state.vaultCrypto };
           delete vaultCrypto[event.vaultId];
+          const pendingVaultAccessIds = { ...state.pendingVaultAccessIds };
+          delete pendingVaultAccessIds[event.vaultId];
           const vaultDirectories = { ...state.vaultDirectories };
           delete vaultDirectories[event.vaultId];
           const items = { ...state.items };
@@ -224,6 +230,7 @@ export function createMetaStore(hooks?: {
             memberships,
             items,
             vaultCrypto,
+            pendingVaultAccessIds,
             vaultDirectories,
             lastRevokedVaultId: event.vaultId,
           });
@@ -246,6 +253,7 @@ export function createMetaStore(hooks?: {
           const vaults = { ...state.vaults };
           const memberships = { ...state.memberships };
           const vaultCrypto = { ...state.vaultCrypto };
+          const pendingVaultAccessIds = { ...state.pendingVaultAccessIds };
           const vaultDirectories = { ...state.vaultDirectories };
           const items = { ...state.items };
           const dropped: string[] = [];
@@ -253,6 +261,7 @@ export function createMetaStore(hooks?: {
             delete vaults[vaultId];
             delete memberships[vaultId];
             delete vaultCrypto[vaultId];
+            delete pendingVaultAccessIds[vaultId];
             delete vaultDirectories[vaultId];
           }
           for (const [id, item] of Object.entries(items)) {
@@ -268,6 +277,7 @@ export function createMetaStore(hooks?: {
             memberships,
             items,
             vaultCrypto,
+            pendingVaultAccessIds,
             vaultDirectories,
             lastRevokedVaultId: staleVaultIds[staleVaultIds.length - 1] ?? state.lastRevokedVaultId,
           });
@@ -293,6 +303,7 @@ export function createMetaStore(hooks?: {
         pendingItemIds: {},
         conflicts: {},
         vaultCrypto: {},
+        pendingVaultAccessIds: {},
         vaultDirectories: {},
         epoch: state.epoch + 1,
       })),

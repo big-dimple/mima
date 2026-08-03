@@ -178,7 +178,7 @@ test.describe.serial('桌面、平板和手机布局', () => {
     await loginAndUnlock(page, 'bob');
     const personalVault = page
       .getByRole('navigation', { name: '库导航' })
-      .locator('button[title$="个人密码库"]')
+      .locator('#personal-vaults button[data-tree-row="true"]')
       .first();
     await expect(personalVault).toBeVisible();
     await personalVault.click();
@@ -270,12 +270,12 @@ test.describe.serial('桌面、平板和手机布局', () => {
         navigation = page.getByRole('dialog', { name: '密码库导航' });
         await expect(navigation).toBeVisible();
       }
-      const personalVault = navigation.locator('button[title$="个人密码库"]').first();
+      const personalVault = navigation.locator('#personal-vaults button[data-tree-row="true"]').first();
       if (await personalVault.getAttribute('aria-current') !== 'page') await personalVault.click();
       await expect(personalVault).toHaveAttribute('aria-current', 'page');
-      const collapsedDisclosure = navigation.getByRole('button', { name: /展开.*个人密码库/ });
-      if (await collapsedDisclosure.count()) await collapsedDisclosure.first().click();
-      await expect(navigation.getByRole('button', { name: /折叠.*个人密码库/ }).first()).toBeVisible();
+      const personalDisclosure = navigation.locator('#personal-vaults button[data-tree-disclosure]').first();
+      if (await personalDisclosure.getAttribute('aria-expanded') !== 'true') await personalDisclosure.click();
+      await expect(personalDisclosure).toHaveAttribute('aria-expanded', 'true');
       await navigation.getByRole('button', { name: '新建目录' }).click();
 
       const dialog = page.getByRole('dialog', { name: '新建目录' });
@@ -312,10 +312,6 @@ test.describe.serial('桌面、平板和手机布局', () => {
     const dialog = page.getByRole('dialog', { name: '管理用户组' });
     const list = dialog.getByTestId('groups-dialog-list');
     const main = dialog.getByTestId('groups-dialog-main');
-    const statusHelp = dialog.getByTestId('group-status-help');
-    await expect(statusHelp).toContainText('人数是组内同事数');
-    await expect(statusHelp).toContainText('同一人有两个库没开通，就会显示 2 项');
-    await expect(statusHelp).toContainText('由对应密码库的拥有者在“管理成员”中开通');
     const suffix = `${testInfo.retry}-${Date.now().toString(36)}`;
     const groupNames = Array.from(
       { length: 12 },
@@ -354,18 +350,15 @@ test.describe.serial('桌面、平板和手机布局', () => {
     const layoutBox = await dialog.getByTestId('groups-dialog-layout').boundingBox();
     const mainBox = await main.boundingBox();
     const nameBox = await dialog.getByLabel('名称').boundingBox();
-    const statusHelpBox = await statusHelp.boundingBox();
     const listBox = await list.boundingBox();
     expect(headerBox).not.toBeNull();
     expect(layoutBox).not.toBeNull();
     expect(mainBox).not.toBeNull();
     expect(nameBox).not.toBeNull();
-    expect(statusHelpBox).not.toBeNull();
     expect(listBox).not.toBeNull();
     expect(Math.abs(layoutBox!.y - (headerBox!.y + headerBox!.height))).toBeLessThanOrEqual(2);
     expect(nameBox!.y - mainBox!.y).toBeGreaterThanOrEqual(40);
     expect(nameBox!.y - mainBox!.y).toBeLessThanOrEqual(100);
-    expect(statusHelpBox!.y + statusHelpBox!.height).toBeLessThanOrEqual(listBox!.y);
     expect(listBox!.height).toBeGreaterThanOrEqual(180);
     expect(await main.evaluate((element) => element.scrollTop)).toBe(0);
     await expectNoHorizontalOverflow(page);

@@ -24,6 +24,8 @@ const DAVE_UPDATED_MAIN_PASSWORD = 'Dave-e2e-updated-main-password-2026';
 test.describe.serial('严格零知识工作台', () => {
   test('浏览器建钥、加密条目、错误主密码和真实锁定', async ({ page }) => {
     await loginAndUnlock(page, 'bob');
+    await expect(page.getByRole('button', { name: '我的密码库', exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: '正在准备工作台' })).toHaveCount(0);
     await ensureLoginItem(page, PERSONAL_ITEM);
 
     await page.getByRole('option', { name: new RegExp(PERSONAL_ITEM.title) }).click();
@@ -320,7 +322,7 @@ test.describe.serial('严格零知识工作台', () => {
       await dialog.getByRole('option', { name: /Carol Wu/ }).click();
       await dialog.getByLabel('权限').selectOption('viewer');
       await dialog.getByRole('button', { name: '授权', exact: true }).click();
-      await expect(dialog.getByRole('row', { name: /Carol Wu.*已开通/ })).toBeVisible({ timeout: 15_000 });
+      await expect(dialog.getByRole('row', { name: /Carol Wu.*查看/ })).toBeVisible({ timeout: 15_000 });
       await expect(dialog.getByRole('button', { name: '开通', exact: true })).toHaveCount(0);
       await dialog.getByRole('button', { name: '关闭' }).click();
 
@@ -491,11 +493,7 @@ test.describe.serial('严格零知识工作台', () => {
       await membersDialog.getByRole('button', { name: '授权', exact: true }).click();
       await expect(membersDialog.getByRole('row', { name: new RegExp(`${escapeRegExp(groupName)}.*查看`) }))
         .toBeVisible();
-
-      const pendingRow = membersDialog.locator('div', { hasText: /Bob Li.*完整访问/ }).last();
-      await pendingRow.getByRole('button', { name: '开通', exact: true }).click();
-      await expect(membersDialog.getByRole('row', { name: new RegExp(`${escapeRegExp(groupName)}.*已开通`) }))
-        .toBeVisible();
+      await expect(membersDialog.getByRole('button', { name: '开通', exact: true })).toHaveCount(0);
       await membersDialog.getByRole('button', { name: '关闭' }).click();
 
       await expect(bob.getByRole('button', { name: vaultName, exact: true })).toBeVisible({ timeout: 15_000 });
@@ -671,7 +669,7 @@ async function moveToFolderViaDialog(page: Page, itemTitle: string, targetFolder
 
 async function selectPersonalVault(page: Page): Promise<void> {
   const personalVault = page.getByRole('navigation', { name: '库导航' })
-    .locator('button[title$="个人密码库"]').first();
+    .locator('#personal-vaults button[data-tree-row="true"]').first();
   await expect(personalVault).toBeVisible();
   if (
     await personalVault.getAttribute('aria-current') !== 'page'

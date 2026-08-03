@@ -125,7 +125,7 @@ function SetupPanel({ user, onLoggedOut }: { user: SessionUser | null; onLoggedO
         </button>
       </form>
       <div className={styles.boundary}>
-        主密码、密码库名称和库内内容都不会以明文发送到服务器；平台管理员不能直接查看。
+        主密码、密码库名称和库内内容都不会以明文发送到服务器，包括平台管理员也不能从平台直接查看。
       </div>
       {user?.isLocalPlatformAdmin && (
         <AdminToolsDisclosure label="管理员设置（不影响主密码创建）">
@@ -313,7 +313,7 @@ function AccountResetPanel({ user, onLoggedOut }: { user: SessionUser | null; on
     setBusy(true);
     try {
       await zeroKnowledge.activateAccountCryptoReset(request, passwordRef.current?.value ?? '');
-      toast('warn', '新的解锁信息已启用。请优先让仍能打开密码库的拥有者重新开通访问；无人能打开时再使用企业恢复。');
+      toast('warn', '新的解锁信息已启用。系统会在仍能打开密码库的拥有者下次解锁后自动恢复访问；确认无人能打开时再使用企业恢复。');
     } catch (error) {
       toast('error', error instanceof Error ? error.message : '密码库解锁重置未完成');
     } finally {
@@ -586,15 +586,33 @@ function MigrationPanel({
   const pendingStates = Object.values(vaultCrypto).filter((state) => state.status !== 'e2ee');
   const toast = useUi((state) => state.toast);
   const [refreshKey, setRefreshKey] = useState(0);
+  const automaticPersonalRetryStarted = useRef(false);
+  const automaticPersonalRetryKey = pendingStates
+    .filter((state) => vaults[state.vaultId]?.kind === 'personal')
+    .map((state) => state.vaultId)
+    .sort()
+    .join(',');
   const refreshAll = async () => {
     await zeroKnowledge.refresh();
     setRefreshKey((value) => value + 1);
   };
+  useEffect(() => {
+    if (!automaticPersonalRetryKey || automaticPersonalRetryStarted.current) return;
+    automaticPersonalRetryStarted.current = true;
+    const timer = window.setTimeout(() => {
+      void zeroKnowledge.refresh()
+        .then(() => setRefreshKey((value) => value + 1))
+        .catch((error) => {
+          toast('error', error instanceof Error ? error.message : '个人密码库自动准备失败');
+        });
+    }, 600);
+    return () => window.clearTimeout(timer);
+  }, [automaticPersonalRetryKey, toast, zeroKnowledge]);
   return (
     <GateShell onLoggedOut={onLoggedOut}>
       <KeyRound size={24} className={styles.icon} aria-hidden />
-      <h1>准备你的密码库</h1>
-      <p>这是首次使用的第 2 步。新密码库只需起一个名称；只有系统检测到旧内容时，才会显示迁移步骤。</p>
+      <h1>正在准备工作台</h1>
+      <p>系统会自动准备“我的密码库”。只有检测到需要迁移的历史内容时，才会显示额外步骤。</p>
       <div className={styles.boundary}>
         密码库名称和内容都会在当前浏览器加密后再上传，服务器只保存加密后的数据。
       </div>
@@ -604,6 +622,7 @@ function MigrationPanel({
             key={state.vaultId}
             cryptoState={state}
             refreshKey={refreshKey}
+            personal={vaults[state.vaultId]?.kind === 'personal'}
             canDiscard={vaults[state.vaultId]?.kind === 'team'}
           />
         ))}
@@ -629,10 +648,12 @@ function MigrationPanel({
 function MigrationVaultRow({
   cryptoState,
   refreshKey,
+  personal,
   canDiscard,
 }: {
   cryptoState: VaultCryptoState;
   refreshKey: number;
+  personal: boolean;
   canDiscard: boolean;
 }) {
   const { zeroKnowledge } = useApp();
@@ -789,13 +810,22 @@ function MigrationVaultRow({
 
       {isEmptyInitialization && (
         <div className={styles.emptyVaultOption}>
-          <strong>创建密码库</strong>
-          <span>输入一个自己容易识别的名称。名称也会在当前浏览器加密后再上传。</span>
-          <PendingVaultInitializer
-            vaultId={cryptoState.vaultId}
-            canInitialize={Boolean(status?.materials)}
-            canDiscard={canDiscard}
-          />
+          {personal ? (
+            <>
+              <strong>正在自动准备“我的密码库”</strong>
+              <span>完成后会直接进入工作台，无需再设置密码库名称。</span>
+            </>
+          ) : (
+            <>
+              <strong>创建密码库</strong>
+              <span>输入一个自己容易识别的名称。名称也会在当前浏览器加密后再上传。</span>
+              <PendingVaultInitializer
+                vaultId={cryptoState.vaultId}
+                canInitialize={Boolean(status?.materials)}
+                canDiscard={canDiscard}
+              />
+            </>
+          )}
         </div>
       )}
     </section>

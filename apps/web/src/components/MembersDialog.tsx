@@ -7,7 +7,6 @@ import type {
   MembershipRole,
   SubjectKind,
   UserSearchResult,
-  VaultEnvelopeTask,
   VaultOwnershipTransfer,
 } from '@mima/contracts';
 import { canManageMembers, resolveEffectiveRole } from '@mima/domain';
@@ -26,12 +25,6 @@ const ROLES: { value: MembershipRole; label: string; desc: string }[] = [
 ];
 
 const EMPTY_MEMBERSHIPS: Membership[] = [];
-
-type EnvelopeTasksState = {
-  vaultId: string | null;
-  status: 'loading' | 'loaded' | 'error';
-  tasks: VaultEnvelopeTask[];
-};
 
 type OwnershipTransferState = {
   vaultId: string | null;
@@ -62,15 +55,8 @@ export function MembersDialog() {
   const [subjectId, setSubjectId] = useState('');
   const [role, setRole] = useState<MembershipRole>('viewer');
   const [transferTo, setTransferTo] = useState('');
-  const envelopeTasksRequestId = useRef(0);
   const ownershipTransferRequestId = useRef(0);
   const batchRunId = useRef(0);
-  const [envelopeTasksState, setEnvelopeTasksState] = useState<EnvelopeTasksState>({
-    vaultId: null,
-    status: 'loading',
-    tasks: [],
-  });
-  const [completingTaskId, setCompletingTaskId] = useState<string | null>(null);
   const [ownershipTransferState, setOwnershipTransferState] = useState<OwnershipTransferState>({
     vaultId: null,
     status: 'loading',
@@ -84,10 +70,6 @@ export function MembersDialog() {
   const [batchStatuses, setBatchStatuses] = useState<BatchGrantStatus[]>([]);
   const [batchRunning, setBatchRunning] = useState(false);
 
-  const envelopeTasks = envelopeTasksState.vaultId === vaultId ? envelopeTasksState.tasks : [];
-  const envelopeTasksStatus = envelopeTasksState.vaultId === vaultId
-    ? envelopeTasksState.status
-    : 'loading';
   const ownershipTransfer = ownershipTransferState.vaultId === vaultId
     ? ownershipTransferState.transfer
     : null;
@@ -112,26 +94,9 @@ export function MembersDialog() {
   }, [vaultId]);
 
   const close = () => {
-    envelopeTasksRequestId.current += 1;
     ownershipTransferRequestId.current += 1;
-    setEnvelopeTasksState({ vaultId: null, status: 'loading', tasks: [] });
     setOwnershipTransferState({ vaultId: null, status: 'loading', transfer: null });
     useUi.getState().openMembers(null);
-  };
-
-  const loadEnvelopeTasks = async () => {
-    const targetVaultId = vaultId;
-    if (!targetVaultId) return;
-    const requestId = ++envelopeTasksRequestId.current;
-    setEnvelopeTasksState({ vaultId: targetVaultId, status: 'loading', tasks: [] });
-    try {
-      const tasks = await zeroKnowledge.listEnvelopeTasks(targetVaultId);
-      if (envelopeTasksRequestId.current !== requestId) return;
-      setEnvelopeTasksState({ vaultId: targetVaultId, status: 'loaded', tasks });
-    } catch {
-      if (envelopeTasksRequestId.current !== requestId) return;
-      setEnvelopeTasksState({ vaultId: targetVaultId, status: 'error', tasks: [] });
-    }
   };
 
   const loadOwnershipTransfer = async () => {
@@ -165,11 +130,9 @@ export function MembersDialog() {
     void api.groups('owned').then((groups) => {
       if (current) setOwnedGroups(groups);
     }).catch(() => undefined);
-    void loadEnvelopeTasks();
     void loadOwnershipTransfer();
     return () => {
       current = false;
-      envelopeTasksRequestId.current += 1;
       ownershipTransferRequestId.current += 1;
     };
   }, [api, memberships, vaultId, zeroKnowledge]);
@@ -178,21 +141,15 @@ export function MembersDialog() {
 
   const add = async () => {
     if (!subjectId) return;
-    envelopeTasksRequestId.current += 1;
-    setEnvelopeTasksState({ vaultId, status: 'loading', tasks: [] });
     try {
       const result = await zeroKnowledge.setVaultMembership(vaultId, subjectKind, subjectId, role);
-      await loadEnvelopeTasks();
       setSubjectId('');
       toast('info', result.rekeyRequired
         ? '成员权限已更新，正在安全更新密码库访问'
         : result.envelopeTasks?.withoutProfile
-          ? '成员已加入；对方设置主密码后，请回来完成访问开通'
-          : result.envelopeTasks?.pending
-            ? '成员已加入；还需在“待开通访问”中完成开通'
-            : '成员授权和访问开通已完成');
+          ? '成员已加入；对方设置主密码后，系统会自动准备团队访问'
+          : '成员授权已保存，系统正在自动准备团队访问');
     } catch (err) {
-      await loadEnvelopeTasks();
       toast('error', err instanceof Error ? err.message : '操作失败');
     }
   };
@@ -238,10 +195,8 @@ export function MembersDialog() {
               ...status,
               state: 'success',
               message: result.envelopeTasks?.withoutProfile
-                ? '已授权，等待对方设置主密码'
-                : result.envelopeTasks?.pending
-                  ? '已授权，待完成访问开通'
-                  : '授权完成',
+                ? '授权完成，对方设置主密码后将自动准备'
+                : '授权完成，访问将自动准备',
             }
           : status));
       } catch (error) {
@@ -283,14 +238,13 @@ export function MembersDialog() {
     setRemovingMembershipKey(operationKey);
     try {
       const result = await zeroKnowledge.removeVaultMembership(vaultId, kind, id);
-      await loadEnvelopeTasks();
       toast('info', result.rekeyRequired
         ? '授权已移除，正在安全更新密码库访问'
         : result.retainedAccess
           ? kind === 'user'
             ? '这条授权已移除；对方仍可通过其他授权访问，无需额外处理'
             : '用户组授权已移除；部分同事仍可通过其他授权访问，无需额外处理'
-          : '授权已移除；对方此前尚未开通访问，无需额外处理');
+          : '授权已移除，无需额外处理');
     } catch (err) {
       toast('error', err instanceof Error ? err.message : '操作失败');
     } finally {
@@ -305,11 +259,6 @@ export function MembersDialog() {
         ? (ownedGroups.find((group) => group.id === id)?.name ?? id)
         : `旧目录组 · ${id}`;
 
-  const membershipTasks = (membership: Membership) => envelopeTasks.filter((task) =>
-    task.authorizationRef === membership.subjectId &&
-    task.authorizationKind === authorizationKind(membership.subjectKind)
-  );
-
   const myRole = user
     ? resolveEffectiveRole(memberships, { userId: user.id, groups: user.groups })
     : null;
@@ -317,13 +266,6 @@ export function MembersDialog() {
   const directOwnerCount = memberships.filter((membership) =>
     membership.subjectKind === 'user' && membership.role === 'owner'
   ).length;
-  const readyOwnerCount = envelopeTasksStatus === 'loaded'
-    ? memberships.filter((membership) =>
-        membership.subjectKind === 'user' &&
-        membership.role === 'owner' &&
-        membershipTasks(membership).length === 0
-      ).length
-    : 0;
 
   const transfer = async () => {
     if (!transferTo) return;
@@ -341,7 +283,6 @@ export function MembersDialog() {
       if (result.vaultId !== vaultId) throw new Error('所有权转移结果与当前密码库不一致，请刷新后重试');
       setOwnershipTransferState({ vaultId, status: 'loaded', transfer: result });
       setTransferTo('');
-      await loadEnvelopeTasks();
       toast('info', `已发起转移，等待 ${name} 在已解锁设备上确认接收`);
     } catch (err) {
       toast('error', err instanceof Error ? err.message : '转移失败');
@@ -367,10 +308,9 @@ export function MembersDialog() {
       const result = await zeroKnowledge.acceptVaultOwnershipTransfer(ownershipTransfer);
       if (result.vaultId !== vaultId) throw new Error('所有权转移结果与当前密码库不一致，请刷新后重试');
       setOwnershipTransferState({ vaultId, status: 'loaded', transfer: result });
-      await loadEnvelopeTasks();
       toast('info', result.status === 'completed'
         ? '已接收所有权，正在安全更新密码库访问'
-        : '已确认接收，等待当前拥有者完成访问开通');
+        : '已确认接收，系统正在完成所有权交接');
     } catch (error) {
       toast('error', error instanceof Error ? error.message : '确认接收失败');
       await loadOwnershipTransfer();
@@ -408,28 +348,6 @@ export function MembersDialog() {
     }
   };
 
-  const completeTask = async (task: VaultEnvelopeTask) => {
-    setCompletingTaskId(task.id);
-    try {
-      await zeroKnowledge.completeEnvelopeTask(task);
-      await loadEnvelopeTasks();
-      toast('info', '密码库访问已开通');
-    } catch (error) {
-      toast('error', error instanceof Error ? error.message : '访问开通失败');
-    } finally {
-      setCompletingTaskId(null);
-    }
-  };
-
-  const membershipKeyStatus = (membership: Membership) => {
-    if (envelopeTasksStatus === 'loading') return '正在检查访问状态';
-    if (envelopeTasksStatus === 'error') return '暂时无法确认';
-    const tasks = membershipTasks(membership);
-    if (tasks.some((task) => !task.recipientProfile)) return '等待对方设置主密码';
-    if (tasks.length > 0) return `${tasks.length} 项待开通`;
-    return '已开通';
-  };
-
   return (
     <Dialog.Root open onOpenChange={(open) => !open && !batchRunning && close()}>
       <Dialog.Portal>
@@ -443,14 +361,12 @@ export function MembersDialog() {
             <button className={dialogStyles.close} aria-label="关闭" disabled={batchRunning}><X size={16} /></button>
           </Dialog.Close>
 
-          {isOwner && envelopeTasksStatus === 'loaded' && readyOwnerCount < 2 && (
+          {isOwner && directOwnerCount <= 1 && (
             <div className={styles.ownerRisk} role="status">
               <ShieldAlert size={18} aria-hidden />
               <div>
-                <strong>{directOwnerCount <= 1 ? '当前只有一位拥有者' : '第二位拥有者尚未就绪'}</strong>
-                <span>{directOwnerCount <= 1
-                  ? '如果唯一拥有者忘记主密码、设备不可用或离职未交接，日常授权会中断。建议现在增加第二位拥有者。'
-                  : '拥有者角色已经保存，但对方暂时还打不开当前密码库。完成访问开通前，唯一可用拥有者不能被移除或降权。'}</span>
+                <strong>当前只有一位拥有者</strong>
+                <span>如果唯一拥有者忘记主密码、设备不可用或离职未交接，自动密钥交付会暂停。建议现在增加第二位拥有者。</span>
               </div>
               <button type="button" onClick={() => {
                 setSubjectKind('user');
@@ -465,11 +381,11 @@ export function MembersDialog() {
           <div className={styles.tableWrapper}>
             <table className={styles.table}>
               <thead>
-                <tr><th>主体</th><th>类型</th><th>角色</th><th>访问状态</th><th /></tr>
+                <tr><th>主体</th><th>类型</th><th>角色</th><th /></tr>
               </thead>
               <tbody>
                 {memberships.length === 0 && (
-                  <tr><td colSpan={5} className={styles.empty}>暂无授权</td></tr>
+                  <tr><td colSpan={4} className={styles.empty}>暂无授权</td></tr>
                 )}
                 {memberships.map((m) => (
                   <tr key={m.id}>
@@ -478,12 +394,11 @@ export function MembersDialog() {
                       {m.subjectKind === 'user' ? '用户' : m.subjectKind === 'custom_group' ? '平台用户组' : '旧目录组'}
                     </td>
                     <td data-label="角色">{ROLES.find((r) => r.value === m.role)?.label ?? m.role}</td>
-                    <td className={styles.kind} data-label="访问状态">{membershipKeyStatus(m)}</td>
                     <td data-label="操作">
                       {isOwner && !(
                         m.subjectKind === 'user' &&
                         m.role === 'owner' &&
-                        (envelopeTasksStatus !== 'loaded' || (membershipTasks(m).length === 0 && readyOwnerCount <= 1))
+                        directOwnerCount <= 1
                       ) && (
                         <IconButton
                           label="移除授权"
@@ -500,32 +415,6 @@ export function MembersDialog() {
               </tbody>
             </table>
           </div>
-
-          {isOwner && envelopeTasksStatus === 'loaded' && envelopeTasks.length > 0 && (
-            <div className={styles.addArea}>
-              <div className={styles.transferTitle}>待开通访问</div>
-              <p className={styles.taskHint}>这些同事已经获得权限，但还打不开当前密码库。由你在此开通即可，不需要对方领取文件。</p>
-              {envelopeTasks.map((task) => (
-                <div className={styles.taskRow} key={task.id}>
-                  <span>
-                    {nameOf('user', task.recipientUserId)} · {task.capability === 'metadata' ? '审计信息' : '完整访问'}
-                  </span>
-                  {task.recipientProfile ? (
-                    <button
-                      className={styles.addBtn}
-                      disabled={completingTaskId !== null}
-                      onClick={() => void completeTask(task)}
-                    >
-                      <KeyRound size={14} aria-hidden />
-                      {completingTaskId === task.id ? '正在开通' : '开通'}
-                    </button>
-                  ) : (
-                    <span className={styles.taskStatus}>等待对方设置主密码</span>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
 
           {isOwner && (
             <div className={styles.addArea}>
@@ -665,13 +554,13 @@ export function MembersDialog() {
               <p className={styles.transferStatus}>
                 {ownershipTransfer.acceptanceStatus === 'waiting'
                   ? !ownershipTransfer.envelopeReady
-                    ? '当前拥有者需要先为对方开通当前密码库；开通前，对方不能确认接收。'
+                    ? '系统正在自动准备目标用户的当前密码库访问；准备完成后才能确认接收。'
                     : ownershipTransfer.toOwnerUserId === user?.id
                       ? '当前设备已经可以打开密码库。确认前不会转移所有权。'
                       : `等待 ${nameOf('user', ownershipTransfer.toOwnerUserId)} 在已解锁设备上确认接收。`
                   : ownershipTransfer.status === 'completed'
                     ? '目标用户已确认，所有权转移已完成。'
-                    : '目标用户已确认，等待当前拥有者完成访问开通。'}
+                    : '目标用户已确认，系统正在完成所有权交接。'}
               </p>
               {ownershipTransfer.acceptanceStatus === 'waiting' &&
                 ownershipTransfer.toOwnerUserId === user?.id && (
@@ -684,7 +573,7 @@ export function MembersDialog() {
                       <KeyRound size={14} aria-hidden />
                       {acceptingTransfer
                         ? '正在确认'
-                        : ownershipTransfer.envelopeReady ? '确认接收' : '等待开通'}
+                        : ownershipTransfer.envelopeReady ? '确认接收' : '正在准备'}
                     </button>
                     <button
                       className={styles.cancelBtn}
@@ -735,19 +624,13 @@ export function MembersDialog() {
                   转移
                 </button>
               </div>
-              <p className={styles.note}>请先在上方把对方加入为查看或编辑成员，并完成访问开通。对方在自己的已解锁设备上确认后，你才会降为编辑。</p>
+              <p className={styles.note}>请先在上方把对方加入为查看或编辑成员。系统会自动准备其密码库访问；对方在自己的已解锁设备上确认后，你才会降为编辑。</p>
             </div>
           )}
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>
   );
-}
-
-function authorizationKind(kind: SubjectKind): VaultEnvelopeTask['authorizationKind'] {
-  if (kind === 'custom_group') return 'custom_group';
-  if (kind === 'group') return 'directory_group';
-  return 'direct';
 }
 
 function chunk<T>(values: T[], size: number): T[][] {
