@@ -20,6 +20,7 @@ import { useApp, useMeta } from '../state/app-context.ts';
 import { useUi } from '../state/ui-store.ts';
 import { readTextFile } from '../utils/read-text-file.ts';
 import { ErrorState, LoadingState } from './AsyncState.tsx';
+import { RecoveryAdministratorGuide } from './RecoveryAdministratorGuide.tsx';
 import styles from './RecoveryDialog.module.css';
 import { useOptionalRecoveryWorkspace } from './RecoveryWorkspaceContext.tsx';
 
@@ -232,6 +233,7 @@ function RecoveryWorkflow({
         metric={`${readiness.readyAdministratorCount}/${readiness.requiredAdministratorCount}`}
       >
         <p>名单来自系统已直授的 platform-admin，不在这里临时指定。三人需分别完成实名登录、主密码和可信设备准备。</p>
+        <RecoveryAdministratorGuide readiness={readiness} />
         <ul className={styles.adminReadinessList}>
           {readiness.administrators.map((administrator) => (
             <li key={administrator.userId} data-ready={administrator.ready}>

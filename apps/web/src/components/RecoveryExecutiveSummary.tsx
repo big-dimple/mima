@@ -7,6 +7,7 @@ import type {
   EnterpriseRecoveryWorkspace,
 } from '@mima/contracts';
 import { useApp } from '../state/app-context.ts';
+import { RecoveryAdministratorGuide } from './RecoveryAdministratorGuide.tsx';
 import styles from './RecoveryDialog.module.css';
 import { useOptionalRecoveryWorkspace } from './RecoveryWorkspaceContext.tsx';
 
@@ -104,6 +105,7 @@ export function RecoveryExecutiveSummary() {
         <ShieldCheck size={24} aria-hidden />
       </div>
       <p className={styles.summaryNext}>{state?.nextAction ?? '正在核对当前准备情况。'}</p>
+      {state && <RecoveryAdministratorGuide readiness={state.readiness} compact />}
       <ul className={styles.assuranceList}>
         <li><UsersRound size={16} aria-hidden /><span><strong>任何一个人都不能单独恢复</strong>每次需要两位管理员确认，并由三份离线材料中的任意两份共同完成。</span></li>
         <li><CheckCircle2 size={16} aria-hidden /><span><strong>只恢复已纳入保护的密码库</strong>恢复的是指定访问能力，不会找回员工旧主密码。</span></li>
