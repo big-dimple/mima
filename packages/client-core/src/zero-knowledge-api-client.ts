@@ -7,11 +7,13 @@ import type {
   ActivateAccountCryptoResetResponse,
   ApproveAccountCryptoResetRequest,
   ApproveEnterpriseRecoveryKeyRequest,
+  ApproveEnterpriseRecoveryCaseRequest,
   ApproveEnterpriseRecoveryRequest,
   ApproveLegacyKeyRetirementRequest,
   AuthConfig,
   CancelAccountCryptoResetRequest,
   CancelEnterpriseRecoveryKeyRequest,
+  CancelEnterpriseRecoveryCaseRequest,
   CancelEnterpriseRecoveryRequest,
   CompleteCryptoUnlockRequest,
   CompleteEnterpriseRecoveryRequest,
@@ -26,6 +28,7 @@ import type {
   DeleteUninitializedVaultRequest,
   CreateEncryptedItemRequest,
   CreateEnterpriseRecoveryRequest,
+  CreateEnterpriseRecoveryCaseRequest,
   DistributeEnterpriseRecoveryEnvelopeRequest,
   DistributeEnterpriseRecoveryEnvelopeResponse,
   CreateLegacyKeyRetirementRequest,
@@ -38,17 +41,22 @@ import type {
   EncryptedContentResponse,
   EncryptedItemMetadata,
   EnterpriseRecoveryCandidate,
+  EnterpriseRecoveryCase,
+  EnterpriseRecoveryCasePackage,
+  EnterpriseRecoveryCaseTransfer,
   EnterpriseRecoveryCoverage,
   EnterpriseRecoveryKey,
   EnterpriseRecoveryReadiness,
   EnterpriseRecoveryRequest,
   EnterpriseRecoveryWorkspace,
+  FinalizeEnterpriseRecoveryCaseRequest,
   ExtensionSessionResponse,
   InitializeVaultCryptoRequest,
   LegacyKeyRetirementResponse,
   LoginRequest,
   PairingCodeResponse,
   RegisterEnterpriseRecoveryKeyRequest,
+  UploadEnterpriseRecoveryCaseTransferRequest,
   RegisterCryptoDeviceRequest,
   RekeyMaterial,
   RekeyMaterialQuery,
@@ -357,6 +365,54 @@ export class ZeroKnowledgeApiClient {
 
   recoveryRequests(): Promise<EnterpriseRecoveryRequest[]> {
     return this.request('GET', '/api/v2/recovery/requests');
+  }
+
+  recoveryCases(): Promise<EnterpriseRecoveryCase[]> {
+    return this.request('GET', '/api/v2/recovery/cases');
+  }
+
+  recoveryCase(caseId: string): Promise<EnterpriseRecoveryCase> {
+    return this.request('GET', `/api/v2/recovery/cases/${caseId}`);
+  }
+
+  createRecoveryCase(request: CreateEnterpriseRecoveryCaseRequest): Promise<EnterpriseRecoveryCase> {
+    return this.request('POST', '/api/v2/recovery/cases', request);
+  }
+
+  finalizeRecoveryCase(
+    caseId: string,
+    request: FinalizeEnterpriseRecoveryCaseRequest,
+  ): Promise<EnterpriseRecoveryCase> {
+    return this.request('POST', `/api/v2/recovery/cases/${caseId}/target`, request);
+  }
+
+  approveRecoveryCase(
+    caseId: string,
+    request: ApproveEnterpriseRecoveryCaseRequest,
+  ): Promise<EnterpriseRecoveryCase> {
+    return this.request('POST', `/api/v2/recovery/cases/${caseId}/approve`, request);
+  }
+
+  cancelRecoveryCase(
+    caseId: string,
+    request: CancelEnterpriseRecoveryCaseRequest,
+  ): Promise<EnterpriseRecoveryCase> {
+    return this.request('POST', `/api/v2/recovery/cases/${caseId}/cancel`, request);
+  }
+
+  recoveryCasePackage(caseId: string): Promise<EnterpriseRecoveryCasePackage> {
+    return this.request('GET', `/api/v2/recovery/cases/${caseId}/package`);
+  }
+
+  uploadRecoveryCaseTransfer(
+    caseId: string,
+    request: UploadEnterpriseRecoveryCaseTransferRequest,
+  ): Promise<EnterpriseRecoveryCase> {
+    return this.request('POST', `/api/v2/recovery/cases/${caseId}/transfers`, request);
+  }
+
+  recoveryCaseTransfer(caseId: string): Promise<EnterpriseRecoveryCaseTransfer | null> {
+    return this.request('GET', `/api/v2/recovery/cases/${caseId}/transfer`);
   }
 
   recoveryWorkspace(): Promise<EnterpriseRecoveryWorkspace> {

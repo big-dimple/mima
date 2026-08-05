@@ -289,7 +289,9 @@ function recoveryClientFixture(
     isUnlocked: true,
     deviceId,
     currentGeneration: 1,
-    completeRecovery: vi.fn().mockResolvedValue({ idempotencyKey: crypto.randomUUID() }),
+    prepareRecovery: vi.fn().mockResolvedValue({ idempotencyKey: crypto.randomUUID() }),
+    commitRecovery: vi.fn().mockResolvedValue(undefined),
+    abortRecovery: vi.fn().mockResolvedValue(undefined),
     prepareEnterpriseRecoveryEnvelope: vi.fn().mockResolvedValue({}),
     decryptBootstrap: vi.fn().mockResolvedValue(projection),
     rekeyMaterialIntent: vi.fn().mockResolvedValue({ taskId: '', actorDeviceId: deviceId, signature: 'signature' }),
@@ -299,6 +301,9 @@ function recoveryClientFixture(
   } as unknown as E2eeKeyringPort & {
     rekeyMaterialIntent: ReturnType<typeof vi.fn>;
     prepareEnterpriseRecoveryEnvelope: ReturnType<typeof vi.fn>;
+    prepareRecovery: ReturnType<typeof vi.fn>;
+    commitRecovery: ReturnType<typeof vi.fn>;
+    abortRecovery: ReturnType<typeof vi.fn>;
     commitVaultRekey: ReturnType<typeof vi.fn>;
   };
   const storage = new MemoryEncryptedStorage();

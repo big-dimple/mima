@@ -1,27 +1,20 @@
 import * as Dialog from '@radix-ui/react-dialog';
 import {
-  ClipboardCheck,
   Clock3,
   LayoutDashboard,
   LifeBuoy,
   RefreshCw,
   Settings2,
   ShieldAlert,
-  ShieldPlus,
-  Wrench,
   X,
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import type { EnterpriseRecoveryKey } from '@mima/contracts';
-import { useApp, useMeta } from '../state/app-context.ts';
+import { useMeta } from '../state/app-context.ts';
 import { useUi } from '../state/ui-store.ts';
 import dialogStyles from './dialog.module.css';
 import styles from './RecoveryDialog.module.css';
 import { AdminAccountResetApprovals } from './SecurityGate.tsx';
-import { EnterpriseRecoveryRequestPanel } from './EnterpriseRecoveryRequestPanel.tsx';
-import { RecoveryCoverageTasks } from './RecoveryCoverageTasks.tsx';
 import { RecoveryKeyManager } from './RecoveryKeyManager.tsx';
-import { RecoveryExecutiveSummary } from './RecoveryExecutiveSummary.tsx';
 import {
   RecoveryWorkspaceProvider,
   useRecoveryWorkspace,
@@ -29,7 +22,7 @@ import {
 
 export { RecoveryKeyManager, parseEnterpriseRecoveryManifest } from './RecoveryKeyManager.tsx';
 
-type RecoverySection = 'overview' | 'setup' | 'approvals' | 'coverage' | 'maintenance' | 'mine';
+type RecoverySection = 'overview' | 'setup' | 'cases' | 'history';
 
 const ADMIN_NAVIGATION: Array<{
   id: RecoverySection;
@@ -37,15 +30,13 @@ const ADMIN_NAVIGATION: Array<{
   icon: typeof LayoutDashboard;
 }> = [
   { id: 'overview', label: '总览', icon: LayoutDashboard },
-  { id: 'setup', label: '准备恢复能力', icon: Settings2 },
-  { id: 'approvals', label: '待办审批', icon: ClipboardCheck },
-  { id: 'coverage', label: '密码库保护', icon: ShieldPlus },
-  { id: 'maintenance', label: '高级维护', icon: Wrench },
-  { id: 'mine', label: '我的恢复', icon: LifeBuoy },
+  { id: 'setup', label: '准备恢复', icon: Settings2 },
+  { id: 'cases', label: '恢复案件', icon: LifeBuoy },
+  { id: 'history', label: '历史记录', icon: Clock3 },
 ];
 
 const MEMBER_NAVIGATION = ADMIN_NAVIGATION.filter(({ id }) => (
-  id === 'overview' || id === 'coverage' || id === 'mine'
+  id === 'overview' || id === 'cases' || id === 'history'
 ));
 
 export function RecoveryDialog() {
@@ -77,27 +68,25 @@ function RecoveryWorkspaceCenter() {
   const { workspace, loading, refreshing, error, refreshedAt, refresh } = useRecoveryWorkspace();
   const [activeSection, setActiveSection] = useState<RecoverySection>('overview');
   const navigation = isLocalPlatformAdmin ? ADMIN_NAVIGATION : MEMBER_NAVIGATION;
-  const activeRequests = workspace?.requests.filter((request) => (
-    (request.status === 'pending' || request.status === 'approved')
-    && Date.parse(request.expiresAt) > Date.now()
+  const activeCases = (workspace?.cases ?? []).filter((entry) => (
+    ['waiting_for_target', 'pending_approval', 'approved', 'processing'].includes(entry.status)
   )) ?? [];
   const counts = useMemo<Partial<Record<RecoverySection, number>>>(() => ({
-    approvals: isLocalPlatformAdmin
-      ? (workspace?.candidates.length ?? 0) + activeRequests.filter((request) => (
-        request.targetUserId !== currentUserId && !request.approvalUserIds.includes(currentUserId)
+    cases: isLocalPlatformAdmin
+      ? activeCases.filter((entry) => (
+        entry.targetUserId !== currentUserId
+        && entry.status === 'pending_approval'
+        && !entry.approvalUserIds.includes(currentUserId)
       )).length
-      : 0,
-    coverage: workspace?.coverage?.vaults.filter((vault) => vault.canManage && !vault.covered).length ?? 0,
-    maintenance: workspace?.keys.filter((key) => key.status === 'pending' || key.status === 'staged').length ?? 0,
-    mine: activeRequests.filter((request) => request.targetUserId === currentUserId).length,
-  }), [activeRequests, currentUserId, isLocalPlatformAdmin, workspace]);
+      : activeCases.filter((entry) => entry.targetUserId === currentUserId).length,
+  }), [activeCases, currentUserId, isLocalPlatformAdmin]);
 
   return (
     <div className={styles.workspaceShell}>
       <header className={styles.workspaceHeader}>
         <div>
           <Dialog.Title className={dialogStyles.title}>企业恢复中心</Dialog.Title>
-          <span>管理员无法查看密码库内容；所有恢复都需要独立审批和离线材料。</span>
+          <span>包括平台管理员也绝对无法查看受保护库；这里只帮助本人恢复原有访问。</span>
         </div>
         <div className={styles.headerActions}>
           <span className={styles.refreshStatus} data-error={Boolean(error)} role="status">
@@ -162,37 +151,39 @@ function RecoveryWorkspaceCenter() {
             </div>
           )}
           {activeSection === 'overview' && (
-            isLocalPlatformAdmin
-              ? <RecoveryExecutiveSummary />
-              : <MemberRecoveryOverview />
+            <MemberRecoveryOverview />
           )}
-          {activeSection === 'setup' && isLocalPlatformAdmin && <RecoveryKeyManager />}
-          {activeSection === 'approvals' && isLocalPlatformAdmin && (
-            <section className={styles.paneSection} aria-labelledby="recovery-approvals-heading">
+          {activeSection === 'setup' && isLocalPlatformAdmin && (
+            <RecoveryKeyManager />
+          )}
+          {activeSection === 'cases' && (
+            <section className={styles.paneSection} aria-labelledby="recovery-cases-heading">
               <div className={styles.paneHeading}>
-                <span>管理员待办</span>
-                <h2 id="recovery-approvals-heading">待办审批</h2>
-                <p>先核对申请人、密码库和请求摘要。你的确认只推进流程，不能解密或查看内容。</p>
+                <span>{isLocalPlatformAdmin ? '管理员协助' : '我的协助'}</span>
+                <h2 id="recovery-cases-heading">恢复案件</h2>
+                <p>{isLocalPlatformAdmin
+                  ? '同事在公司群里求助后，从这里发起；两位管理员分别确认即可。'
+                  : '管理员发起后，你只需要设置新主密码，后续会自动完成。'}</p>
               </div>
-              <AdminAccountResetApprovals
-                showEmpty
-                recoveryWorkspace={workspace}
-                onRecoveryChanged={refresh}
-              />
+              {isLocalPlatformAdmin ? (
+                <AdminAccountResetApprovals
+                  showEmpty
+                  recoveryWorkspace={workspace}
+                  onRecoveryChanged={refresh}
+                />
+              ) : <RecoveryCaseList active />}
             </section>
           )}
-          {activeSection === 'coverage' && (
-            <section className={styles.paneSection} aria-labelledby="recovery-coverage-page-heading">
+          {activeSection === 'history' && (
+            <section className={styles.paneSection} aria-labelledby="recovery-history-heading">
               <div className={styles.paneHeading}>
-                <span>密码库所有者待办</span>
-                <h2 id="recovery-coverage-page-heading">密码库保护</h2>
-                <p>只有你能解锁并管理的密码库会出现在这里。平台不能代替所有者生成恢复保护。</p>
+                <span>处理记录</span>
+                <h2 id="recovery-history-heading">历史记录</h2>
+                <p>保留每次协助的结果和时间，不显示密码库名称或库内内容。</p>
               </div>
-              <RecoveryCoverageTasks showEmpty />
+              <RecoveryCaseList active={false} />
             </section>
           )}
-          {activeSection === 'maintenance' && isLocalPlatformAdmin && <RecoveryMaintenance />}
-          {activeSection === 'mine' && <EnterpriseRecoveryRequestPanel />}
         </main>
       </div>
     </div>
@@ -204,87 +195,53 @@ function MemberRecoveryOverview() {
     <section className={styles.paneSection} aria-labelledby="member-recovery-overview-heading">
       <div className={styles.paneHeading}>
         <span>恢复说明</span>
-        <h2 id="member-recovery-overview-heading">先判断是否真的需要企业恢复</h2>
-        <p>仍有可信设备或密码库所有者可以打开内容时，应优先直接恢复访问。企业恢复只处理所有正常入口都不可用的情况。</p>
+        <h2 id="member-recovery-overview-heading">忘记主密码时，管理员可以帮你恢复原有访问</h2>
+        <p>你直接在公司群里联系管理员即可，不需要自己找申请入口、下载工具或理解技术步骤。</p>
       </div>
       <div className={styles.boundaryGrid}>
-        <div><strong>不会找回旧主密码</strong><span>恢复完成后仍需在目标设备建立新的本机解锁能力。</span></div>
-        <div><strong>不会绕过原有权限</strong><span>只能恢复到已经拥有合法访问权的本人设备。</span></div>
-        <div><strong>需要多人共同完成</strong><span>两位管理员确认，再由两名离线材料保管人联合处理。</span></div>
-        <div><strong>每次请求单独核对</strong><span>恢复包、审批和结果都只属于本次请求，不能跨请求重复使用。</span></div>
+        <div><strong>旧主密码不会被找回</strong><span>你会设置一个新主密码。</span></div>
+        <div><strong>只恢复原有权限</strong><span>系统不会借恢复流程给你新增任何密码库权限。</span></div>
+        <div><strong>需要两位管理员确认</strong><span>任何一位管理员都不能单独完成恢复。</span></div>
+        <div><strong>管理员不能代替你</strong><span>包括平台管理员也绝对无法查看受保护库，更不能登录你的账号。</span></div>
       </div>
     </section>
   );
 }
 
-function RecoveryMaintenance() {
-  const { api } = useApp();
-  const toast = useUi((state) => state.toast);
-  const { workspace, refresh } = useRecoveryWorkspace();
-  const [busyId, setBusyId] = useState<string | null>(null);
-  const keys = workspace?.keys ?? [];
-
-  const cancelKey = async (key: EnterpriseRecoveryKey) => {
-    const confirmed = await useUi.getState().requestConfirm({
-      title: '取消本次恢复能力准备？',
-      body: '这会结束当前未启用的公开清单。已经分发到线下的对应恢复材料应按公司制度销毁；已正式启用的恢复能力不会受影响。',
-      confirmText: '确认取消',
-      cancelText: '返回',
-      danger: true,
-    });
-    if (!confirmed) return;
-    setBusyId(key.id);
-    try {
-      await api.cancelRecoveryKey(key.id, {
-        idempotencyKey: crypto.randomUUID(),
-        ceremonyEvidenceDigest: key.ceremonyEvidenceDigest,
-      });
-      toast('info', '本次恢复能力准备已取消');
-      await refresh();
-    } catch (caught) {
-      toast('error', caught instanceof Error ? caught.message : '取消失败');
-    } finally {
-      setBusyId(null);
-    }
-  };
-
+function RecoveryCaseList({ active }: { active: boolean }) {
+  const currentUserId = useMeta((state) => state.user?.id ?? '');
+  const isLocalPlatformAdmin = useMeta((state) => state.user?.isLocalPlatformAdmin ?? false);
+  const { workspace } = useRecoveryWorkspace();
+  const rows = (workspace?.cases ?? []).filter((entry) => {
+    if (!isLocalPlatformAdmin && entry.targetUserId !== currentUserId) return false;
+    const ongoing = ['waiting_for_target', 'pending_approval', 'approved', 'processing'].includes(entry.status);
+    return active ? ongoing : !ongoing;
+  });
+  if (rows.length === 0) return <div className={styles.empty}>{active ? '当前没有进行中的恢复协助。' : '还没有历史记录。'}</div>;
   return (
-    <section className={styles.paneSection} aria-labelledby="recovery-maintenance-heading">
-      <div className={styles.paneHeading}>
-        <span>低频操作</span>
-        <h2 id="recovery-maintenance-heading">高级维护</h2>
-        <p>这里只处理未完成准备的取消和历史核对。正式启用的恢复能力不能在浏览器中直接删除。</p>
-      </div>
-      {keys.length === 0 ? (
-        <div className={styles.empty}>还没有企业恢复公开清单。</div>
-      ) : (
-        <ul className={styles.maintenanceList}>
-          {keys.map((key) => (
-            <li key={key.id}>
-              <div>
-                <strong>{recoveryKeyStatusLabel(key.status)}</strong>
-                <span><Clock3 size={14} aria-hidden />{new Date(key.createdAt).toLocaleString()}</span>
-                <code>{key.keyFingerprint}</code>
-              </div>
-              {(key.status === 'pending' || key.status === 'staged') && (
-                <button type="button" disabled={busyId !== null} onClick={() => void cancelKey(key)}>
-                  {busyId === key.id ? '正在取消…' : '取消本次准备'}
-                </button>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
-    </section>
+    <ul className={styles.maintenanceList}>
+      {rows.map((entry) => (
+        <li key={entry.id}>
+          <div>
+            <strong>{isLocalPlatformAdmin ? entry.targetDisplayName : (entry.kind === 'forgot_password' ? '忘记主密码' : '交接中断')}</strong>
+            <span>{caseStatusLabel(entry)} · {new Date(entry.createdAt).toLocaleString()}</span>
+            <span>原有密码库 {entry.items.length} 个，已恢复 {entry.resolvedItemCount} 个{entry.skippedItemCount ? `，已跳过 ${entry.skippedItemCount} 个失效权限` : ''}</span>
+          </div>
+        </li>
+      ))}
+    </ul>
   );
 }
 
-function recoveryKeyStatusLabel(status: EnterpriseRecoveryKey['status']) {
-  if (status === 'pending') return '等待第二位管理员确认';
-  if (status === 'staged') return '等待密码库覆盖或正式启用';
-  if (status === 'active') return '当前启用';
-  if (status === 'retired') return '已退役';
-  if (status === 'compromised') return '已标记为不可信';
+function caseStatusLabel(entry: import('@mima/contracts').EnterpriseRecoveryCase) {
+  if (entry.status === 'waiting_for_target') {
+    return entry.kind === 'forgot_password' ? '等待用户设置新主密码' : '正在自动准备恢复';
+  }
+  if (entry.status === 'pending_approval') return '等待两位管理员确认';
+  if (entry.status === 'approved' || entry.status === 'processing') return '正在自动恢复';
+  if (entry.status === 'completed') return '已完成';
+  if (entry.status === 'completed_with_skips') return '已完成，失效权限已跳过';
+  if (entry.status === 'expired') return '已过期';
   return '已取消';
 }
 

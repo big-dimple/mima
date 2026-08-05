@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import {
+  createEnterpriseRecoveryKit,
+  createVaultKeyGrant,
   createVaultKeys,
   destroyKeyPair,
   destroyVaultKeys,
@@ -11,8 +13,9 @@ import {
   type SigningKeyPair,
   type VaultKeys,
 } from '@mima/e2ee';
+import { createRecoveryCaseTransfer } from '../src/case-transfer.ts';
 import { createRecoveryTransfer } from '../src/transfer.ts';
-import type { RecoveryInput } from '../src/protocol.ts';
+import type { RecoveryCaseInput, RecoveryInput } from '../src/protocol.ts';
 
 const vaults: VaultKeys[] = [];
 const keyPairs: Array<EncryptionKeyPair | SigningKeyPair> = [];
@@ -44,6 +47,61 @@ describe('recovery tool transfer capability', () => {
     });
     vaults.push(opened);
     expect(opened.contentKey !== undefined).toBe(capability === 'full');
+  });
+
+  it('uses two shares once and returns one result for every vault in the case', async () => {
+    const kit = await createEnterpriseRecoveryKit('multi-vault-case');
+    const target = await generateEncryptionKeyPair();
+    const ownerSigner = await generateSigningKeyPair();
+    keyPairs.push(target, ownerSigner);
+    const inputs: RecoveryInput[] = [];
+    for (const [index, capability] of (['full', 'metadata'] as const).entries()) {
+      const vaultKeys = await createVaultKeys(index + 1);
+      vaults.push(vaultKeys);
+      const vaultId = `20000000-0000-4000-8000-00000000000${index + 1}`;
+      const recoveryEnvelope = await createVaultKeyGrant(
+        vaultKeys,
+        kit.publicKey,
+        ownerSigner.privateKey,
+        {
+          vaultId,
+          recipientKind: 'recovery',
+          recipientId: '30000000-0000-4000-8000-000000000001',
+          recipientKeyVersion: 1,
+          capability: 'recovery',
+          signerUserId: 'u-owner',
+          signerKeyVersion: 1,
+        },
+      );
+      inputs.push({
+        ...recoveryInput(capability, target.publicKey),
+        requestId: `10000000-0000-4000-8000-00000000000${index + 1}`,
+        vaultId,
+        epoch: index + 1,
+        recovery: {
+          keyId: '30000000-0000-4000-8000-000000000001',
+          ceremonyId: kit.ceremonyId,
+          ceremonyDigest: kit.ceremonyDigest,
+          publicKey: kit.publicKey,
+        },
+        recoveryEnvelope,
+        trustedOwnerSigningPublicKey: ownerSigner.publicKey,
+      });
+    }
+    const input: RecoveryCaseInput = {
+      protocol: 'mima-e2ee-v2',
+      kind: 'enterprise-recovery-case-package',
+      caseId: '40000000-0000-4000-8000-000000000001',
+      caseDigest: 'F'.repeat(43),
+      recovery: inputs[0]!.recovery,
+      items: inputs,
+    };
+
+    const result = await createRecoveryCaseTransfer(input, [kit.shares[0]!, kit.shares[2]!]);
+
+    expect(result.results).toHaveLength(2);
+    expect(result.results.map((entry) => entry.vaultId)).toEqual(inputs.map((entry) => entry.vaultId));
+    expect(result.results.map((entry) => entry.targetCapability)).toEqual(['full', 'metadata']);
   });
 });
 

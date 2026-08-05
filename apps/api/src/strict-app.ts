@@ -6,6 +6,7 @@ import { registerE2eeAuditRoutes } from './routes/e2ee-audit.ts';
 import { registerE2eeCryptoRoutes } from './routes/e2ee-crypto.ts';
 import { registerE2eeVaultRoutes } from './routes/e2ee-vaults.ts';
 import { registerE2eeRecoveryRoutes } from './routes/e2ee-recovery.ts';
+import { registerE2eeRecoveryCaseRoutes } from './routes/e2ee-recovery-cases.ts';
 import { registerE2eeExtensionRoutes } from './routes/e2ee-extension.ts';
 import { registerE2eeEnvelopeTaskRoutes } from './routes/e2ee-envelope-tasks.ts';
 import { registerE2eeAccountResetRoutes } from './routes/e2ee-account-reset.ts';
@@ -24,6 +25,7 @@ export async function buildStrictApp(opts: BuildStrictAppOptions = {}): Promise<
   registerE2eeLegacyKeyRetirementRoutes(app);
   registerE2eeVaultRoutes(app);
   registerE2eeRecoveryRoutes(app);
+  registerE2eeRecoveryCaseRoutes(app);
   registerE2eeExtensionRoutes(app);
   registerE2eeEnvelopeTaskRoutes(app);
 

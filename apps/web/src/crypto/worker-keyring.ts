@@ -335,14 +335,29 @@ export class WorkerKeyring implements E2eeKeyringPort {
     return this.forward('prepareEnterpriseRecoveryEnvelope', args);
   }
 
-  completeRecovery(
+  prepareInterruptedHandoffRecoveryCase(
+    ...args: Parameters<E2eeKeyring['prepareInterruptedHandoffRecoveryCase']>
+  ): ReturnType<E2eeKeyring['prepareInterruptedHandoffRecoveryCase']> {
+    return this.forward('prepareInterruptedHandoffRecoveryCase', args);
+  }
+
+  prepareRecovery(
     userId: string,
     request: EnterpriseRecoveryRequest,
     recoveryKey: EnterpriseRecoveryKey,
     header: EncryptedVaultHeader,
     offlineResult: OfflineRecoveryResult,
+    idempotencyKey?: string,
   ): Promise<CompleteEnterpriseRecoveryRequest> {
-    return this.forward('completeRecovery', [userId, request, recoveryKey, header, offlineResult]);
+    return this.forward('prepareRecovery', [userId, request, recoveryKey, header, offlineResult, idempotencyKey]);
+  }
+
+  commitRecovery(requestId: string): Promise<void> {
+    return this.forward('commitRecovery', [requestId]);
+  }
+
+  abortRecovery(requestId: string): Promise<void> {
+    return this.forward('abortRecovery', [requestId]);
   }
 
   approveExtensionEnrollment(

@@ -162,6 +162,10 @@ function isAllowedWhileLocked(method: string, route: string): boolean {
   if (route === '/api/v2/recovery/requests/:requestId' && method === 'GET') return true;
   if (route === '/api/v2/recovery/requests/:requestId/package' && method === 'GET') return true;
   if (route === '/api/v2/recovery/requests/:requestId/approve' && method === 'POST') return true;
+  if (route === '/api/v2/recovery/cases' && method === 'GET') return true;
+  if (route === '/api/v2/recovery/cases/:caseId' && method === 'GET') return true;
+  if (route === '/api/v2/recovery/cases/:caseId/target' && method === 'POST') return true;
+  if (route === '/api/v2/recovery/cases/:caseId/cancel' && method === 'POST') return true;
   return route === '/api/session/lock' || route === '/api/session/unlock' || route === '/api/session/reauth';
 }
 

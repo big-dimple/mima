@@ -61,6 +61,7 @@ import {
   resolveAuthorizedVaultCapability,
 } from '../services/vault-envelope-tasks.ts';
 import { hasLocalPlatformAdminRole } from '../services/system-roles.ts';
+import { listEnterpriseRecoveryCases } from './e2ee-recovery-cases.ts';
 import {
   lockEnterpriseRecoveryAdministration,
   lockEnterpriseRecoveryCoverage,
@@ -146,12 +147,13 @@ export function registerE2eeRecoveryRoutes(app: FastifyInstance): void {
       : await db.select().from(enterpriseRecoveryRequests)
           .where(eq(enterpriseRecoveryRequests.targetUserId, req.user.id))
           .orderBy(desc(enterpriseRecoveryRequests.createdAt));
-    const [readiness, coverage, candidates] = await Promise.all([
+    const [readiness, coverage, candidates, cases] = await Promise.all([
       canManage ? enterpriseRecoveryReadinessDto(db) : Promise.resolve(null),
       workflowKey && ['staged', 'active'].includes(workflowKey.status)
         ? enterpriseRecoveryCoverageDto(db, workflowKey.id, req.user.id, canManage)
         : Promise.resolve(null),
       canManage ? listPersonalVaultRecoveryCandidates(db) : Promise.resolve([]),
+      listEnterpriseRecoveryCases(db, req.user.id, canManage),
     ]);
     reply.header('cache-control', 'no-store');
     return {
@@ -160,6 +162,7 @@ export function registerE2eeRecoveryRoutes(app: FastifyInstance): void {
       readiness,
       coverage,
       requests: await Promise.all(requestRows.map((request) => recoveryRequestDto(db, request))),
+      cases,
       candidates: candidates.map((candidate) => ({
         vaultId: candidate.vault.id,
         targetUserId: candidate.user.id,
@@ -1030,8 +1033,11 @@ export function registerE2eeRecoveryRoutes(app: FastifyInstance): void {
           request.vaultId,
           req.user.id,
         );
-        if (!actor || actor.id !== request.targetDeviceId) {
-          throw new RecoveryRequestError(403, '必须由恢复请求绑定的目标设备确认');
+        if (!actor || req.sessionRow.locked || req.sessionRow.unlockedDeviceId !== actor.id) {
+          throw new RecoveryRequestError(403, '请先用新主密码解锁后再继续');
+        }
+        if (request.caseId === null && actor.id !== request.targetDeviceId) {
+          throw new RecoveryRequestError(403, '这次旧版恢复申请需要在发起时使用的页面完成');
         }
         const state = stateRows[0];
         const envelope = req.body.recoveredEnvelope;
@@ -1049,7 +1055,7 @@ export function registerE2eeRecoveryRoutes(app: FastifyInstance): void {
           userId: req.user.id,
           vaultId: request.vaultId,
           request: { requestId: request.id, ...without(req.body, 'targetConfirmationSignature') },
-        })) throw new RecoveryRequestError(401, '目标设备确认签名无效');
+        })) throw new RecoveryRequestError(401, '当前登录确认失败，请重新登录后重试');
         let ciphertext; let signature;
         try {
           ciphertext = decodeBase64Url(envelope.sealedKeyBundle, { min: 49, max: 10_000 });
@@ -1278,6 +1284,7 @@ async function recoveryRequestDto(
     .where(eq(enterpriseRecoveryApprovals.requestId, row.id));
   return {
     id: row.id,
+    caseId: row.caseId,
     vaultId: row.vaultId,
     recoveryKeyId: row.recoveryKeyId,
     keyEpoch: row.keyEpoch,

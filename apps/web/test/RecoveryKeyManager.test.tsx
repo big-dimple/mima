@@ -21,27 +21,28 @@ beforeEach(() => {
 
 describe('enterprise recovery key manager', () => {
   it('accepts only the public manifest and maps its evidence digest to registration', async () => {
-    const pending = recoveryKey('pending');
+    const pending = { ...recoveryKey('pending'), approvalUserIds: ['admin-3'] };
     const api = {
       recoveryKeys: vi.fn()
         .mockResolvedValueOnce([])
         .mockResolvedValueOnce([pending]),
       recoveryReadiness: vi.fn().mockResolvedValue(readyAdministrators()),
       registerRecoveryKey: vi.fn().mockResolvedValue(pending),
+      approveRecoveryKey: vi.fn().mockResolvedValue(pending),
     };
     renderManager(api);
 
-    expect(await screen.findByText(/企业可选的兜底能力/)).toBeVisible();
-    expect(screen.getByText(/三份恢复材料不得上传、截图/)).toHaveTextContent('同一保管位置');
-    const input = screen.getByLabelText('公开清单 manifest.json');
+    expect(await screen.findByText(/只需准备一次/)).toBeVisible();
+    expect(screen.getByText(/恢复材料绝不能上传/)).toBeVisible();
+    const input = screen.getByLabelText('选择企业恢复公开清单');
 
     await userEvent.upload(input, new File(
       ['share-1-private-canary.mimashare'],
       'not-a-manifest.json',
       { type: 'application/json' },
     ));
-    expect(await screen.findByRole('alert')).toHaveTextContent('不是有效 JSON');
-    expect(screen.getByRole('button', { name: '登记公开清单' })).toBeDisabled();
+    expect(await screen.findByRole('alert')).toHaveTextContent('不是有效的公开清单');
+    expect(screen.getByRole('button', { name: '登记并完成第一次确认' })).toBeDisabled();
     expect(api.registerRecoveryKey).not.toHaveBeenCalled();
 
     await userEvent.upload(input, new File(
@@ -49,8 +50,9 @@ describe('enterprise recovery key manager', () => {
       'manifest.json',
       { type: 'application/json' },
     ));
-    expect(await screen.findByText('manifest.json')).toBeVisible();
-    await userEvent.click(screen.getByRole('button', { name: '登记公开清单' }));
+    expect(await screen.findByText(/manifest.json 文件检查通过/)).toBeVisible();
+    await userEvent.click(screen.getByRole('checkbox'));
+    await userEvent.click(screen.getByRole('button', { name: '登记并完成第一次确认' }));
     await waitFor(() => expect(api.registerRecoveryKey).toHaveBeenCalledWith({
       ceremonyId: pending.ceremonyId,
       publicEncryptionKey: pending.publicEncryptionKey,
@@ -59,12 +61,15 @@ describe('enterprise recovery key manager', () => {
       shareCount: 3,
       ceremonyEvidenceDigest: pending.ceremonyEvidenceDigest,
     }));
+    expect(api.approveRecoveryKey).toHaveBeenCalledWith(pending.id, {
+      idempotencyKey: expect.any(String),
+      ceremonyEvidenceDigest: pending.ceremonyEvidenceDigest,
+    });
     expect(input).toHaveValue('');
-    expect(await screen.findByText('1/2')).toBeVisible();
-    expect(screen.getByText('恢复材料摘要')).toBeVisible();
+    expect(await screen.findByText(/你的确认已经完成/)).toBeVisible();
   });
 
-  it('binds approval and activation to the digest after readiness and coverage are complete', async () => {
+  it('automatically activates after the second approval and background coverage complete', async () => {
     const pending = recoveryKey('pending');
     const staged = recoveryKey('staged');
     const active = recoveryKey('active');
@@ -80,23 +85,20 @@ describe('enterprise recovery key manager', () => {
     };
     renderManager(api, true);
 
-    await userEvent.click(await screen.findByRole('button', { name: '核对公开清单并批准' }));
+    await userEvent.click(await screen.findByRole('button', { name: '核对并确认' }));
+    await userEvent.click(screen.getByRole('button', { name: '已经核对，确认' }));
     await waitFor(() => expect(api.approveRecoveryKey).toHaveBeenCalledWith(pending.id, {
       idempotencyKey: expect.any(String),
       ceremonyEvidenceDigest: pending.ceremonyEvidenceDigest,
     }));
-
-    await userEvent.click(await screen.findByRole('button', { name: '正式启用企业恢复' }));
-    expect(screen.getByText(/三份恢复材料已经交给三个独立保管人/)).toBeVisible();
-    await userEvent.click(screen.getByRole('button', { name: '确认保管并启用' }));
     await waitFor(() => expect(api.activateRecoveryKey).toHaveBeenCalledWith(pending.id, {
-      idempotencyKey: expect.any(String),
+      idempotencyKey: `activate-${pending.id}`,
       ceremonyEvidenceDigest: pending.ceremonyEvidenceDigest,
     }));
-    expect(await screen.findByText('企业恢复当前已启用。')).toBeVisible();
+    expect(await screen.findByText('企业恢复已经准备完成。')).toBeVisible();
   });
 
-  it('keeps activation unavailable while any existing vault is uncovered', async () => {
+  it('waits in the background while any existing vault is uncovered', async () => {
     const staged = recoveryKey('staged');
     const api = {
       recoveryKeys: vi.fn().mockResolvedValue([staged]),
@@ -106,10 +108,8 @@ describe('enterprise recovery key manager', () => {
     };
     renderManager(api);
 
-    const activate = await screen.findByRole('button', { name: '正式启用企业恢复' });
-    expect(activate).toBeDisabled();
-    expect(screen.getByText('密码库覆盖尚未完成，启用操作不可用。')).toBeVisible();
-    expect(screen.getByText(/还有 1 个密码库待处理/)).toBeVisible();
+    expect(await screen.findByText('系统正在后台保护现有密码库：1/2')).toBeVisible();
+    expect(screen.queryByRole('button', { name: /启用企业恢复/ })).not.toBeInTheDocument();
     expect(api.activateRecoveryKey).not.toHaveBeenCalled();
   });
 
@@ -121,15 +121,15 @@ describe('enterprise recovery key manager', () => {
     };
     renderManager(api, false, 'admin-1');
 
-    expect(await screen.findByText(/你已批准，等待另一名管理员/)).toBeVisible();
-    expect(screen.queryByRole('button', { name: '核对公开清单并批准' })).not.toBeInTheDocument();
+    expect(await screen.findByText(/你的确认已经完成/)).toBeVisible();
+    expect(screen.queryByRole('button', { name: '核对并确认' })).not.toBeInTheDocument();
   });
 
   it('rejects manifests with any non-public field', () => {
     expect(() => parseEnterpriseRecoveryManifest(JSON.stringify({
       ...publicManifest(),
       share: 'private-share-canary',
-    }))).toThrow('已拒绝导入');
+    }))).toThrow('不要选择恢复材料');
   });
 });
 

@@ -18,7 +18,7 @@ describe('versioned migration upgrade acceptance', () => {
     await resetDatabase(comparisonDatabaseName);
   });
 
-  it('preserves frozen 0001 data through 0023 and an idempotent replay', async () => {
+  it('preserves frozen 0001 data through 0024 and an idempotent replay', async () => {
     await resetDatabase();
     await createDatabase();
 
@@ -126,8 +126,8 @@ describe('versioned migration upgrade acceptance', () => {
         SELECT count(*)::int AS count, max(id) AS head FROM schema_migrations
       `);
       expect(migrations.rows[0]).toEqual({
-        count: 23,
-        head: '0023_enterprise_recovery_integrity',
+        count: 24,
+        head: '0024_enterprise_recovery_cases',
       });
 
       await verification.query(`
@@ -342,7 +342,7 @@ describe('versioned migration upgrade acceptance', () => {
       await seedRecoveryIntegrityUpgradeFixture(client);
       const before = await logicalV4Digest(client, '0023_enterprise_recovery_integrity');
 
-      await runMigrations(databaseUrl);
+      await applyMigration(client, '0023_enterprise_recovery_integrity');
 
       expect(await logicalV4Digest(client, '0023_enterprise_recovery_integrity')).toBe(before);
       expect((await client.query<{
@@ -436,6 +436,24 @@ async function applyMigrationsThrough(client: pg.Client, head: string): Promise<
     if (migration.id === head) return;
   }
   throw new Error(`migration head not found: ${head}`);
+}
+
+async function applyMigration(client: pg.Client, id: string): Promise<void> {
+  const path = resolve(import.meta.dirname, `../../src/db/migrations/${id}.sql`);
+  const source = readFileSync(path, 'utf8');
+  const checksum = createHash('sha256').update(source).digest('hex');
+  await client.query('BEGIN');
+  try {
+    await client.query(source);
+    await client.query(
+      'INSERT INTO schema_migrations (id, checksum) VALUES ($1, $2)',
+      [id, checksum],
+    );
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  }
 }
 
 async function seedRecoveryIntegrityUpgradeFixture(client: pg.Client): Promise<void> {

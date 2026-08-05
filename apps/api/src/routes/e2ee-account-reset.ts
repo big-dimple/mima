@@ -712,6 +712,7 @@ async function accountResetDto(
     .where(eq(accountCryptoResetVaults.requestId, row.id));
   return {
     id: row.id,
+    caseId: row.caseId,
     targetUserId: row.targetUserId,
     expectedProfileVersion: row.expectedProfileVersion,
     expectedKeyVersion: row.expectedCryptoGeneration,

@@ -42,7 +42,9 @@ The service should not receive:
 
 The Web E2EE model still trusts the JavaScript currently served to the browser. It does not protect against a malicious build, XSS, a compromised endpoint, a malicious browser extension, keylogging, screen capture, browser vulnerabilities or an authorized user exporting data. Weak master passwords may be guessed offline. Revocation cannot erase content a former member already viewed or copied.
 
-Platform administrators are inside the service trust boundary for operations but do not receive vault keys through that role. They cannot directly inspect master passwords, vault names or vault contents from the platform.
+Platform administrators are inside the service trust boundary for operations but do not receive vault keys through that role. Including platform administrators, nobody can use the platform to inspect a protected vault. Enterprise recovery can only return an approved set of still-valid permissions to the original user; it does not expose a browsing path or let an administrator sign in as that user.
+
+For a recovery case, the recovered vault envelope is addressed to the user's new account public key, not to the browser where the new master password was chosen. After the second approval activates that encrypted account profile, the user may sign in from any browser, unlock with the new master password, and complete recovery through that browser's current active session. The service still verifies the user key, active session, current device signature, key generation, live authorization, vault epoch and recovery evidence without receiving a password or private key.
 
 ## Non-negotiable invariants
 
@@ -75,5 +77,7 @@ Do not replace algorithms, parameters, AAD, canonical encoding or envelope forma
 `deploy/runtime.env`, `.mima/`, backups and recovery artifacts must never be committed. A complete server recovery requires the database plus runtime keys, audit keys, identity secrets and the stable extension identity. Backups created by `deploy/mima.sh backup` are sensitive and are not additionally encrypted by the script.
 
 Enterprise recovery is optional and disabled by default. When enabled, three shares are created offline and any two are required. Shares must stay outside the server, Git, chat, tickets and normal backups.
+
+For a forgotten master password, an administrator starts one recovery case, the user chooses a new master password, and two different administrators confirm the user's identity. Unlocked owner clients restore access automatically. Only vaults that no owner can open require the offline wizard, which handles the whole approved case with any two different shares. Revoked permissions, stale key generations and expired cases are filtered before any envelope is delivered.
 
 See [DEPLOYMENT.md](DEPLOYMENT.md) for the operational procedure and [LLMWIKI.md](LLMWIKI.md) for implementation invariants.

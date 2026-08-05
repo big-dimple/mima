@@ -4,7 +4,7 @@
   "version": "0.2.0",
   "type": "module",
   "scripts": {
-    "build": "tsup --config tsup.config.ts",
+    "build": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\" && tsup --config tsup.config.ts && node scripts/build-wizard.mjs",
     "start": "tsx src/cli.ts",
     "typecheck": "tsc -p tsconfig.json"
   },

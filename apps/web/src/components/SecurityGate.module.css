@@ -231,7 +231,8 @@
   font-weight: 600;
 }
 
-.resetForm input {
+.resetForm input,
+.resetForm select {
   width: 100%;
   min-height: var(--control-standard);
   padding: 8px 10px;

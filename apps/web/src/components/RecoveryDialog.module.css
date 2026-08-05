@@ -697,6 +697,20 @@
   font-weight: 600;
 }
 
+.manifestForm .attestationLine {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: start;
+  gap: 8px;
+  line-height: 1.55;
+}
+
+.attestationLine input {
+  width: 16px;
+  height: 16px;
+  margin: 1px 0 0;
+}
+
 .fileInput,
 .requestForm select {
   width: 100%;

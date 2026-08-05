@@ -1,4 +1,4 @@
-import { Terminal } from 'lucide-react';
+import { Settings2 } from 'lucide-react';
 import type { EnterpriseRecoveryReadiness } from '@mima/contracts';
 import styles from './RecoveryDialog.module.css';
 
@@ -26,11 +26,11 @@ export function RecoveryAdministratorGuide({
     return (
       <div className={styles.adminProvisioningGuide} data-compact={compact}>
         <strong className={styles.adminProvisioningHeading}>
-          管理员人数已满足，无需再次执行授权命令
+          管理员人数已满足，还有人需要完成首次使用
         </strong>
         <p>
-          已直授 {readiness.administratorCount} 名管理员，其中 {readiness.readyAdministratorCount} 名已准备。
-          请按管理员列表补齐主密码、当前设备、实名 OIDC 或账号启用状态，然后重新登录或刷新本页。
+          已设置 {readiness.administratorCount} 名管理员，其中 {readiness.readyAdministratorCount} 名已经可以参与确认。
+          其余管理员登录一次、设置主密码并进入工作台后，再刷新本页即可。
         </p>
       </div>
     );
@@ -39,25 +39,21 @@ export function RecoveryAdministratorGuide({
   return (
     <div className={styles.adminProvisioningGuide} data-compact={compact}>
       <strong className={styles.adminProvisioningHeading}>
-        <Terminal size={15} aria-hidden />
-        还需直授 {assignmentGap} 名系统管理员
+        <Settings2 size={15} aria-hidden />
+        还需设置 {assignmentGap} 名恢复管理员
       </strong>
-      <p>候选人先用企业账号登录平台一次，再由有服务器权限的运维人员进入部署目录执行：</p>
-      <div className={styles.adminCommandList} aria-label="系统管理员维护命令">
-        <code>{ADMIN_COMMANDS.list}</code>
-        <code>{ADMIN_COMMANDS.grant}</code>
-        {!compact && <code>{ADMIN_COMMANDS.revoke}</code>}
-      </div>
-      <p>
-        命令中的 &lt;登录用户名&gt; 是登录用户名，不是显示名称。授权后，该管理员需设置主密码、准备当前设备，
-        再重新登录或刷新本页。
-      </p>
-      {!compact && (
-        <p>
-          需要更换管理员时先用 revoke 撤销旧人，再用 grant 授予新人。平台不提供自助授予，避免账号自行提权；
-          系统管理员角色本身不能解密或查看任何受保护密码库。
-        </p>
-      )}
+      <p>候选人先用公司账号登录平台一次，然后请有服务器权限的人按下面说明设置。平台内不能自行提升权限。</p>
+      <details>
+        <summary>服务器管理员操作说明</summary>
+        <p>进入本项目的部署目录，在终端运行：</p>
+        <div className={styles.adminCommandList} aria-label="恢复管理员维护命令">
+          <code>{ADMIN_COMMANDS.list}</code>
+          <code>{ADMIN_COMMANDS.grant}</code>
+          {!compact && <code>{ADMIN_COMMANDS.revoke}</code>}
+        </div>
+        <p>&lt;登录用户名&gt; 填公司登录账号。更换人员时先撤销旧账号，再设置新账号。</p>
+      </details>
+      <p>设置完成后，该管理员登录并设置主密码即可。包括平台管理员也绝对无法查看受保护库。</p>
     </div>
   );
 }

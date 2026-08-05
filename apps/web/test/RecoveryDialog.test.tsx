@@ -34,15 +34,13 @@ describe('enterprise recovery center', () => {
     expect(await screen.findByRole('heading', { name: '企业恢复中心' })).toBeVisible();
     expect(screen.getByRole('navigation', { name: '企业恢复功能' })).toBeVisible();
     expect(screen.getByRole('button', { name: '总览' })).toBeVisible();
-    expect(screen.getByRole('button', { name: '密码库保护' })).toBeVisible();
-    expect(screen.getByRole('button', { name: '我的恢复' })).toBeVisible();
-    expect(screen.queryByRole('button', { name: '准备恢复能力' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: '待办审批' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: '管理者入门' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '恢复案件' })).toBeVisible();
+    expect(screen.getByRole('button', { name: '历史记录' })).toBeVisible();
+    expect(screen.queryByRole('button', { name: '准备恢复' })).not.toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole('button', { name: '我的恢复' }));
-    expect(await screen.findByRole('heading', { name: '我的恢复' })).toBeVisible();
-    expect(screen.getByText(/当前没有需要你处理的恢复请求/)).toBeVisible();
+    await userEvent.click(screen.getByRole('button', { name: '恢复案件' }));
+    expect(await screen.findByRole('heading', { name: '恢复案件' })).toBeVisible();
+    expect(screen.getByText(/当前没有进行中的恢复协助/)).toBeVisible();
     expect(api.recoveryWorkspace).toHaveBeenCalledTimes(1);
   });
 
@@ -74,10 +72,13 @@ describe('enterprise recovery center', () => {
       </AppContext.Provider>,
     );
 
-    expect(await screen.findByText('未准备')).toBeVisible();
-    for (const label of ['总览', '准备恢复能力', '待办审批', '密码库保护', '高级维护', '我的恢复']) {
+    expect(await screen.findByRole('heading', { name: '企业恢复中心' })).toBeVisible();
+    for (const label of ['总览', '准备恢复', '恢复案件', '历史记录']) {
       expect(screen.getByRole('button', { name: label })).toBeVisible();
     }
+    await userEvent.click(screen.getByRole('button', { name: '准备恢复' }));
+    expect(await screen.findByRole('heading', { name: '准备企业恢复' })).toBeVisible();
+    expect(screen.getByText(/还需设置 3 名恢复管理员/)).toBeVisible();
     await waitFor(() => expect(api.recoveryWorkspace).toHaveBeenCalledTimes(1));
     expect(screen.queryByText('第一次管理企业恢复？')).not.toBeInTheDocument();
   });
@@ -91,5 +92,6 @@ function emptyWorkspace(): EnterpriseRecoveryWorkspace {
     coverage: null,
     requests: [],
     candidates: [],
+    cases: [],
   };
 }

@@ -4730,6 +4730,11 @@
                         "type": "string",
                         "format": "uuid"
                       },
+                      "caseId": {
+                        "type": "string",
+                        "format": "uuid",
+                        "nullable": true
+                      },
                       "targetUserId": {
                         "type": "string"
                       },
@@ -5330,6 +5335,11 @@
                       "type": "string",
                       "format": "uuid"
                     },
+                    "caseId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "nullable": true
+                    },
                     "targetUserId": {
                       "type": "string"
                     },
@@ -5701,6 +5711,11 @@
                     "id": {
                       "type": "string",
                       "format": "uuid"
+                    },
+                    "caseId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "nullable": true
                     },
                     "targetUserId": {
                       "type": "string"
@@ -6100,6 +6115,11 @@
                       "type": "string",
                       "format": "uuid"
                     },
+                    "caseId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "nullable": true
+                    },
                     "targetUserId": {
                       "type": "string"
                     },
@@ -6497,6 +6517,11 @@
                     "id": {
                       "type": "string",
                       "format": "uuid"
+                    },
+                    "caseId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "nullable": true
                     },
                     "targetUserId": {
                       "type": "string"
@@ -6912,6 +6937,11 @@
                         "id": {
                           "type": "string",
                           "format": "uuid"
+                        },
+                        "caseId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "nullable": true
                         },
                         "targetUserId": {
                           "type": "string"
@@ -17004,6 +17034,11 @@
                             "type": "string",
                             "format": "uuid"
                           },
+                          "caseId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "nullable": true
+                          },
                           "vaultId": {
                             "type": "string",
                             "format": "uuid"
@@ -17058,6 +17093,7 @@
                             "enum": [
                               "pending",
                               "approved",
+                              "satisfied",
                               "completed",
                               "cancelled",
                               "expired",
@@ -17174,6 +17210,284 @@
                         ],
                         "additionalProperties": false
                       }
+                    },
+                    "cases": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "forgot_password",
+                              "interrupted_handoff"
+                            ]
+                          },
+                          "targetUserId": {
+                            "type": "string"
+                          },
+                          "targetUsername": {
+                            "type": "string"
+                          },
+                          "targetDisplayName": {
+                            "type": "string"
+                          },
+                          "recoveryKeyId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "waiting_for_target",
+                              "pending_approval",
+                              "approved",
+                              "processing",
+                              "completed",
+                              "completed_with_skips",
+                              "cancelled",
+                              "expired"
+                            ]
+                          },
+                          "caseDigest": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200000,
+                            "pattern": "^[A-Za-z0-9_-]+$",
+                            "nullable": true
+                          },
+                          "targetDeviceId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "nullable": true
+                          },
+                          "targetKeyVersion": {
+                            "type": "integer",
+                            "exclusiveMinimum": true,
+                            "minimum": 0,
+                            "nullable": true
+                          },
+                          "accountResetRequestId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "nullable": true
+                          },
+                          "approvalUserIds": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            },
+                            "maxItems": 2
+                          },
+                          "items": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string",
+                                  "format": "uuid"
+                                },
+                                "caseId": {
+                                  "type": "string",
+                                  "format": "uuid",
+                                  "nullable": true
+                                },
+                                "vaultId": {
+                                  "type": "string",
+                                  "format": "uuid"
+                                },
+                                "recoveryKeyId": {
+                                  "type": "string",
+                                  "format": "uuid"
+                                },
+                                "keyEpoch": {
+                                  "type": "integer",
+                                  "exclusiveMinimum": true,
+                                  "minimum": 0
+                                },
+                                "targetUserId": {
+                                  "type": "string"
+                                },
+                                "targetDeviceId": {
+                                  "type": "string",
+                                  "format": "uuid"
+                                },
+                                "targetEncryptionPublicKey": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 200000,
+                                  "pattern": "^[A-Za-z0-9_-]+$"
+                                },
+                                "targetKeyVersion": {
+                                  "type": "integer",
+                                  "exclusiveMinimum": true,
+                                  "minimum": 0
+                                },
+                                "targetCapability": {
+                                  "type": "string",
+                                  "enum": [
+                                    "metadata",
+                                    "full"
+                                  ]
+                                },
+                                "accountResetRequestId": {
+                                  "type": "string",
+                                  "format": "uuid",
+                                  "nullable": true
+                                },
+                                "requestDigest": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 200000,
+                                  "pattern": "^[A-Za-z0-9_-]+$"
+                                },
+                                "status": {
+                                  "type": "string",
+                                  "enum": [
+                                    "pending",
+                                    "approved",
+                                    "satisfied",
+                                    "completed",
+                                    "cancelled",
+                                    "expired",
+                                    "failed"
+                                  ]
+                                },
+                                "approvalUserIds": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  },
+                                  "maxItems": 2
+                                },
+                                "createdAt": {
+                                  "type": "string"
+                                },
+                                "expiresAt": {
+                                  "type": "string"
+                                },
+                                "completedAt": {
+                                  "type": "string",
+                                  "nullable": true
+                                },
+                                "cancelledAt": {
+                                  "type": "string",
+                                  "nullable": true
+                                },
+                                "expiredAt": {
+                                  "type": "string",
+                                  "nullable": true
+                                },
+                                "lastErrorCode": {
+                                  "type": "string",
+                                  "nullable": true
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "vaultId",
+                                "recoveryKeyId",
+                                "keyEpoch",
+                                "targetUserId",
+                                "targetDeviceId",
+                                "targetEncryptionPublicKey",
+                                "targetKeyVersion",
+                                "targetCapability",
+                                "accountResetRequestId",
+                                "requestDigest",
+                                "status",
+                                "approvalUserIds",
+                                "createdAt",
+                                "expiresAt",
+                                "completedAt"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "resolvedItemCount": {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          "skippedItemCount": {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          "hasOfflineResult": {
+                            "type": "boolean"
+                          },
+                          "createdByUserId": {
+                            "type": "string"
+                          },
+                          "createdAt": {
+                            "type": "string"
+                          },
+                          "expiresAt": {
+                            "type": "string"
+                          },
+                          "finalizedAt": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "approvedAt": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "processingAt": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "completedAt": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "cancelledAt": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "expiredAt": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "lastErrorCode": {
+                            "type": "string",
+                            "nullable": true
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "kind",
+                          "targetUserId",
+                          "targetUsername",
+                          "targetDisplayName",
+                          "recoveryKeyId",
+                          "status",
+                          "caseDigest",
+                          "targetDeviceId",
+                          "targetKeyVersion",
+                          "accountResetRequestId",
+                          "approvalUserIds",
+                          "items",
+                          "resolvedItemCount",
+                          "skippedItemCount",
+                          "hasOfflineResult",
+                          "createdByUserId",
+                          "createdAt",
+                          "expiresAt",
+                          "finalizedAt",
+                          "approvedAt",
+                          "processingAt",
+                          "completedAt",
+                          "cancelledAt",
+                          "expiredAt",
+                          "lastErrorCode"
+                        ],
+                        "additionalProperties": false
+                      }
                     }
                   },
                   "required": [
@@ -17182,7 +17496,8 @@
                     "readiness",
                     "coverage",
                     "requests",
-                    "candidates"
+                    "candidates",
+                    "cases"
                   ],
                   "additionalProperties": false
                 }
@@ -18144,6 +18459,11 @@
                         "type": "string",
                         "format": "uuid"
                       },
+                      "caseId": {
+                        "type": "string",
+                        "format": "uuid",
+                        "nullable": true
+                      },
                       "vaultId": {
                         "type": "string",
                         "format": "uuid"
@@ -18198,6 +18518,7 @@
                         "enum": [
                           "pending",
                           "approved",
+                          "satisfied",
                           "completed",
                           "cancelled",
                           "expired",
@@ -18377,6 +18698,11 @@
                       "type": "string",
                       "format": "uuid"
                     },
+                    "caseId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "nullable": true
+                    },
                     "vaultId": {
                       "type": "string",
                       "format": "uuid"
@@ -18431,6 +18757,7 @@
                       "enum": [
                         "pending",
                         "approved",
+                        "satisfied",
                         "completed",
                         "cancelled",
                         "expired",
@@ -18597,6 +18924,11 @@
                       "type": "string",
                       "format": "uuid"
                     },
+                    "caseId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "nullable": true
+                    },
                     "vaultId": {
                       "type": "string",
                       "format": "uuid"
@@ -18651,6 +18983,7 @@
                       "enum": [
                         "pending",
                         "approved",
+                        "satisfied",
                         "completed",
                         "cancelled",
                         "expired",
@@ -18897,6 +19230,11 @@
                       "type": "string",
                       "format": "uuid"
                     },
+                    "caseId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "nullable": true
+                    },
                     "vaultId": {
                       "type": "string",
                       "format": "uuid"
@@ -18951,6 +19289,7 @@
                       "enum": [
                         "pending",
                         "approved",
+                        "satisfied",
                         "completed",
                         "cancelled",
                         "expired",
@@ -19180,6 +19519,11 @@
                       "type": "string",
                       "format": "uuid"
                     },
+                    "caseId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "nullable": true
+                    },
                     "vaultId": {
                       "type": "string",
                       "format": "uuid"
@@ -19234,6 +19578,7 @@
                       "enum": [
                         "pending",
                         "approved",
+                        "satisfied",
                         "completed",
                         "cancelled",
                         "expired",
@@ -19488,6 +19833,11 @@
                       "type": "string",
                       "format": "uuid"
                     },
+                    "caseId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "nullable": true
+                    },
                     "vaultId": {
                       "type": "string",
                       "format": "uuid"
@@ -19542,6 +19892,7 @@
                       "enum": [
                         "pending",
                         "approved",
+                        "satisfied",
                         "completed",
                         "cancelled",
                         "expired",
@@ -19637,6 +19988,3559 @@
         },
         "operationId": "completeRecoveryRequest",
         "summary": "确认企业恢复结果",
+        "security": [
+          {
+            "webSession": []
+          }
+        ]
+      }
+    },
+    "/api/v2/recovery/cases": {
+      "get": {
+        "tags": [
+          "企业恢复"
+        ],
+        "responses": {
+          "200": {
+            "description": "请求成功。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "forgot_password",
+                          "interrupted_handoff"
+                        ]
+                      },
+                      "targetUserId": {
+                        "type": "string"
+                      },
+                      "targetUsername": {
+                        "type": "string"
+                      },
+                      "targetDisplayName": {
+                        "type": "string"
+                      },
+                      "recoveryKeyId": {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      "status": {
+                        "type": "string",
+                        "enum": [
+                          "waiting_for_target",
+                          "pending_approval",
+                          "approved",
+                          "processing",
+                          "completed",
+                          "completed_with_skips",
+                          "cancelled",
+                          "expired"
+                        ]
+                      },
+                      "caseDigest": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200000,
+                        "pattern": "^[A-Za-z0-9_-]+$",
+                        "nullable": true
+                      },
+                      "targetDeviceId": {
+                        "type": "string",
+                        "format": "uuid",
+                        "nullable": true
+                      },
+                      "targetKeyVersion": {
+                        "type": "integer",
+                        "exclusiveMinimum": true,
+                        "minimum": 0,
+                        "nullable": true
+                      },
+                      "accountResetRequestId": {
+                        "type": "string",
+                        "format": "uuid",
+                        "nullable": true
+                      },
+                      "approvalUserIds": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        },
+                        "maxItems": 2
+                      },
+                      "items": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "format": "uuid"
+                            },
+                            "caseId": {
+                              "type": "string",
+                              "format": "uuid",
+                              "nullable": true
+                            },
+                            "vaultId": {
+                              "type": "string",
+                              "format": "uuid"
+                            },
+                            "recoveryKeyId": {
+                              "type": "string",
+                              "format": "uuid"
+                            },
+                            "keyEpoch": {
+                              "type": "integer",
+                              "exclusiveMinimum": true,
+                              "minimum": 0
+                            },
+                            "targetUserId": {
+                              "type": "string"
+                            },
+                            "targetDeviceId": {
+                              "type": "string",
+                              "format": "uuid"
+                            },
+                            "targetEncryptionPublicKey": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 200000,
+                              "pattern": "^[A-Za-z0-9_-]+$"
+                            },
+                            "targetKeyVersion": {
+                              "type": "integer",
+                              "exclusiveMinimum": true,
+                              "minimum": 0
+                            },
+                            "targetCapability": {
+                              "type": "string",
+                              "enum": [
+                                "metadata",
+                                "full"
+                              ]
+                            },
+                            "accountResetRequestId": {
+                              "type": "string",
+                              "format": "uuid",
+                              "nullable": true
+                            },
+                            "requestDigest": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 200000,
+                              "pattern": "^[A-Za-z0-9_-]+$"
+                            },
+                            "status": {
+                              "type": "string",
+                              "enum": [
+                                "pending",
+                                "approved",
+                                "satisfied",
+                                "completed",
+                                "cancelled",
+                                "expired",
+                                "failed"
+                              ]
+                            },
+                            "approvalUserIds": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              },
+                              "maxItems": 2
+                            },
+                            "createdAt": {
+                              "type": "string"
+                            },
+                            "expiresAt": {
+                              "type": "string"
+                            },
+                            "completedAt": {
+                              "type": "string",
+                              "nullable": true
+                            },
+                            "cancelledAt": {
+                              "type": "string",
+                              "nullable": true
+                            },
+                            "expiredAt": {
+                              "type": "string",
+                              "nullable": true
+                            },
+                            "lastErrorCode": {
+                              "type": "string",
+                              "nullable": true
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "vaultId",
+                            "recoveryKeyId",
+                            "keyEpoch",
+                            "targetUserId",
+                            "targetDeviceId",
+                            "targetEncryptionPublicKey",
+                            "targetKeyVersion",
+                            "targetCapability",
+                            "accountResetRequestId",
+                            "requestDigest",
+                            "status",
+                            "approvalUserIds",
+                            "createdAt",
+                            "expiresAt",
+                            "completedAt"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "resolvedItemCount": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "skippedItemCount": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "hasOfflineResult": {
+                        "type": "boolean"
+                      },
+                      "createdByUserId": {
+                        "type": "string"
+                      },
+                      "createdAt": {
+                        "type": "string"
+                      },
+                      "expiresAt": {
+                        "type": "string"
+                      },
+                      "finalizedAt": {
+                        "type": "string",
+                        "nullable": true
+                      },
+                      "approvedAt": {
+                        "type": "string",
+                        "nullable": true
+                      },
+                      "processingAt": {
+                        "type": "string",
+                        "nullable": true
+                      },
+                      "completedAt": {
+                        "type": "string",
+                        "nullable": true
+                      },
+                      "cancelledAt": {
+                        "type": "string",
+                        "nullable": true
+                      },
+                      "expiredAt": {
+                        "type": "string",
+                        "nullable": true
+                      },
+                      "lastErrorCode": {
+                        "type": "string",
+                        "nullable": true
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "kind",
+                      "targetUserId",
+                      "targetUsername",
+                      "targetDisplayName",
+                      "recoveryKeyId",
+                      "status",
+                      "caseDigest",
+                      "targetDeviceId",
+                      "targetKeyVersion",
+                      "accountResetRequestId",
+                      "approvalUserIds",
+                      "items",
+                      "resolvedItemCount",
+                      "skippedItemCount",
+                      "hasOfflineResult",
+                      "createdByUserId",
+                      "createdAt",
+                      "expiresAt",
+                      "finalizedAt",
+                      "approvedAt",
+                      "processingAt",
+                      "completedAt",
+                      "cancelledAt",
+                      "expiredAt",
+                      "lastErrorCode"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "请求校验、认证、授权、资源状态或版本冲突失败。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "integer"
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentVersion": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "statusCode",
+                    "error",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "operationId": "listRecoveryCases",
+        "summary": "读取恢复协助案件",
+        "security": [
+          {
+            "webSession": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "企业恢复"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "idempotencyKey": {
+                    "type": "string",
+                    "minLength": 8,
+                    "maxLength": 80
+                  },
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "forgot_password",
+                      "interrupted_handoff"
+                    ]
+                  },
+                  "targetUserId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  }
+                },
+                "required": [
+                  "idempotencyKey",
+                  "kind",
+                  "targetUserId"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "请求成功。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "forgot_password",
+                        "interrupted_handoff"
+                      ]
+                    },
+                    "targetUserId": {
+                      "type": "string"
+                    },
+                    "targetUsername": {
+                      "type": "string"
+                    },
+                    "targetDisplayName": {
+                      "type": "string"
+                    },
+                    "recoveryKeyId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "waiting_for_target",
+                        "pending_approval",
+                        "approved",
+                        "processing",
+                        "completed",
+                        "completed_with_skips",
+                        "cancelled",
+                        "expired"
+                      ]
+                    },
+                    "caseDigest": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 200000,
+                      "pattern": "^[A-Za-z0-9_-]+$",
+                      "nullable": true
+                    },
+                    "targetDeviceId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "nullable": true
+                    },
+                    "targetKeyVersion": {
+                      "type": "integer",
+                      "exclusiveMinimum": true,
+                      "minimum": 0,
+                      "nullable": true
+                    },
+                    "accountResetRequestId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "nullable": true
+                    },
+                    "approvalUserIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "maxItems": 2
+                    },
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "caseId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "nullable": true
+                          },
+                          "vaultId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "recoveryKeyId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "keyEpoch": {
+                            "type": "integer",
+                            "exclusiveMinimum": true,
+                            "minimum": 0
+                          },
+                          "targetUserId": {
+                            "type": "string"
+                          },
+                          "targetDeviceId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "targetEncryptionPublicKey": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200000,
+                            "pattern": "^[A-Za-z0-9_-]+$"
+                          },
+                          "targetKeyVersion": {
+                            "type": "integer",
+                            "exclusiveMinimum": true,
+                            "minimum": 0
+                          },
+                          "targetCapability": {
+                            "type": "string",
+                            "enum": [
+                              "metadata",
+                              "full"
+                            ]
+                          },
+                          "accountResetRequestId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "nullable": true
+                          },
+                          "requestDigest": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200000,
+                            "pattern": "^[A-Za-z0-9_-]+$"
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "pending",
+                              "approved",
+                              "satisfied",
+                              "completed",
+                              "cancelled",
+                              "expired",
+                              "failed"
+                            ]
+                          },
+                          "approvalUserIds": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            },
+                            "maxItems": 2
+                          },
+                          "createdAt": {
+                            "type": "string"
+                          },
+                          "expiresAt": {
+                            "type": "string"
+                          },
+                          "completedAt": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "cancelledAt": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "expiredAt": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "lastErrorCode": {
+                            "type": "string",
+                            "nullable": true
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "vaultId",
+                          "recoveryKeyId",
+                          "keyEpoch",
+                          "targetUserId",
+                          "targetDeviceId",
+                          "targetEncryptionPublicKey",
+                          "targetKeyVersion",
+                          "targetCapability",
+                          "accountResetRequestId",
+                          "requestDigest",
+                          "status",
+                          "approvalUserIds",
+                          "createdAt",
+                          "expiresAt",
+                          "completedAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "resolvedItemCount": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "skippedItemCount": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "hasOfflineResult": {
+                      "type": "boolean"
+                    },
+                    "createdByUserId": {
+                      "type": "string"
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    },
+                    "expiresAt": {
+                      "type": "string"
+                    },
+                    "finalizedAt": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "approvedAt": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "processingAt": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "completedAt": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "cancelledAt": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "expiredAt": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "lastErrorCode": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "kind",
+                    "targetUserId",
+                    "targetUsername",
+                    "targetDisplayName",
+                    "recoveryKeyId",
+                    "status",
+                    "caseDigest",
+                    "targetDeviceId",
+                    "targetKeyVersion",
+                    "accountResetRequestId",
+                    "approvalUserIds",
+                    "items",
+                    "resolvedItemCount",
+                    "skippedItemCount",
+                    "hasOfflineResult",
+                    "createdByUserId",
+                    "createdAt",
+                    "expiresAt",
+                    "finalizedAt",
+                    "approvedAt",
+                    "processingAt",
+                    "completedAt",
+                    "cancelledAt",
+                    "expiredAt",
+                    "lastErrorCode"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "请求校验、认证、授权、资源状态或版本冲突失败。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "integer"
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentVersion": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "statusCode",
+                    "error",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "operationId": "createRecoveryCase",
+        "summary": "管理员发起恢复协助",
+        "security": [
+          {
+            "webSession": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/csrfToken"
+          }
+        ]
+      }
+    },
+    "/api/v2/recovery/cases/{caseId}": {
+      "get": {
+        "tags": [
+          "企业恢复"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "in": "path",
+            "name": "caseId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "请求成功。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "forgot_password",
+                        "interrupted_handoff"
+                      ]
+                    },
+                    "targetUserId": {
+                      "type": "string"
+                    },
+                    "targetUsername": {
+                      "type": "string"
+                    },
+                    "targetDisplayName": {
+                      "type": "string"
+                    },
+                    "recoveryKeyId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "waiting_for_target",
+                        "pending_approval",
+                        "approved",
+                        "processing",
+                        "completed",
+                        "completed_with_skips",
+                        "cancelled",
+                        "expired"
+                      ]
+                    },
+                    "caseDigest": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 200000,
+                      "pattern": "^[A-Za-z0-9_-]+$",
+                      "nullable": true
+                    },
+                    "targetDeviceId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "nullable": true
+                    },
+                    "targetKeyVersion": {
+                      "type": "integer",
+                      "exclusiveMinimum": true,
+                      "minimum": 0,
+                      "nullable": true
+                    },
+                    "accountResetRequestId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "nullable": true
+                    },
+                    "approvalUserIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "maxItems": 2
+                    },
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "caseId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "nullable": true
+                          },
+                          "vaultId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "recoveryKeyId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "keyEpoch": {
+                            "type": "integer",
+                            "exclusiveMinimum": true,
+                            "minimum": 0
+                          },
+                          "targetUserId": {
+                            "type": "string"
+                          },
+                          "targetDeviceId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "targetEncryptionPublicKey": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200000,
+                            "pattern": "^[A-Za-z0-9_-]+$"
+                          },
+                          "targetKeyVersion": {
+                            "type": "integer",
+                            "exclusiveMinimum": true,
+                            "minimum": 0
+                          },
+                          "targetCapability": {
+                            "type": "string",
+                            "enum": [
+                              "metadata",
+                              "full"
+                            ]
+                          },
+                          "accountResetRequestId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "nullable": true
+                          },
+                          "requestDigest": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200000,
+                            "pattern": "^[A-Za-z0-9_-]+$"
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "pending",
+                              "approved",
+                              "satisfied",
+                              "completed",
+                              "cancelled",
+                              "expired",
+                              "failed"
+                            ]
+                          },
+                          "approvalUserIds": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            },
+                            "maxItems": 2
+                          },
+                          "createdAt": {
+                            "type": "string"
+                          },
+                          "expiresAt": {
+                            "type": "string"
+                          },
+                          "completedAt": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "cancelledAt": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "expiredAt": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "lastErrorCode": {
+                            "type": "string",
+                            "nullable": true
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "vaultId",
+                          "recoveryKeyId",
+                          "keyEpoch",
+                          "targetUserId",
+                          "targetDeviceId",
+                          "targetEncryptionPublicKey",
+                          "targetKeyVersion",
+                          "targetCapability",
+                          "accountResetRequestId",
+                          "requestDigest",
+                          "status",
+                          "approvalUserIds",
+                          "createdAt",
+                          "expiresAt",
+                          "completedAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "resolvedItemCount": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "skippedItemCount": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "hasOfflineResult": {
+                      "type": "boolean"
+                    },
+                    "createdByUserId": {
+                      "type": "string"
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    },
+                    "expiresAt": {
+                      "type": "string"
+                    },
+                    "finalizedAt": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "approvedAt": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "processingAt": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "completedAt": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "cancelledAt": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "expiredAt": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "lastErrorCode": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "kind",
+                    "targetUserId",
+                    "targetUsername",
+                    "targetDisplayName",
+                    "recoveryKeyId",
+                    "status",
+                    "caseDigest",
+                    "targetDeviceId",
+                    "targetKeyVersion",
+                    "accountResetRequestId",
+                    "approvalUserIds",
+                    "items",
+                    "resolvedItemCount",
+                    "skippedItemCount",
+                    "hasOfflineResult",
+                    "createdByUserId",
+                    "createdAt",
+                    "expiresAt",
+                    "finalizedAt",
+                    "approvedAt",
+                    "processingAt",
+                    "completedAt",
+                    "cancelledAt",
+                    "expiredAt",
+                    "lastErrorCode"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "请求校验、认证、授权、资源状态或版本冲突失败。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "integer"
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentVersion": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "statusCode",
+                    "error",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getRecoveryCase",
+        "summary": "读取恢复协助案件详情",
+        "security": [
+          {
+            "webSession": []
+          }
+        ]
+      }
+    },
+    "/api/v2/recovery/cases/{caseId}/target": {
+      "post": {
+        "tags": [
+          "企业恢复"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "idempotencyKey": {
+                        "type": "string",
+                        "minLength": 8,
+                        "maxLength": 80
+                      },
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "forgot_password"
+                        ]
+                      },
+                      "accountResetRequestId": {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      "activation": {
+                        "type": "object",
+                        "properties": {
+                          "idempotencyKey": {
+                            "type": "string",
+                            "minLength": 8,
+                            "maxLength": 80
+                          },
+                          "requestDigest": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200000,
+                            "pattern": "^[A-Za-z0-9_-]+$"
+                          },
+                          "candidateDevicePossessionSignature": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200000,
+                            "pattern": "^[A-Za-z0-9_-]+$"
+                          },
+                          "candidateUserSignature": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200000,
+                            "pattern": "^[A-Za-z0-9_-]+$"
+                          }
+                        },
+                        "required": [
+                          "idempotencyKey",
+                          "requestDigest",
+                          "candidateDevicePossessionSignature",
+                          "candidateUserSignature"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "idempotencyKey",
+                      "kind",
+                      "accountResetRequestId",
+                      "activation"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "idempotencyKey": {
+                        "type": "string",
+                        "minLength": 8,
+                        "maxLength": 80
+                      },
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "interrupted_handoff"
+                        ]
+                      },
+                      "targetDeviceId": {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      "targetEncryptionPublicKey": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200000,
+                        "pattern": "^[A-Za-z0-9_-]+$"
+                      },
+                      "targetKeyVersion": {
+                        "type": "integer",
+                        "exclusiveMinimum": true,
+                        "minimum": 0
+                      },
+                      "targetSignature": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200000,
+                        "pattern": "^[A-Za-z0-9_-]+$"
+                      }
+                    },
+                    "required": [
+                      "idempotencyKey",
+                      "kind",
+                      "targetDeviceId",
+                      "targetEncryptionPublicKey",
+                      "targetKeyVersion",
+                      "targetSignature"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "in": "path",
+            "name": "caseId",
+            "required": true
+          },
+          {
+            "$ref": "#/components/parameters/csrfToken"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "请求成功。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "forgot_password",
+                        "interrupted_handoff"
+                      ]
+                    },
+                    "targetUserId": {
+                      "type": "string"
+                    },
+                    "targetUsername": {
+                      "type": "string"
+                    },
+                    "targetDisplayName": {
+                      "type": "string"
+                    },
+                    "recoveryKeyId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "waiting_for_target",
+                        "pending_approval",
+                        "approved",
+                        "processing",
+                        "completed",
+                        "completed_with_skips",
+                        "cancelled",
+                        "expired"
+                      ]
+                    },
+                    "caseDigest": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 200000,
+                      "pattern": "^[A-Za-z0-9_-]+$",
+                      "nullable": true
+                    },
+                    "targetDeviceId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "nullable": true
+                    },
+                    "targetKeyVersion": {
+                      "type": "integer",
+                      "exclusiveMinimum": true,
+                      "minimum": 0,
+                      "nullable": true
+                    },
+                    "accountResetRequestId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "nullable": true
+                    },
+                    "approvalUserIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "maxItems": 2
+                    },
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "caseId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "nullable": true
+                          },
+                          "vaultId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "recoveryKeyId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "keyEpoch": {
+                            "type": "integer",
+                            "exclusiveMinimum": true,
+                            "minimum": 0
+                          },
+                          "targetUserId": {
+                            "type": "string"
+                          },
+                          "targetDeviceId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "targetEncryptionPublicKey": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200000,
+                            "pattern": "^[A-Za-z0-9_-]+$"
+                          },
+                          "targetKeyVersion": {
+                            "type": "integer",
+                            "exclusiveMinimum": true,
+                            "minimum": 0
+                          },
+                          "targetCapability": {
+                            "type": "string",
+                            "enum": [
+                              "metadata",
+                              "full"
+                            ]
+                          },
+                          "accountResetRequestId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "nullable": true
+                          },
+                          "requestDigest": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200000,
+                            "pattern": "^[A-Za-z0-9_-]+$"
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "pending",
+                              "approved",
+                              "satisfied",
+                              "completed",
+                              "cancelled",
+                              "expired",
+                              "failed"
+                            ]
+                          },
+                          "approvalUserIds": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            },
+                            "maxItems": 2
+                          },
+                          "createdAt": {
+                            "type": "string"
+                          },
+                          "expiresAt": {
+                            "type": "string"
+                          },
+                          "completedAt": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "cancelledAt": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "expiredAt": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "lastErrorCode": {
+                            "type": "string",
+                            "nullable": true
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "vaultId",
+                          "recoveryKeyId",
+                          "keyEpoch",
+                          "targetUserId",
+                          "targetDeviceId",
+                          "targetEncryptionPublicKey",
+                          "targetKeyVersion",
+                          "targetCapability",
+                          "accountResetRequestId",
+                          "requestDigest",
+                          "status",
+                          "approvalUserIds",
+                          "createdAt",
+                          "expiresAt",
+                          "completedAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "resolvedItemCount": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "skippedItemCount": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "hasOfflineResult": {
+                      "type": "boolean"
+                    },
+                    "createdByUserId": {
+                      "type": "string"
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    },
+                    "expiresAt": {
+                      "type": "string"
+                    },
+                    "finalizedAt": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "approvedAt": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "processingAt": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "completedAt": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "cancelledAt": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "expiredAt": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "lastErrorCode": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "kind",
+                    "targetUserId",
+                    "targetUsername",
+                    "targetDisplayName",
+                    "recoveryKeyId",
+                    "status",
+                    "caseDigest",
+                    "targetDeviceId",
+                    "targetKeyVersion",
+                    "accountResetRequestId",
+                    "approvalUserIds",
+                    "items",
+                    "resolvedItemCount",
+                    "skippedItemCount",
+                    "hasOfflineResult",
+                    "createdByUserId",
+                    "createdAt",
+                    "expiresAt",
+                    "finalizedAt",
+                    "approvedAt",
+                    "processingAt",
+                    "completedAt",
+                    "cancelledAt",
+                    "expiredAt",
+                    "lastErrorCode"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "请求校验、认证、授权、资源状态或版本冲突失败。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "integer"
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentVersion": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "statusCode",
+                    "error",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "operationId": "finalizeRecoveryCaseTarget",
+        "summary": "用户设置新的主密码",
+        "security": [
+          {
+            "webSession": []
+          }
+        ]
+      }
+    },
+    "/api/v2/recovery/cases/{caseId}/approve": {
+      "post": {
+        "tags": [
+          "企业恢复"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "idempotencyKey": {
+                    "type": "string",
+                    "minLength": 8,
+                    "maxLength": 80
+                  },
+                  "caseDigest": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200000,
+                    "pattern": "^[A-Za-z0-9_-]+$"
+                  }
+                },
+                "required": [
+                  "idempotencyKey",
+                  "caseDigest"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "in": "path",
+            "name": "caseId",
+            "required": true
+          },
+          {
+            "$ref": "#/components/parameters/csrfToken"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "请求成功。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "forgot_password",
+                        "interrupted_handoff"
+                      ]
+                    },
+                    "targetUserId": {
+                      "type": "string"
+                    },
+                    "targetUsername": {
+                      "type": "string"
+                    },
+                    "targetDisplayName": {
+                      "type": "string"
+                    },
+                    "recoveryKeyId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "waiting_for_target",
+                        "pending_approval",
+                        "approved",
+                        "processing",
+                        "completed",
+                        "completed_with_skips",
+                        "cancelled",
+                        "expired"
+                      ]
+                    },
+                    "caseDigest": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 200000,
+                      "pattern": "^[A-Za-z0-9_-]+$",
+                      "nullable": true
+                    },
+                    "targetDeviceId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "nullable": true
+                    },
+                    "targetKeyVersion": {
+                      "type": "integer",
+                      "exclusiveMinimum": true,
+                      "minimum": 0,
+                      "nullable": true
+                    },
+                    "accountResetRequestId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "nullable": true
+                    },
+                    "approvalUserIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "maxItems": 2
+                    },
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "caseId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "nullable": true
+                          },
+                          "vaultId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "recoveryKeyId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "keyEpoch": {
+                            "type": "integer",
+                            "exclusiveMinimum": true,
+                            "minimum": 0
+                          },
+                          "targetUserId": {
+                            "type": "string"
+                          },
+                          "targetDeviceId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "targetEncryptionPublicKey": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200000,
+                            "pattern": "^[A-Za-z0-9_-]+$"
+                          },
+                          "targetKeyVersion": {
+                            "type": "integer",
+                            "exclusiveMinimum": true,
+                            "minimum": 0
+                          },
+                          "targetCapability": {
+                            "type": "string",
+                            "enum": [
+                              "metadata",
+                              "full"
+                            ]
+                          },
+                          "accountResetRequestId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "nullable": true
+                          },
+                          "requestDigest": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200000,
+                            "pattern": "^[A-Za-z0-9_-]+$"
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "pending",
+                              "approved",
+                              "satisfied",
+                              "completed",
+                              "cancelled",
+                              "expired",
+                              "failed"
+                            ]
+                          },
+                          "approvalUserIds": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            },
+                            "maxItems": 2
+                          },
+                          "createdAt": {
+                            "type": "string"
+                          },
+                          "expiresAt": {
+                            "type": "string"
+                          },
+                          "completedAt": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "cancelledAt": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "expiredAt": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "lastErrorCode": {
+                            "type": "string",
+                            "nullable": true
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "vaultId",
+                          "recoveryKeyId",
+                          "keyEpoch",
+                          "targetUserId",
+                          "targetDeviceId",
+                          "targetEncryptionPublicKey",
+                          "targetKeyVersion",
+                          "targetCapability",
+                          "accountResetRequestId",
+                          "requestDigest",
+                          "status",
+                          "approvalUserIds",
+                          "createdAt",
+                          "expiresAt",
+                          "completedAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "resolvedItemCount": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "skippedItemCount": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "hasOfflineResult": {
+                      "type": "boolean"
+                    },
+                    "createdByUserId": {
+                      "type": "string"
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    },
+                    "expiresAt": {
+                      "type": "string"
+                    },
+                    "finalizedAt": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "approvedAt": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "processingAt": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "completedAt": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "cancelledAt": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "expiredAt": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "lastErrorCode": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "kind",
+                    "targetUserId",
+                    "targetUsername",
+                    "targetDisplayName",
+                    "recoveryKeyId",
+                    "status",
+                    "caseDigest",
+                    "targetDeviceId",
+                    "targetKeyVersion",
+                    "accountResetRequestId",
+                    "approvalUserIds",
+                    "items",
+                    "resolvedItemCount",
+                    "skippedItemCount",
+                    "hasOfflineResult",
+                    "createdByUserId",
+                    "createdAt",
+                    "expiresAt",
+                    "finalizedAt",
+                    "approvedAt",
+                    "processingAt",
+                    "completedAt",
+                    "cancelledAt",
+                    "expiredAt",
+                    "lastErrorCode"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "请求校验、认证、授权、资源状态或版本冲突失败。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "integer"
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentVersion": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "statusCode",
+                    "error",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "operationId": "approveRecoveryCase",
+        "summary": "管理员确认恢复协助",
+        "security": [
+          {
+            "webSession": []
+          }
+        ]
+      }
+    },
+    "/api/v2/recovery/cases/{caseId}/cancel": {
+      "post": {
+        "tags": [
+          "企业恢复"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "idempotencyKey": {
+                    "type": "string",
+                    "minLength": 8,
+                    "maxLength": 80
+                  },
+                  "caseDigest": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200000,
+                    "pattern": "^[A-Za-z0-9_-]+$",
+                    "nullable": true
+                  }
+                },
+                "required": [
+                  "idempotencyKey",
+                  "caseDigest"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "in": "path",
+            "name": "caseId",
+            "required": true
+          },
+          {
+            "$ref": "#/components/parameters/csrfToken"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "请求成功。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "forgot_password",
+                        "interrupted_handoff"
+                      ]
+                    },
+                    "targetUserId": {
+                      "type": "string"
+                    },
+                    "targetUsername": {
+                      "type": "string"
+                    },
+                    "targetDisplayName": {
+                      "type": "string"
+                    },
+                    "recoveryKeyId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "waiting_for_target",
+                        "pending_approval",
+                        "approved",
+                        "processing",
+                        "completed",
+                        "completed_with_skips",
+                        "cancelled",
+                        "expired"
+                      ]
+                    },
+                    "caseDigest": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 200000,
+                      "pattern": "^[A-Za-z0-9_-]+$",
+                      "nullable": true
+                    },
+                    "targetDeviceId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "nullable": true
+                    },
+                    "targetKeyVersion": {
+                      "type": "integer",
+                      "exclusiveMinimum": true,
+                      "minimum": 0,
+                      "nullable": true
+                    },
+                    "accountResetRequestId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "nullable": true
+                    },
+                    "approvalUserIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "maxItems": 2
+                    },
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "caseId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "nullable": true
+                          },
+                          "vaultId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "recoveryKeyId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "keyEpoch": {
+                            "type": "integer",
+                            "exclusiveMinimum": true,
+                            "minimum": 0
+                          },
+                          "targetUserId": {
+                            "type": "string"
+                          },
+                          "targetDeviceId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "targetEncryptionPublicKey": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200000,
+                            "pattern": "^[A-Za-z0-9_-]+$"
+                          },
+                          "targetKeyVersion": {
+                            "type": "integer",
+                            "exclusiveMinimum": true,
+                            "minimum": 0
+                          },
+                          "targetCapability": {
+                            "type": "string",
+                            "enum": [
+                              "metadata",
+                              "full"
+                            ]
+                          },
+                          "accountResetRequestId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "nullable": true
+                          },
+                          "requestDigest": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200000,
+                            "pattern": "^[A-Za-z0-9_-]+$"
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "pending",
+                              "approved",
+                              "satisfied",
+                              "completed",
+                              "cancelled",
+                              "expired",
+                              "failed"
+                            ]
+                          },
+                          "approvalUserIds": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            },
+                            "maxItems": 2
+                          },
+                          "createdAt": {
+                            "type": "string"
+                          },
+                          "expiresAt": {
+                            "type": "string"
+                          },
+                          "completedAt": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "cancelledAt": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "expiredAt": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "lastErrorCode": {
+                            "type": "string",
+                            "nullable": true
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "vaultId",
+                          "recoveryKeyId",
+                          "keyEpoch",
+                          "targetUserId",
+                          "targetDeviceId",
+                          "targetEncryptionPublicKey",
+                          "targetKeyVersion",
+                          "targetCapability",
+                          "accountResetRequestId",
+                          "requestDigest",
+                          "status",
+                          "approvalUserIds",
+                          "createdAt",
+                          "expiresAt",
+                          "completedAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "resolvedItemCount": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "skippedItemCount": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "hasOfflineResult": {
+                      "type": "boolean"
+                    },
+                    "createdByUserId": {
+                      "type": "string"
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    },
+                    "expiresAt": {
+                      "type": "string"
+                    },
+                    "finalizedAt": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "approvedAt": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "processingAt": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "completedAt": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "cancelledAt": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "expiredAt": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "lastErrorCode": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "kind",
+                    "targetUserId",
+                    "targetUsername",
+                    "targetDisplayName",
+                    "recoveryKeyId",
+                    "status",
+                    "caseDigest",
+                    "targetDeviceId",
+                    "targetKeyVersion",
+                    "accountResetRequestId",
+                    "approvalUserIds",
+                    "items",
+                    "resolvedItemCount",
+                    "skippedItemCount",
+                    "hasOfflineResult",
+                    "createdByUserId",
+                    "createdAt",
+                    "expiresAt",
+                    "finalizedAt",
+                    "approvedAt",
+                    "processingAt",
+                    "completedAt",
+                    "cancelledAt",
+                    "expiredAt",
+                    "lastErrorCode"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "请求校验、认证、授权、资源状态或版本冲突失败。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "integer"
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentVersion": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "statusCode",
+                    "error",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "operationId": "cancelRecoveryCase",
+        "summary": "取消恢复协助",
+        "security": [
+          {
+            "webSession": []
+          }
+        ]
+      }
+    },
+    "/api/v2/recovery/cases/{caseId}/package": {
+      "get": {
+        "tags": [
+          "企业恢复"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "in": "path",
+            "name": "caseId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "请求成功。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "protocol": {
+                      "type": "string",
+                      "enum": [
+                        "mima-e2ee-v2"
+                      ]
+                    },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "enterprise-recovery-case-package"
+                      ]
+                    },
+                    "caseId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "caseDigest": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 200000,
+                      "pattern": "^[A-Za-z0-9_-]+$"
+                    },
+                    "recoveryKey": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "ceremonyId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "keyFingerprint": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200000,
+                          "pattern": "^[A-Za-z0-9_-]+$"
+                        },
+                        "publicEncryptionKey": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200000,
+                          "pattern": "^[A-Za-z0-9_-]+$"
+                        },
+                        "threshold": {
+                          "type": "number",
+                          "enum": [
+                            2
+                          ]
+                        },
+                        "shareCount": {
+                          "type": "number",
+                          "enum": [
+                            3
+                          ]
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "pending",
+                            "staged",
+                            "active",
+                            "retired",
+                            "compromised",
+                            "cancelled"
+                          ]
+                        },
+                        "ceremonyEvidenceDigest": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200000,
+                          "pattern": "^[A-Za-z0-9_-]+$"
+                        },
+                        "approvalUserIds": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          },
+                          "maxItems": 2
+                        },
+                        "createdAt": {
+                          "type": "string"
+                        },
+                        "retiredAt": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "cancelledAt": {
+                          "type": "string",
+                          "nullable": true
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "ceremonyId",
+                        "keyFingerprint",
+                        "publicEncryptionKey",
+                        "threshold",
+                        "shareCount",
+                        "status",
+                        "ceremonyEvidenceDigest",
+                        "approvalUserIds",
+                        "createdAt",
+                        "retiredAt"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "request": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "format": "uuid"
+                              },
+                              "caseId": {
+                                "type": "string",
+                                "format": "uuid",
+                                "nullable": true
+                              },
+                              "vaultId": {
+                                "type": "string",
+                                "format": "uuid"
+                              },
+                              "recoveryKeyId": {
+                                "type": "string",
+                                "format": "uuid"
+                              },
+                              "keyEpoch": {
+                                "type": "integer",
+                                "exclusiveMinimum": true,
+                                "minimum": 0
+                              },
+                              "targetUserId": {
+                                "type": "string"
+                              },
+                              "targetDeviceId": {
+                                "type": "string",
+                                "format": "uuid"
+                              },
+                              "targetEncryptionPublicKey": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 200000,
+                                "pattern": "^[A-Za-z0-9_-]+$"
+                              },
+                              "targetKeyVersion": {
+                                "type": "integer",
+                                "exclusiveMinimum": true,
+                                "minimum": 0
+                              },
+                              "targetCapability": {
+                                "type": "string",
+                                "enum": [
+                                  "metadata",
+                                  "full"
+                                ]
+                              },
+                              "accountResetRequestId": {
+                                "type": "string",
+                                "format": "uuid",
+                                "nullable": true
+                              },
+                              "requestDigest": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 200000,
+                                "pattern": "^[A-Za-z0-9_-]+$"
+                              },
+                              "status": {
+                                "type": "string",
+                                "enum": [
+                                  "pending",
+                                  "approved",
+                                  "satisfied",
+                                  "completed",
+                                  "cancelled",
+                                  "expired",
+                                  "failed"
+                                ]
+                              },
+                              "approvalUserIds": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                },
+                                "maxItems": 2
+                              },
+                              "createdAt": {
+                                "type": "string"
+                              },
+                              "expiresAt": {
+                                "type": "string"
+                              },
+                              "completedAt": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "cancelledAt": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "expiredAt": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "lastErrorCode": {
+                                "type": "string",
+                                "nullable": true
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "vaultId",
+                              "recoveryKeyId",
+                              "keyEpoch",
+                              "targetUserId",
+                              "targetDeviceId",
+                              "targetEncryptionPublicKey",
+                              "targetKeyVersion",
+                              "targetCapability",
+                              "accountResetRequestId",
+                              "requestDigest",
+                              "status",
+                              "approvalUserIds",
+                              "createdAt",
+                              "expiresAt",
+                              "completedAt"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "activeEpoch": {
+                            "type": "integer",
+                            "exclusiveMinimum": true,
+                            "minimum": 0
+                          },
+                          "recoveryEnvelope": {
+                            "type": "object",
+                            "properties": {
+                              "vaultId": {
+                                "type": "string",
+                                "format": "uuid"
+                              },
+                              "epoch": {
+                                "type": "integer",
+                                "exclusiveMinimum": true,
+                                "minimum": 0
+                              },
+                              "recipientKind": {
+                                "type": "string",
+                                "enum": [
+                                  "user",
+                                  "device",
+                                  "recovery"
+                                ]
+                              },
+                              "recipientId": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 200
+                              },
+                              "recipientKeyVersion": {
+                                "type": "integer",
+                                "exclusiveMinimum": true,
+                                "minimum": 0
+                              },
+                              "capability": {
+                                "type": "string",
+                                "enum": [
+                                  "metadata",
+                                  "full",
+                                  "recovery"
+                                ]
+                              },
+                              "sealedKeyBundle": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 200000,
+                                "pattern": "^[A-Za-z0-9_-]+$"
+                              },
+                              "signerUserId": {
+                                "type": "string"
+                              },
+                              "signerKeyVersion": {
+                                "type": "integer",
+                                "exclusiveMinimum": true,
+                                "minimum": 0
+                              },
+                              "signature": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 200000,
+                                "pattern": "^[A-Za-z0-9_-]+$"
+                              }
+                            },
+                            "required": [
+                              "vaultId",
+                              "epoch",
+                              "recipientKind",
+                              "recipientId",
+                              "recipientKeyVersion",
+                              "capability",
+                              "sealedKeyBundle",
+                              "signerUserId",
+                              "signerKeyVersion",
+                              "signature"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "trustedSigner": {
+                            "type": "object",
+                            "properties": {
+                              "userId": {
+                                "type": "string"
+                              },
+                              "keyVersion": {
+                                "type": "integer",
+                                "exclusiveMinimum": true,
+                                "minimum": 0
+                              },
+                              "signingPublicKey": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 200000,
+                                "pattern": "^[A-Za-z0-9_-]+$"
+                              }
+                            },
+                            "required": [
+                              "userId",
+                              "keyVersion",
+                              "signingPublicKey"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "targetProfile": {
+                            "type": "object",
+                            "properties": {
+                              "userId": {
+                                "type": "string"
+                              },
+                              "keyVersion": {
+                                "type": "integer",
+                                "exclusiveMinimum": true,
+                                "minimum": 0
+                              },
+                              "encryptionPublicKey": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 200000,
+                                "pattern": "^[A-Za-z0-9_-]+$"
+                              },
+                              "signingPublicKey": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 200000,
+                                "pattern": "^[A-Za-z0-9_-]+$"
+                              }
+                            },
+                            "required": [
+                              "userId",
+                              "keyVersion",
+                              "encryptionPublicKey",
+                              "signingPublicKey"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "required": [
+                          "request",
+                          "activeEpoch",
+                          "recoveryEnvelope",
+                          "trustedSigner",
+                          "targetProfile"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "minItems": 1
+                    }
+                  },
+                  "required": [
+                    "protocol",
+                    "kind",
+                    "caseId",
+                    "caseDigest",
+                    "recoveryKey",
+                    "items"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "请求校验、认证、授权、资源状态或版本冲突失败。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "integer"
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentVersion": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "statusCode",
+                    "error",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getRecoveryCasePackage",
+        "summary": "下载一次恢复协助的离线处理包",
+        "security": [
+          {
+            "webSession": []
+          }
+        ]
+      }
+    },
+    "/api/v2/recovery/cases/{caseId}/transfers": {
+      "post": {
+        "tags": [
+          "企业恢复"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "idempotencyKey": {
+                    "type": "string",
+                    "minLength": 8,
+                    "maxLength": 80
+                  },
+                  "caseDigest": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200000,
+                    "pattern": "^[A-Za-z0-9_-]+$"
+                  },
+                  "transfer": {
+                    "type": "object",
+                    "properties": {
+                      "protocol": {
+                        "type": "string",
+                        "enum": [
+                          "mima-e2ee-v2"
+                        ]
+                      },
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "enterprise-recovery-case-transfer"
+                        ]
+                      },
+                      "caseId": {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      "caseDigest": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200000,
+                        "pattern": "^[A-Za-z0-9_-]+$"
+                      },
+                      "results": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "protocol": {
+                              "type": "string",
+                              "enum": [
+                                "lm-e2ee-v1"
+                              ]
+                            },
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "enterprise-recovery-transfer"
+                              ]
+                            },
+                            "formatVersion": {
+                              "type": "number",
+                              "enum": [
+                                1
+                              ]
+                            },
+                            "requestId": {
+                              "type": "string",
+                              "format": "uuid"
+                            },
+                            "requestDigest": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 200000,
+                              "pattern": "^[A-Za-z0-9_-]+$"
+                            },
+                            "vaultId": {
+                              "type": "string",
+                              "format": "uuid"
+                            },
+                            "epoch": {
+                              "type": "integer",
+                              "exclusiveMinimum": true,
+                              "minimum": 0
+                            },
+                            "recoveryKeyId": {
+                              "type": "string",
+                              "format": "uuid"
+                            },
+                            "ceremonyId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 200
+                            },
+                            "recoveryCeremonyDigest": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 200000,
+                              "pattern": "^[A-Za-z0-9_-]+$"
+                            },
+                            "targetUserId": {
+                              "type": "string"
+                            },
+                            "targetCapability": {
+                              "type": "string",
+                              "enum": [
+                                "metadata",
+                                "full"
+                              ]
+                            },
+                            "toolEvidenceDigest": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 200000,
+                              "pattern": "^[A-Za-z0-9_-]+$"
+                            },
+                            "recoveredEnvelope": {
+                              "type": "object",
+                              "properties": {
+                                "vaultId": {
+                                  "type": "string",
+                                  "format": "uuid"
+                                },
+                                "epoch": {
+                                  "type": "integer",
+                                  "exclusiveMinimum": true,
+                                  "minimum": 0
+                                },
+                                "recipientKind": {
+                                  "type": "string",
+                                  "enum": [
+                                    "user",
+                                    "device",
+                                    "recovery"
+                                  ]
+                                },
+                                "recipientId": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 200
+                                },
+                                "recipientKeyVersion": {
+                                  "type": "integer",
+                                  "exclusiveMinimum": true,
+                                  "minimum": 0
+                                },
+                                "capability": {
+                                  "type": "string",
+                                  "enum": [
+                                    "metadata",
+                                    "full",
+                                    "recovery"
+                                  ]
+                                },
+                                "sealedKeyBundle": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 200000,
+                                  "pattern": "^[A-Za-z0-9_-]+$"
+                                },
+                                "signerUserId": {
+                                  "type": "string"
+                                },
+                                "signerKeyVersion": {
+                                  "type": "integer",
+                                  "exclusiveMinimum": true,
+                                  "minimum": 0
+                                }
+                              },
+                              "required": [
+                                "vaultId",
+                                "epoch",
+                                "recipientKind",
+                                "recipientId",
+                                "recipientKeyVersion",
+                                "capability",
+                                "sealedKeyBundle",
+                                "signerUserId",
+                                "signerKeyVersion"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "protocol",
+                            "kind",
+                            "formatVersion",
+                            "requestId",
+                            "requestDigest",
+                            "vaultId",
+                            "epoch",
+                            "recoveryKeyId",
+                            "ceremonyId",
+                            "recoveryCeremonyDigest",
+                            "targetUserId",
+                            "targetCapability",
+                            "toolEvidenceDigest",
+                            "recoveredEnvelope"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "minItems": 1
+                      }
+                    },
+                    "required": [
+                      "protocol",
+                      "kind",
+                      "caseId",
+                      "caseDigest",
+                      "results"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "idempotencyKey",
+                  "caseDigest",
+                  "transfer"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "in": "path",
+            "name": "caseId",
+            "required": true
+          },
+          {
+            "$ref": "#/components/parameters/csrfToken"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "请求成功。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "forgot_password",
+                        "interrupted_handoff"
+                      ]
+                    },
+                    "targetUserId": {
+                      "type": "string"
+                    },
+                    "targetUsername": {
+                      "type": "string"
+                    },
+                    "targetDisplayName": {
+                      "type": "string"
+                    },
+                    "recoveryKeyId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "waiting_for_target",
+                        "pending_approval",
+                        "approved",
+                        "processing",
+                        "completed",
+                        "completed_with_skips",
+                        "cancelled",
+                        "expired"
+                      ]
+                    },
+                    "caseDigest": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 200000,
+                      "pattern": "^[A-Za-z0-9_-]+$",
+                      "nullable": true
+                    },
+                    "targetDeviceId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "nullable": true
+                    },
+                    "targetKeyVersion": {
+                      "type": "integer",
+                      "exclusiveMinimum": true,
+                      "minimum": 0,
+                      "nullable": true
+                    },
+                    "accountResetRequestId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "nullable": true
+                    },
+                    "approvalUserIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "maxItems": 2
+                    },
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "caseId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "nullable": true
+                          },
+                          "vaultId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "recoveryKeyId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "keyEpoch": {
+                            "type": "integer",
+                            "exclusiveMinimum": true,
+                            "minimum": 0
+                          },
+                          "targetUserId": {
+                            "type": "string"
+                          },
+                          "targetDeviceId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "targetEncryptionPublicKey": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200000,
+                            "pattern": "^[A-Za-z0-9_-]+$"
+                          },
+                          "targetKeyVersion": {
+                            "type": "integer",
+                            "exclusiveMinimum": true,
+                            "minimum": 0
+                          },
+                          "targetCapability": {
+                            "type": "string",
+                            "enum": [
+                              "metadata",
+                              "full"
+                            ]
+                          },
+                          "accountResetRequestId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "nullable": true
+                          },
+                          "requestDigest": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200000,
+                            "pattern": "^[A-Za-z0-9_-]+$"
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "pending",
+                              "approved",
+                              "satisfied",
+                              "completed",
+                              "cancelled",
+                              "expired",
+                              "failed"
+                            ]
+                          },
+                          "approvalUserIds": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            },
+                            "maxItems": 2
+                          },
+                          "createdAt": {
+                            "type": "string"
+                          },
+                          "expiresAt": {
+                            "type": "string"
+                          },
+                          "completedAt": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "cancelledAt": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "expiredAt": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "lastErrorCode": {
+                            "type": "string",
+                            "nullable": true
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "vaultId",
+                          "recoveryKeyId",
+                          "keyEpoch",
+                          "targetUserId",
+                          "targetDeviceId",
+                          "targetEncryptionPublicKey",
+                          "targetKeyVersion",
+                          "targetCapability",
+                          "accountResetRequestId",
+                          "requestDigest",
+                          "status",
+                          "approvalUserIds",
+                          "createdAt",
+                          "expiresAt",
+                          "completedAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "resolvedItemCount": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "skippedItemCount": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "hasOfflineResult": {
+                      "type": "boolean"
+                    },
+                    "createdByUserId": {
+                      "type": "string"
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    },
+                    "expiresAt": {
+                      "type": "string"
+                    },
+                    "finalizedAt": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "approvedAt": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "processingAt": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "completedAt": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "cancelledAt": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "expiredAt": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "lastErrorCode": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "kind",
+                    "targetUserId",
+                    "targetUsername",
+                    "targetDisplayName",
+                    "recoveryKeyId",
+                    "status",
+                    "caseDigest",
+                    "targetDeviceId",
+                    "targetKeyVersion",
+                    "accountResetRequestId",
+                    "approvalUserIds",
+                    "items",
+                    "resolvedItemCount",
+                    "skippedItemCount",
+                    "hasOfflineResult",
+                    "createdByUserId",
+                    "createdAt",
+                    "expiresAt",
+                    "finalizedAt",
+                    "approvedAt",
+                    "processingAt",
+                    "completedAt",
+                    "cancelledAt",
+                    "expiredAt",
+                    "lastErrorCode"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "请求校验、认证、授权、资源状态或版本冲突失败。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "integer"
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentVersion": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "statusCode",
+                    "error",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "operationId": "uploadRecoveryCaseTransfer",
+        "summary": "提交一次恢复协助的离线处理结果",
+        "security": [
+          {
+            "webSession": []
+          }
+        ]
+      }
+    },
+    "/api/v2/recovery/cases/{caseId}/transfer": {
+      "get": {
+        "tags": [
+          "企业恢复"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "in": "path",
+            "name": "caseId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "请求成功。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "protocol": {
+                      "type": "string",
+                      "enum": [
+                        "mima-e2ee-v2"
+                      ]
+                    },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "enterprise-recovery-case-transfer"
+                      ]
+                    },
+                    "caseId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "caseDigest": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 200000,
+                      "pattern": "^[A-Za-z0-9_-]+$"
+                    },
+                    "results": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "protocol": {
+                            "type": "string",
+                            "enum": [
+                              "lm-e2ee-v1"
+                            ]
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "enterprise-recovery-transfer"
+                            ]
+                          },
+                          "formatVersion": {
+                            "type": "number",
+                            "enum": [
+                              1
+                            ]
+                          },
+                          "requestId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "requestDigest": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200000,
+                            "pattern": "^[A-Za-z0-9_-]+$"
+                          },
+                          "vaultId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "epoch": {
+                            "type": "integer",
+                            "exclusiveMinimum": true,
+                            "minimum": 0
+                          },
+                          "recoveryKeyId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "ceremonyId": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200
+                          },
+                          "recoveryCeremonyDigest": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200000,
+                            "pattern": "^[A-Za-z0-9_-]+$"
+                          },
+                          "targetUserId": {
+                            "type": "string"
+                          },
+                          "targetCapability": {
+                            "type": "string",
+                            "enum": [
+                              "metadata",
+                              "full"
+                            ]
+                          },
+                          "toolEvidenceDigest": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200000,
+                            "pattern": "^[A-Za-z0-9_-]+$"
+                          },
+                          "recoveredEnvelope": {
+                            "type": "object",
+                            "properties": {
+                              "vaultId": {
+                                "type": "string",
+                                "format": "uuid"
+                              },
+                              "epoch": {
+                                "type": "integer",
+                                "exclusiveMinimum": true,
+                                "minimum": 0
+                              },
+                              "recipientKind": {
+                                "type": "string",
+                                "enum": [
+                                  "user",
+                                  "device",
+                                  "recovery"
+                                ]
+                              },
+                              "recipientId": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 200
+                              },
+                              "recipientKeyVersion": {
+                                "type": "integer",
+                                "exclusiveMinimum": true,
+                                "minimum": 0
+                              },
+                              "capability": {
+                                "type": "string",
+                                "enum": [
+                                  "metadata",
+                                  "full",
+                                  "recovery"
+                                ]
+                              },
+                              "sealedKeyBundle": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 200000,
+                                "pattern": "^[A-Za-z0-9_-]+$"
+                              },
+                              "signerUserId": {
+                                "type": "string"
+                              },
+                              "signerKeyVersion": {
+                                "type": "integer",
+                                "exclusiveMinimum": true,
+                                "minimum": 0
+                              }
+                            },
+                            "required": [
+                              "vaultId",
+                              "epoch",
+                              "recipientKind",
+                              "recipientId",
+                              "recipientKeyVersion",
+                              "capability",
+                              "sealedKeyBundle",
+                              "signerUserId",
+                              "signerKeyVersion"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "required": [
+                          "protocol",
+                          "kind",
+                          "formatVersion",
+                          "requestId",
+                          "requestDigest",
+                          "vaultId",
+                          "epoch",
+                          "recoveryKeyId",
+                          "ceremonyId",
+                          "recoveryCeremonyDigest",
+                          "targetUserId",
+                          "targetCapability",
+                          "toolEvidenceDigest",
+                          "recoveredEnvelope"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "minItems": 1
+                    }
+                  },
+                  "required": [
+                    "protocol",
+                    "kind",
+                    "caseId",
+                    "caseDigest",
+                    "results"
+                  ],
+                  "additionalProperties": false,
+                  "nullable": true
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "请求校验、认证、授权、资源状态或版本冲突失败。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "integer"
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentVersion": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "statusCode",
+                    "error",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getRecoveryCaseTransfer",
+        "summary": "领取一次恢复协助的处理结果",
         "security": [
           {
             "webSession": []
@@ -22812,7 +26716,7 @@
     },
     {
       "name": "账户恢复",
-      "description": "丢失全部设备后的双管理员账户重置。"
+      "description": "忘记主密码后的双管理员账户重置。"
     },
     {
       "name": "浏览器扩展",

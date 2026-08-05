@@ -115,12 +115,20 @@ describe('enterprise recovery coverage serialization', () => {
       const activating = activation.query(
         `UPDATE enterprise_recovery_keys SET status = 'active' WHERE id = $1`,
         [recoveryKey.id],
+      ).then(
+        (value) => ({ status: 'fulfilled' as const, value }),
+        (reason: unknown) => ({ status: 'rejected' as const, reason }),
       ).finally(() => { activationSettled = true; });
       await delay(100);
       expect(activationSettled).toBe(false);
 
       await cutover.query('COMMIT');
-      await expect(activating).rejects.toThrow(/does not cover every e2ee vault/);
+      const activationResult = await activating;
+      expect(activationResult.status).toBe('rejected');
+      if (activationResult.status === 'rejected') {
+        expect(activationResult.reason).toBeInstanceOf(Error);
+        expect((activationResult.reason as Error).message).toMatch(/does not cover every e2ee vault/);
+      }
       await activation.query('ROLLBACK');
     } finally {
       await Promise.all([

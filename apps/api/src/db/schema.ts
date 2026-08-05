@@ -1319,6 +1319,10 @@ export const accountCryptoResetRequests = pgTable(
     candidateDeviceCertificateSignature: bytea('candidate_device_certificate_signature').notNull(),
     candidateUserProof: bytea('candidate_user_proof').notNull(),
     requestDigest: bytea('request_digest').notNull().unique(),
+    caseId: uuid('case_id'),
+    recoveryActivationIdempotencyKey: text('recovery_activation_idempotency_key'),
+    recoveryActivationDeviceSignature: bytea('recovery_activation_device_signature'),
+    recoveryActivationUserSignature: bytea('recovery_activation_user_signature'),
     status: text('status')
       .$type<'pending' | 'approved' | 'activated' | 'cancelled' | 'expired' | 'failed'>()
       .notNull()
@@ -1343,6 +1347,9 @@ export const accountCryptoResetRequests = pgTable(
     uniqueIndex('account_crypto_reset_requests_candidate_device_uq')
       .on(t.candidateDeviceId)
       .where(sql`${t.status} IN ('pending', 'approved', 'activated')`),
+    uniqueIndex('account_crypto_reset_requests_case_uq')
+      .on(t.caseId)
+      .where(sql`${t.caseId} IS NOT NULL`),
   ],
 );
 
@@ -1379,6 +1386,88 @@ export const accountCryptoResetVaults = pgTable(
   ],
 );
 
+export const enterpriseRecoveryCases = pgTable(
+  'enterprise_recovery_cases',
+  {
+    id: uuid('id').primaryKey(),
+    kind: text('kind').$type<'forgot_password' | 'interrupted_handoff'>().notNull(),
+    targetUserId: text('target_user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    recoveryKeyId: uuid('recovery_key_id')
+      .notNull()
+      .references(() => enterpriseRecoveryKeys.id, { onDelete: 'restrict' }),
+    status: text('status').$type<
+      | 'waiting_for_target'
+      | 'pending_approval'
+      | 'approved'
+      | 'processing'
+      | 'completed'
+      | 'completed_with_skips'
+      | 'cancelled'
+      | 'expired'
+    >().notNull().default('waiting_for_target'),
+    caseDigest: bytea('case_digest'),
+    targetDeviceId: uuid('target_device_id'),
+    targetEncryptionPublicKey: bytea('target_encryption_public_key'),
+    targetKeyVersion: integer('target_key_version'),
+    accountResetRequestId: uuid('account_reset_request_id').references(
+      () => accountCryptoResetRequests.id,
+      { onDelete: 'restrict' },
+    ),
+    createdByUserId: text('created_by_user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    finalizedAt: timestamp('finalized_at', { withTimezone: true }),
+    approvedAt: timestamp('approved_at', { withTimezone: true }),
+    processingAt: timestamp('processing_at', { withTimezone: true }),
+    completedAt: timestamp('completed_at', { withTimezone: true }),
+    cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
+    expiredAt: timestamp('expired_at', { withTimezone: true }),
+    lastErrorCode: text('last_error_code'),
+  },
+  (t) => [
+    uniqueIndex('enterprise_recovery_cases_active_target_uq')
+      .on(t.targetUserId)
+      .where(sql`${t.status} IN ('waiting_for_target', 'pending_approval', 'approved', 'processing')`),
+    index('enterprise_recovery_cases_admin_idx').on(t.status, t.expiresAt, t.createdAt),
+  ],
+);
+
+export const enterpriseRecoveryCaseApprovals = pgTable(
+  'enterprise_recovery_case_approvals',
+  {
+    caseId: uuid('case_id')
+      .notNull()
+      .references(() => enterpriseRecoveryCases.id, { onDelete: 'restrict' }),
+    approverUserId: text('approver_user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    caseDigest: bytea('case_digest').notNull(),
+    approvedAt: timestamp('approved_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.caseId, t.approverUserId] })],
+);
+
+export const enterpriseRecoveryCaseTransfers = pgTable(
+  'enterprise_recovery_case_transfers',
+  {
+    caseId: uuid('case_id')
+      .primaryKey()
+      .references(() => enterpriseRecoveryCases.id, { onDelete: 'restrict' }),
+    caseDigest: bytea('case_digest').notNull(),
+    transferDigest: bytea('transfer_digest').notNull(),
+    transferPayload: jsonb('transfer_payload').$type<Record<string, unknown>>().notNull(),
+    uploadedByUserId: text('uploaded_by_user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    uploadedAt: timestamp('uploaded_at', { withTimezone: true }).notNull().defaultNow(),
+    consumedAt: timestamp('consumed_at', { withTimezone: true }),
+  },
+);
+
 export const enterpriseRecoveryRequests = pgTable(
   'enterprise_recovery_requests',
   {
@@ -1395,6 +1484,7 @@ export const enterpriseRecoveryRequests = pgTable(
       .references(() => users.id, { onDelete: 'restrict' }),
     targetDeviceId: uuid('target_device_id').notNull(),
     targetEncryptionPublicKey: bytea('target_encryption_public_key').notNull(),
+    targetKeyFingerprint: text('target_key_fingerprint'),
     targetKeyVersion: integer('target_key_version').notNull(),
     targetCapability: text('target_capability').$type<'metadata' | 'full'>().notNull(),
     reason: text('reason')
@@ -1404,9 +1494,10 @@ export const enterpriseRecoveryRequests = pgTable(
       () => accountCryptoResetRequests.id,
       { onDelete: 'restrict' },
     ),
+    caseId: uuid('case_id').references(() => enterpriseRecoveryCases.id, { onDelete: 'restrict' }),
     requestDigest: bytea('request_digest').notNull().unique(),
     status: text('status')
-      .$type<'pending' | 'approved' | 'completed' | 'cancelled' | 'expired' | 'failed'>()
+      .$type<'pending' | 'approved' | 'satisfied' | 'completed' | 'cancelled' | 'expired' | 'failed'>()
       .notNull()
       .default('pending'),
     createdByUserId: text('created_by_user_id')
@@ -1431,15 +1522,13 @@ export const enterpriseRecoveryRequests = pgTable(
       foreignColumns: [vaultKeyEpochs.vaultId, vaultKeyEpochs.epoch],
       name: 'enterprise_recovery_requests_epoch_fk',
     }).onDelete('restrict'),
-    foreignKey({
-      columns: [t.targetDeviceId, t.targetUserId],
-      foreignColumns: [userDevices.id, userDevices.userId],
-      name: 'enterprise_recovery_requests_target_device_fk',
-    }).onDelete('restrict'),
     uniqueIndex('enterprise_recovery_requests_active_uq')
       .on(t.vaultId, t.targetUserId)
       .where(sql`${t.status} IN ('pending', 'approved')`),
     index('enterprise_recovery_requests_target_idx').on(t.targetUserId, t.status, t.expiresAt),
+    index('enterprise_recovery_requests_case_idx')
+      .on(t.caseId, t.status, t.vaultId)
+      .where(sql`${t.caseId} IS NOT NULL`),
   ],
 );
 

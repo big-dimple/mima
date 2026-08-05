@@ -16,18 +16,19 @@ import {
 import type { LegacyMigrationStatusResponse, SecurityPhase } from '@mima/client-core';
 import type {
   AccountCryptoResetRequest,
-  EnterpriseRecoveryCandidate,
-  EnterpriseRecoveryRequest,
+  EnterpriseRecoveryCase,
   EnterpriseRecoveryWorkspace,
   SessionUser,
   VaultCryptoState,
 } from '@mima/contracts';
+import { EnterpriseRecoveryCaseTransferSchema } from '@mima/contracts';
 import { useApp, useMeta } from '../state/app-context.ts';
 import type { LocalAccessReason } from '../state/local-access.ts';
 import { useUi } from '../state/ui-store.ts';
 import { LoadingState } from './AsyncState.tsx';
 import { EnterpriseRecoveryRequestPanel } from './EnterpriseRecoveryRequestPanel.tsx';
 import { RecoveryKeyManager } from './RecoveryKeyManager.tsx';
+import { readTextFile } from '../utils/read-text-file.ts';
 import styles from './SecurityGate.module.css';
 
 export function SecurityGate({
@@ -125,7 +126,7 @@ function SetupPanel({ user, onLoggedOut }: { user: SessionUser | null; onLoggedO
         </button>
       </form>
       <div className={styles.boundary}>
-        主密码、密码库名称和库内内容都不会以明文发送到服务器，包括平台管理员也不能从平台直接查看。
+        主密码、密码库名称和库内内容都不会以明文发送到服务器，包括平台管理员也绝对无法查看受保护库。
       </div>
       {user?.isLocalPlatformAdmin && (
         <AdminToolsDisclosure label="管理员设置（不影响主密码创建）">
@@ -212,9 +213,9 @@ function UnlockPanel({
         <button className={styles.primary} type="submit" disabled={busy}>{busy ? '正在解锁密码库…' : '解锁密码库'}</button>
       </form>
       <button className={styles.secondary} type="button" onClick={() => setResetting((value) => !value)}>
-        {resetting ? '返回主密码解锁' : '忘记主密码或没有可用设备'}
+        {resetting ? '返回主密码解锁' : '忘记主密码'}
       </button>
-      {resetting && <StartAccountResetForm />}
+      {resetting && <ForgotPasswordHelp />}
       {user?.isLocalPlatformAdmin && <AdminAccountResetApprovals />}
     </GateShell>
   );
@@ -238,63 +239,133 @@ function BrowserCredentialAccount({ id, user }: { id: string; user: SessionUser 
   );
 }
 
-function StartAccountResetForm() {
-  const { zeroKnowledge } = useApp();
+function ForgotPasswordHelp() {
+  const { api, zeroKnowledge } = useApp();
+  const currentUserId = useMeta((state) => state.user?.id ?? '');
   const toast = useUi((state) => state.toast);
   const passwordRef = useRef<HTMLInputElement>(null);
   const confirmationRef = useRef<HTMLInputElement>(null);
+  const [recoveryCase, setRecoveryCase] = useState<EnterpriseRecoveryCase | null>(null);
+  const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const load = async () => {
+    setLoading(true);
+    try {
+      const cases = await api.recoveryCases();
+      setRecoveryCase(cases.find((entry) => (
+        entry.targetUserId === currentUserId
+        && ['waiting_for_target', 'pending_approval', 'approved', 'processing'].includes(entry.status)
+      )) ?? null);
+    } catch (error) {
+      toast('error', error instanceof Error ? error.message : '恢复协助状态加载失败');
+    } finally {
+      setLoading(false);
+    }
+  };
+  useEffect(() => { void load(); }, [currentUserId]);
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
+    if (!recoveryCase || recoveryCase.status !== 'waiting_for_target') return;
     setBusy(true);
     try {
-      await zeroKnowledge.startAccountCryptoReset(
+      await zeroKnowledge.startForgotPasswordRecoveryCase(
+        recoveryCase.id,
         passwordRef.current?.value ?? '',
         confirmationRef.current?.value ?? '',
       );
-      toast('warn', '解锁重置申请已提交，需要两名不同的系统管理员审批');
+      toast('info', '新主密码已设置，正在等待两位管理员确认');
     } catch (error) {
-      toast('error', error instanceof Error ? error.message : '解锁重置申请提交失败');
+      toast('error', error instanceof Error ? error.message : '新主密码设置失败');
     } finally {
       if (passwordRef.current) passwordRef.current.value = '';
       if (confirmationRef.current) confirmationRef.current.value = '';
       setBusy(false);
     }
   };
+  if (loading) return <LoadingState label="正在查看管理员是否已发起协助…" />;
+  if (!recoveryCase) {
+    return (
+      <div className={styles.resetForm}>
+        <div className={styles.notice}>
+          请在公司群里联系管理员，并直接说“我忘记主密码，请在企业恢复中心发起协助”。管理员发起后，刷新这里设置新主密码即可。
+        </div>
+        <button type="button" className={styles.secondary} onClick={() => void load()}>
+          <RefreshCw size={15} aria-hidden />管理员已发起，刷新状态
+        </button>
+      </div>
+    );
+  }
+  if (recoveryCase.status !== 'waiting_for_target') {
+    return (
+      <div className={styles.resetForm}>
+        <div className={styles.notice}>{recoveryCase.status === 'pending_approval'
+          ? `新主密码已准备好，正在等待管理员确认（${recoveryCase.approvalUserIds.length}/2）。无需停留本页，确认完成后请用新主密码重新登录。`
+          : '管理员已经确认，系统正在自动恢复你的原有访问。'}</div>
+        <button type="button" className={styles.secondary} onClick={() => void load()}>
+          <RefreshCw size={15} aria-hidden />刷新状态
+        </button>
+      </div>
+    );
+  }
   return (
     <form className={styles.resetForm} onSubmit={submit}>
-      <div className={styles.notice}>这不会找回原主密码。优先请仍能打开密码库的所有者重新授权；确需企业恢复时，每次要由两位管理员共同确认，并由三份离线恢复材料中的任意两份共同完成。</div>
+      <div className={styles.notice}>管理员已发起协助。请设置新主密码；原主密码不会被找回，管理员也不能登录你的账号或查看受保护库。</div>
       <label htmlFor="reset-main-password">新的主密码</label>
       <input id="reset-main-password" ref={passwordRef} type="password" autoComplete="new-password" minLength={12} maxLength={256} />
       <label htmlFor="reset-main-password-confirmation">再次输入新的主密码</label>
       <input id="reset-main-password-confirmation" ref={confirmationRef} type="password" autoComplete="new-password" minLength={12} maxLength={256} />
       <button className={styles.primary} type="submit" disabled={busy}>
-        {busy ? '正在准备重置申请…' : '提交密码库解锁重置申请'}
+        {busy ? '正在安全保存…' : '设置新主密码并等待确认'}
       </button>
     </form>
   );
 }
 
 function AccountResetPanel({ user, onLoggedOut }: { user: SessionUser | null; onLoggedOut: () => void }) {
-  const { zeroKnowledge } = useApp();
+  const { api, zeroKnowledge } = useApp();
   const toast = useUi((state) => state.toast);
   const [request, setRequest] = useState<AccountCryptoResetRequest | null>(null);
+  const [recoveryCase, setRecoveryCase] = useState<EnterpriseRecoveryCase | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
-  const passwordRef = useRef<HTMLInputElement>(null);
+  const activationStarted = useRef<string | null>(null);
   const load = async () => {
-    setLoading(true);
     try {
-      const requests = await zeroKnowledge.accountCryptoResetRequests();
-      setRequest(requests.find((entry) => entry.targetUserId === user?.id
-        && (entry.status === 'pending' || entry.status === 'approved')) ?? null);
+      const [requests, cases] = await Promise.all([
+        zeroKnowledge.accountCryptoResetRequests(),
+        api.recoveryCases(),
+      ]);
+      const activeRequest = requests.find((entry) => entry.targetUserId === user?.id
+        && (entry.status === 'pending' || entry.status === 'approved')) ?? null;
+      setRequest(activeRequest);
+      setRecoveryCase(cases.find((entry) => entry.id === activeRequest?.caseId) ?? null);
+      if (activeRequest?.status === 'approved'
+        && activeRequest.caseId === null
+        && activationStarted.current !== activeRequest.id
+      ) {
+        activationStarted.current = activeRequest.id;
+        setBusy(true);
+        try {
+          await zeroKnowledge.activatePreparedAccountCryptoReset(activeRequest);
+          toast('info', '新主密码已启用，系统正在自动恢复你原有的密码库访问');
+        } catch (error) {
+          activationStarted.current = null;
+          toast('error', error instanceof Error ? error.message : '自动启用新主密码失败，请刷新重试');
+        } finally {
+          setBusy(false);
+        }
+      }
     } catch (error) {
       toast('error', error instanceof Error ? error.message : '解锁重置状态加载失败');
     } finally {
       setLoading(false);
     }
   };
-  useEffect(() => { void load(); }, [user?.id]);
+  useEffect(() => {
+    void load();
+    const timer = window.setInterval(() => void load(), 3000);
+    return () => window.clearInterval(timer);
+  }, [user?.id]);
   const cancel = async () => {
     if (!request) return;
     setBusy(true);
@@ -307,40 +378,22 @@ function AccountResetPanel({ user, onLoggedOut }: { user: SessionUser | null; on
       setBusy(false);
     }
   };
-  const activate = async (event: React.FormEvent) => {
-    event.preventDefault();
-    if (!request) return;
-    setBusy(true);
-    try {
-      await zeroKnowledge.activateAccountCryptoReset(request, passwordRef.current?.value ?? '');
-      toast('warn', '新的解锁信息已启用。系统会在仍能打开密码库的拥有者下次解锁后自动恢复访问；确认无人能打开时再使用企业恢复。');
-    } catch (error) {
-      toast('error', error instanceof Error ? error.message : '密码库解锁重置未完成');
-    } finally {
-      if (passwordRef.current) passwordRef.current.value = '';
-      setBusy(false);
-    }
-  };
   return (
     <GateShell onLoggedOut={onLoggedOut}>
       <UserRoundCheck size={24} className={styles.icon} aria-hidden />
-      <h1>重置密码库解锁</h1>
-      <p>原来的主密码和解锁能力无法找回。管理员审批只允许你在这台浏览器重新建立解锁能力，不能查看你的密码库内容。</p>
-      {loading && <LoadingState label="正在加载审批状态…" />}
-      {!loading && !request && <div className={styles.notice}>没有进行中的重置请求。请返回锁定页重新发起。</div>}
+      <h1>正在恢复访问</h1>
+      <p>你已经设置好新主密码。两位管理员确认后，系统会自动完成后续步骤；之后可在任意浏览器重新登录。</p>
+      {loading && <LoadingState label="正在查看管理员确认进度…" />}
+      {!loading && !request && <div className={styles.notice}>这次协助已经结束，请返回登录页重新进入。</div>}
       {request && (
         <>
-          <div className={styles.account}>已审批 {request.approvalUserIds.length}/2 人 · 有效期至 {new Date(request.expiresAt).toLocaleString()}</div>
-          <div className={styles.boundary}>请求摘要：{request.requestDigest.slice(0, 16)}… 审批后不会自动完成；必须回到发起申请的这台浏览器，输入新主密码确认。</div>
-          {request.status === 'approved' && (
-            <form className={styles.form} onSubmit={activate}>
-              <label htmlFor="activate-reset-main-password">新的主密码</label>
-              <input id="activate-reset-main-password" ref={passwordRef} type="password" autoComplete="current-password" maxLength={256} />
-              <button className={styles.primary} type="submit" disabled={busy}>{busy ? '正在验证新主密码…' : '验证新主密码并完成重置'}</button>
-            </form>
-          )}
+          <div className={styles.account}>管理员已确认 {request.approvalUserIds.length}/2 人</div>
+          <div className={styles.boundary}>{busy || request.status === 'approved'
+            ? '确认已经完成，正在自动启用新主密码。'
+            : `等待另一位管理员确认。有效期至 ${new Date(request.expiresAt).toLocaleString()}`}</div>
+          {recoveryCase && <div className={styles.notice}>本次协助会恢复你原本已经拥有的权限，不会新增任何密码库权限。</div>}
           <div className={styles.actions}>
-            <button type="button" onClick={() => void load()} disabled={busy}><RefreshCw size={15} aria-hidden />刷新状态</button>
+            <button type="button" onClick={() => void load()} disabled={busy}><RefreshCw size={15} aria-hidden />立即刷新</button>
             <button type="button" onClick={() => void cancel()} disabled={busy}>取消重置</button>
           </div>
         </>
@@ -359,49 +412,69 @@ export function AdminAccountResetApprovals({
   recoveryWorkspace?: EnterpriseRecoveryWorkspace | null;
   onRecoveryChanged?: () => void | Promise<void>;
 } = {}) {
-  const { api, zeroKnowledge } = useApp();
+  const { api } = useApp();
   const currentUserId = useMeta((state) => state.user?.id ?? '');
   const toast = useUi((state) => state.toast);
-  const [requests, setRequests] = useState<AccountCryptoResetRequest[]>([]);
-  const [recoveries, setRecoveries] = useState<EnterpriseRecoveryRequest[]>([]);
-  const [candidates, setCandidates] = useState<EnterpriseRecoveryCandidate[]>([]);
+  const [cases, setCases] = useState<EnterpriseRecoveryCase[]>(recoveryWorkspace?.cases ?? []);
+  const [users, setUsers] = useState<Array<{ id: string; username: string; displayName: string }>>([]);
+  const [targetUserId, setTargetUserId] = useState('');
+  const [kind, setKind] = useState<EnterpriseRecoveryCase['kind']>('forgot_password');
   const [busyId, setBusyId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const load = async () => {
     setLoading(true);
     try {
-      const values = await zeroKnowledge.accountCryptoResetRequests();
-      const [recoveryValues, candidateValues] = recoveryWorkspace
-        ? [recoveryWorkspace.requests, recoveryWorkspace.candidates]
-        : await Promise.all([api.recoveryRequests(), api.recoveryCandidates()]);
-      setRequests(values.filter((entry) =>
-        entry.targetUserId !== currentUserId
-        && ((entry.status === 'pending' || entry.status === 'approved')
-          ? new Date(entry.expiresAt).getTime() > Date.now()
-          : entry.status === 'activated' && entry.affectedVaultIds.length > 0),
-      ));
-      setRecoveries(recoveryValues);
-      setCandidates(candidateValues);
+      const [caseValues, directory] = await Promise.all([
+        api.recoveryCases(),
+        api.directory(),
+      ]);
+      setCases(caseValues);
+      const availableUsers = directory.users.filter((entry) => entry.id !== currentUserId);
+      setUsers(availableUsers);
+      setTargetUserId((current) => current || availableUsers[0]?.id || '');
     } catch (error) {
-      toast('error', error instanceof Error ? error.message : '待审批请求加载失败');
+      toast('error', error instanceof Error ? error.message : '恢复协助加载失败');
     } finally {
       setLoading(false);
     }
   };
   useEffect(() => { void load(); }, [currentUserId, recoveryWorkspace]);
-  const approve = async (request: AccountCryptoResetRequest) => {
+  const create = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!targetUserId) return;
+    setBusyId('create');
+    try {
+      await api.createRecoveryCase({
+        idempotencyKey: crypto.randomUUID(),
+        kind,
+        targetUserId,
+      });
+      toast('info', '恢复协助已发起，等待用户设置新主密码');
+      await load();
+      await onRecoveryChanged?.();
+    } catch (error) {
+      toast('error', error instanceof Error ? error.message : '恢复协助发起失败');
+    } finally {
+      setBusyId(null);
+    }
+  };
+  const approve = async (recoveryCase: EnterpriseRecoveryCase) => {
     const confirmed = await useUi.getState().requestConfirm({
-      title: '批准账户加密身份重置？',
-      body: `申请人：${request.targetUserId}\n请求摘要：${request.requestDigest}\n有效期：${new Date(request.expiresAt).toLocaleString('zh-CN', { hour12: false })}\n批准后将计入双人审批，并允许申请人启用新的加密身份。请先与申请人核对完整摘要。`,
-      confirmText: '摘要一致，批准',
-      cancelText: '返回核对',
+      title: '确认帮助这位同事恢复？',
+      body: `用户：${recoveryCase.targetDisplayName}（${recoveryCase.targetUsername}）\n场景：${recoveryCase.kind === 'forgot_password' ? '忘记主密码' : '交接中断后恢复原有权限'}\n涉及 ${recoveryCase.items.length} 个原本已有权限的密码库。请先通过公司沟通渠道确认本人身份。`,
+      confirmText: '身份已确认，同意协助',
+      cancelText: '暂不确认',
       danger: true,
     });
     if (!confirmed) return;
-    setBusyId(request.id);
+    setBusyId(recoveryCase.id);
     try {
-      await zeroKnowledge.approveAccountCryptoReset(request);
-      toast('info', '审批已绑定到该请求摘要');
+      if (!recoveryCase.caseDigest) throw new Error('用户还没有设置新主密码');
+      await api.approveRecoveryCase(recoveryCase.id, {
+        idempotencyKey: crypto.randomUUID(),
+        caseDigest: recoveryCase.caseDigest,
+      });
+      toast('info', '你的确认已记录，系统会在两人确认后自动继续');
       await load();
       await onRecoveryChanged?.();
     } catch (error) {
@@ -410,167 +483,121 @@ export function AdminAccountResetApprovals({
       setBusyId(null);
     }
   };
-  const createRecovery = async (request: AccountCryptoResetRequest, vaultId: string) => {
-    setBusyId(`${request.id}:${vaultId}`);
+  const downloadPackage = async (recoveryCase: EnterpriseRecoveryCase) => {
+    setBusyId(`download:${recoveryCase.id}`);
     try {
-      await api.createRecoveryRequest({
-        idempotencyKey: crypto.randomUUID(),
-        vaultId,
-        targetUserId: request.targetUserId,
-        targetDeviceId: request.candidateDevice.id,
-        targetEncryptionPublicKey: request.encryptionPublicKey,
-        targetKeyVersion: request.newKeyVersion,
-        reason: 'account_reset',
-        accountResetRequestId: request.id,
-      });
-      toast('info', '该密码库的企业恢复请求已发起，仍需两名不同管理员审批');
-      await load();
-      await onRecoveryChanged?.();
+      const value = await api.recoveryCasePackage(recoveryCase.id);
+      downloadJson(`企业恢复-${recoveryCase.targetUsername}-${recoveryCase.id.slice(0, 8)}.json`, value);
+      toast('info', '处理包已下载，请在离线电脑中双击打开恢复向导');
     } catch (error) {
-      toast('error', error instanceof Error ? error.message : '企业恢复请求发起失败');
+      toast('error', error instanceof Error ? error.message : '处理包下载失败');
     } finally {
       setBusyId(null);
     }
   };
-  const approveRecovery = async (request: EnterpriseRecoveryRequest) => {
-    setBusyId(request.id);
+  const uploadTransfer = async (recoveryCase: EnterpriseRecoveryCase, file: File) => {
+    setBusyId(`upload:${recoveryCase.id}`);
     try {
-      await api.approveRecoveryRequest(request.id, {
+      const transfer = EnterpriseRecoveryCaseTransferSchema.parse(JSON.parse(await readTextFile(file)));
+      if (!recoveryCase.caseDigest) throw new Error('这次协助还没有准备完成');
+      await api.uploadRecoveryCaseTransfer(recoveryCase.id, {
         idempotencyKey: crypto.randomUUID(),
-        requestDigest: request.requestDigest,
+        caseDigest: recoveryCase.caseDigest,
+        transfer,
       });
-      toast('info', '企业恢复审批已绑定到请求摘要');
+      toast('info', '处理结果已提交，系统会自动完成恢复');
       await load();
       await onRecoveryChanged?.();
     } catch (error) {
-      toast('error', error instanceof Error ? error.message : '企业恢复审批失败');
-    } finally {
-      setBusyId(null);
-    }
-  };
-  const createPersonalRecovery = async (candidate: EnterpriseRecoveryCandidate) => {
-    setBusyId(`candidate:${candidate.vaultId}`);
-    try {
-      await api.createRecoveryRequest({
-        idempotencyKey: crypto.randomUUID(),
-        vaultId: candidate.vaultId,
-        targetUserId: candidate.targetUserId,
-        targetDeviceId: candidate.targetDeviceId,
-        targetEncryptionPublicKey: candidate.targetEncryptionPublicKey,
-        targetKeyVersion: candidate.targetKeyVersion,
-        reason: 'lost_all_devices',
-      });
-      toast('info', '企业恢复请求已发起，仍需两名不同管理员审批和离线恢复材料');
-      await load();
-      await onRecoveryChanged?.();
-    } catch (error) {
-      toast('error', error instanceof Error ? error.message : '企业恢复请求发起失败');
+      toast('error', error instanceof Error ? error.message : '处理结果不匹配或已失效');
     } finally {
       setBusyId(null);
     }
   };
   if (loading) return <LoadingState label="正在核对待审批请求…" />;
-  if (requests.length === 0 && candidates.length === 0) {
-    return showEmpty ? (
-      <section className={styles.adminSection} aria-label="恢复协助与密码库解锁重置审批">
-        <div className={styles.notice}>当前没有需要你审批或发起协助的恢复请求。</div>
-      </section>
-    ) : null;
-  }
+  const activeCases = cases.filter((entry) => ['waiting_for_target', 'pending_approval', 'approved', 'processing'].includes(entry.status));
   return (
-    <section className={styles.adminSection} aria-label="恢复协助与密码库解锁重置审批">
-      <h2>待处理的恢复协助</h2>
-      <p>管理员只能发起和审批流程，不能直接查看密码库内容。完整恢复仍需两名不同管理员审批，并由两名材料保管人在隔离设备联合处理。</p>
-      {candidates.map((candidate) => {
-        const recovery = recoveries.find((entry) =>
-          entry.vaultId === candidate.vaultId &&
-          entry.targetUserId === candidate.targetUserId &&
-          (entry.status === 'pending' || entry.status === 'approved'));
-        const approvedByMe = recovery?.approvalUserIds.includes(currentUserId) ?? false;
+    <section className={styles.adminSection} aria-label="恢复协助">
+      <h2>发起恢复协助</h2>
+      <p>同事忘记主密码或交接中断时，由管理员在这里发起。一次协助覆盖其仍然有效的原有权限，不需要逐个密码库操作。</p>
+      <form className={styles.resetForm} onSubmit={create}>
+        <label htmlFor="recovery-target-user">需要帮助的同事</label>
+        <select id="recovery-target-user" value={targetUserId} onChange={(event) => setTargetUserId(event.target.value)}>
+          {users.map((entry) => <option key={entry.id} value={entry.id}>{entry.displayName}（{entry.username}）</option>)}
+        </select>
+        <label htmlFor="recovery-case-kind">遇到的问题</label>
+        <select id="recovery-case-kind" value={kind} onChange={(event) => setKind(event.target.value as EnterpriseRecoveryCase['kind'])}>
+          <option value="forgot_password">忘记主密码</option>
+          <option value="interrupted_handoff">已有权限，但交接中断后打不开</option>
+        </select>
+        <button className={styles.primary} type="submit" disabled={!targetUserId || busyId !== null}>
+          {busyId === 'create' ? '正在发起…' : '发起恢复协助'}
+        </button>
+      </form>
+      <h2>正在处理</h2>
+      {activeCases.length === 0 && showEmpty && <div className={styles.notice}>当前没有进行中的恢复协助。</div>}
+      {activeCases.map((recoveryCase) => {
+        const approvedByMe = recoveryCase.approvalUserIds.includes(currentUserId);
+        const canApprove = recoveryCase.status === 'pending_approval' && !approvedByMe;
+        const unresolved = recoveryCase.items.length - recoveryCase.resolvedItemCount - recoveryCase.skippedItemCount;
         return (
-          <div className={styles.approvalRow} key={`candidate:${candidate.vaultId}`}>
-            <div>
-              <strong>{candidate.targetDisplayName} · 个人密码库需要企业恢复</strong>
-              <span>
-                {candidate.targetUsername} · 密码库 {candidate.vaultId.slice(0, 8)} · {recovery
-                  ? `${recovery.approvalUserIds.length}/2 人已审批`
-                  : '当前设备暂时打不开这个密码库'}
-              </span>
-            </div>
-            {!recovery ? (
-              <button
-                type="button"
-                disabled={busyId !== null}
-                onClick={() => void createPersonalRecovery(candidate)}
-              >
-                {busyId === `candidate:${candidate.vaultId}` ? '发起中…' : '核对后发起恢复'}
-              </button>
-            ) : (
-              <button
-                type="button"
-                disabled={approvedByMe || recovery.status === 'approved' || recovery.status === 'completed' || busyId !== null}
-                onClick={() => void approveRecovery(recovery)}
-              >
-                {approvedByMe ? '已审批' : recovery.status === 'approved' ? '已完成双人审批' : '审批恢复'}
+          <div className={styles.recoveryGroup} key={recoveryCase.id}>
+            <strong>{recoveryCase.targetDisplayName} · {recoveryCase.kind === 'forgot_password' ? '忘记主密码' : '交接中断'}</strong>
+            <span>{recoveryCaseStatusText(recoveryCase)} · 原有密码库 {recoveryCase.items.length} 个</span>
+            {canApprove && (
+              <button type="button" disabled={busyId !== null} onClick={() => void approve(recoveryCase)}>
+                {busyId === recoveryCase.id ? '正在确认…' : '确认身份并同意协助'}
               </button>
             )}
-          </div>
-        );
-      })}
-      {requests.length > 0 && <h2>待审批的解锁重置</h2>}
-      {requests.length > 0 && <p>解锁重置只为用户建立新的本机解锁能力，管理员仍看不到密码库内容。请通过公司流程核对申请人和请求摘要。</p>}
-      {requests.map((request) => {
-        if (request.status === 'activated') {
-          return (
-            <div className={styles.recoveryGroup} key={request.id}>
-              <strong>{request.targetUserId} · 无人可解锁时的企业恢复</strong>
-              {request.affectedVaultIds.map((vaultId) => {
-                const recovery = recoveries.find((entry) =>
-                  entry.accountResetRequestId === request.id && entry.vaultId === vaultId,
-                );
-                const approvedByMe = recovery?.approvalUserIds.includes(currentUserId) ?? false;
-                return (
-                  <div className={styles.approvalRow} key={vaultId}>
-                    <div>
-                      <strong>密码库 {vaultId.slice(0, 8)}</strong>
-                      <span>{recovery
-                        ? `${recovery.approvalUserIds.length}/2 人已审批 · ${recovery.targetCapability === 'metadata' ? '仅审计信息' : '全部内容'}`
-                        : '仅在没有拥有者能够解锁时发起'}</span>
-                    </div>
-                    {!recovery ? (
-                      <button type="button" disabled={busyId !== null} onClick={() => void createRecovery(request, vaultId)}>
-                        {busyId === `${request.id}:${vaultId}` ? '发起中…' : '确认无人可解锁后发起'}
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        disabled={approvedByMe || recovery.status === 'completed' || busyId !== null}
-                        onClick={() => void approveRecovery(recovery)}
-                      >
-                        {approvedByMe ? '已审批' : recovery.status === 'approved' ? '补充审批' : '审批恢复'}
-                      </button>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          );
-        }
-        const approved = request.approvalUserIds.includes(currentUserId);
-        return (
-          <div className={styles.approvalRow} key={request.id}>
-            <div>
-              <strong>{request.targetUserId}</strong>
-              <span>{request.requestDigest.slice(0, 12)}… · {request.approvalUserIds.length}/2 人</span>
-            </div>
-            <button type="button" disabled={approved || busyId !== null} onClick={() => void approve(request)}>
-              {approved ? '已审批' : busyId === request.id ? '提交中…' : '核对后批准'}
-            </button>
+            {recoveryCase.status === 'pending_approval' && approvedByMe && <div className={styles.notice}>你已确认，等待另一位管理员。</div>}
+            {['approved', 'processing'].includes(recoveryCase.status) && unresolved > 0 && !recoveryCase.hasOfflineResult && (
+              <div className={styles.actions}>
+                <button type="button" disabled={busyId !== null} onClick={() => void downloadPackage(recoveryCase)}>
+                  {busyId === `download:${recoveryCase.id}` ? '正在准备…' : '下载离线处理包'}
+                </button>
+                <label className={styles.secondary}>
+                  上传离线处理结果
+                  <input
+                    type="file"
+                    accept="application/json,.json"
+                    hidden
+                    disabled={busyId !== null}
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      if (file) void uploadTransfer(recoveryCase, file);
+                      event.target.value = '';
+                    }}
+                  />
+                </label>
+              </div>
+            )}
+            {recoveryCase.hasOfflineResult && <div className={styles.notice}>离线处理已完成，系统正在自动完成恢复。</div>}
           </div>
         );
       })}
     </section>
   );
+}
+
+function recoveryCaseStatusText(recoveryCase: EnterpriseRecoveryCase): string {
+  if (recoveryCase.status === 'waiting_for_target') return '等待用户设置新主密码';
+  if (recoveryCase.status === 'pending_approval') return `管理员已确认 ${recoveryCase.approvalUserIds.length}/2 人`;
+  if (recoveryCase.status === 'approved') return '两人已确认，正在自动处理';
+  if (recoveryCase.status === 'processing') return '正在恢复原有访问';
+  if (recoveryCase.status === 'completed') return '已经完成';
+  if (recoveryCase.status === 'completed_with_skips') return '已完成，失效权限已跳过';
+  if (recoveryCase.status === 'expired') return '已过期';
+  return '已取消';
+}
+
+function downloadJson(fileName: string, value: unknown): void {
+  const blob = new Blob([JSON.stringify(value, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = fileName;
+  anchor.click();
+  URL.revokeObjectURL(url);
 }
 
 function MigrationPanel({
@@ -962,7 +989,7 @@ function RekeyPanel({ onLoggedOut }: { onLoggedOut: () => void }) {
       <AlertTriangle size={24} className={styles.warningIcon} aria-hidden />
       <h1>{recoveryPending.length > 0 ? '部分密码库需要企业恢复' : '密码库正在安全更新'}</h1>
       <p>{recoveryPending.length > 0
-        ? '当前设备暂时打不开这些个人密码库。在恢复完成前，系统不会返回对应条目；账号登录成功也不能代替密码库解锁。'
+        ? '这些个人密码库暂时打不开。在恢复完成前，系统不会返回对应条目；账号登录成功也不能代替密码库解锁。'
         : '移除成员、降低权限或撤销设备后，系统会更新密码库的访问保护。完成前暂时不能修改，避免旧权限继续获得新内容。'}</p>
       {pending.length > 0 && (
         <div className={styles.boundary}>对方已经看过或离线保存的旧内容无法远程抹除；这次安全更新只会阻止其继续获得后续内容。</div>
@@ -970,7 +997,7 @@ function RekeyPanel({ onLoggedOut }: { onLoggedOut: () => void }) {
       {recoveryPending.map((state) => (
         <div className={styles.pendingVault} key={`recovery:${state.vaultId}`}>
           <strong>密码库 {state.vaultId.slice(0, 8)} · 需要企业恢复</strong>
-          <span>请联系系统管理员在“企业恢复”中发起协助。请求仍需两名不同管理员审批，并由两名材料保管人使用两份离线材料联合处理；个人库只会恢复到你本人绑定的设备。</span>
+          <span>请在公司群里联系管理员发起恢复协助。两位管理员确认后，系统只会恢复你原本拥有的权限，管理员不能借此查看或接管。</span>
         </div>
       ))}
       {recoveryPending.length > 0 && (

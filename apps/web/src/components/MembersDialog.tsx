@@ -366,7 +366,7 @@ export function MembersDialog() {
               <ShieldAlert size={18} aria-hidden />
               <div>
                 <strong>当前只有一位拥有者</strong>
-                <span>如果唯一拥有者忘记主密码、设备不可用或离职未交接，自动密钥交付会暂停。建议现在增加第二位拥有者。</span>
+                <span>如果唯一拥有者无法继续管理密码库或离职未交接，自动密钥交付会暂停。建议现在增加第二位拥有者。</span>
               </div>
               <button type="button" onClick={() => {
                 setSubjectKind('user');

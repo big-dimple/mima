@@ -11,6 +11,7 @@ const { values } = parseArgs({
     version: { type: 'string' },
     'extension-dir': { type: 'string' },
     'recovery-tool-file': { type: 'string' },
+    'recovery-wizard-file': { type: 'string' },
     'offline-usage-file': { type: 'string' },
     'output-dir': { type: 'string' },
   },
@@ -21,6 +22,7 @@ const prefix = requiredOption('prefix');
 const version = requiredOption('version');
 const extensionDirectory = requiredOption('extension-dir');
 const recoveryToolFile = requiredOption('recovery-tool-file');
+const recoveryWizardFile = requiredOption('recovery-wizard-file');
 const offlineUsageFile = requiredOption('offline-usage-file');
 const outputDirectory = requiredOption('output-dir');
 
@@ -29,6 +31,7 @@ if (!/^[a-z0-9][a-z0-9-]*$/.test(prefix) || !/^[0-9A-Za-z][0-9A-Za-z.-]*$/.test(
 }
 
 await assertRegularFile(recoveryToolFile);
+await assertRegularFile(recoveryWizardFile);
 await assertRegularFile(offlineUsageFile);
 const extensionFiles = await listRegularFiles(extensionDirectory);
 if (extensionFiles.length === 0) throw new Error('extension directory is empty');
@@ -42,8 +45,9 @@ await writeArchive(extensionArchive, extensionFiles.map((file) => ({
   entry: relative(extensionDirectory, file).split(sep).join('/'),
 })));
 await writeArchive(recoveryArchive, [
-  { source: recoveryToolFile, entry: `${prefix}-recovery-tool.mjs` },
-  { source: offlineUsageFile, entry: 'OFFLINE-USAGE.txt' },
+  { source: recoveryWizardFile, entry: '打开企业恢复向导.html' },
+  { source: recoveryToolFile, entry: `advanced/${prefix}-recovery-tool.mjs` },
+  { source: offlineUsageFile, entry: 'advanced/命令行说明.txt' },
 ]);
 
 const recoveryDigest = await sha256File(recoveryArchive);

@@ -15,6 +15,7 @@ import type {
   EncryptedItemMetadata,
   EnterpriseRecoveryKey,
   EnterpriseRecoveryRequest,
+  FinalizeEnterpriseRecoveryCaseRequest,
   CompleteEnterpriseRecoveryRequest,
   CompleteVaultEnvelopeTaskRequest,
   CreateAccountCryptoResetRequest,
@@ -289,6 +290,7 @@ export class E2eeKeyring {
     keys: Required<VaultKeys>;
     verification: Omit<LegacyMigrationVerifyRequest, 'signature'>;
   }>();
+  private pendingRecoveries = new Map<string, { vaultId: string; keys: VaultKeys }>();
   private generation = 0;
 
   get isUnlocked(): boolean {
@@ -433,7 +435,7 @@ export class E2eeKeyring {
   async prepareAccountCryptoResetActivation(
     userId: string,
     reset: Pick<AccountCryptoResetRequest, 'id' | 'requestDigest'>,
-    idempotencyKey = crypto.randomUUID(),
+    idempotencyKey: string = crypto.randomUUID(),
   ): Promise<PreparedAccountCryptoResetActivation> {
     const candidate = this.pendingAccountCryptoReset;
     if (!candidate || candidate.accountId !== userId) {
@@ -1545,8 +1547,8 @@ export class E2eeKeyring {
     if (account.accountId !== userId || profile.userId !== userId) {
       throw new Error('只能为当前账号拥有的密码库添加公司恢复保护');
     }
-    if (recoveryKey.status !== 'staged') {
-      throw new Error('企业恢复公钥尚未完成双人批准或已经启用');
+    if (recoveryKey.status !== 'staged' && recoveryKey.status !== 'active') {
+      throw new Error('企业恢复保护尚未准备好');
     }
     const keys = this.requireFullVaultKeys(vaultId);
     if (keys.keyEpoch !== expectedEpoch) {
@@ -1582,12 +1584,43 @@ export class E2eeKeyring {
     };
   }
 
-  async completeRecovery(
+  async prepareInterruptedHandoffRecoveryCase(
+    userId: string,
+    caseId: string,
+    profile: UserCryptoProfile,
+  ): Promise<FinalizeEnterpriseRecoveryCaseRequest> {
+    const account = this.requireAccount();
+    const device = this.requireDevice(account);
+    if (account.accountId !== userId
+      || profile.userId !== userId
+      || profile.encryptionPublicKey !== account.encryptionKeyPair.publicKey
+      || profile.signingPublicKey !== account.signingKeyPair.publicKey
+    ) throw new Error('账号安全信息已经变化，请重新登录后再试');
+    const unsigned = {
+      idempotencyKey: crypto.randomUUID(),
+      kind: 'interrupted_handoff' as const,
+      targetDeviceId: device.deviceId,
+      targetEncryptionPublicKey: profile.encryptionPublicKey,
+      targetKeyVersion: profile.keyVersion,
+    };
+    return {
+      ...unsigned,
+      targetSignature: await this.signCommand(
+        'recovery.case.target',
+        userId,
+        {},
+        { caseId, ...unsigned },
+      ),
+    };
+  }
+
+  async prepareRecovery(
     userId: string,
     request: EnterpriseRecoveryRequest,
     recoveryKey: EnterpriseRecoveryKey,
     header: EncryptedVaultHeader,
     offlineResult: OfflineRecoveryResult,
+    idempotencyKey: string = crypto.randomUUID(),
   ): Promise<CompleteEnterpriseRecoveryRequest> {
     const account = this.requireAccount();
     const device = this.requireDevice(account);
@@ -1596,7 +1629,7 @@ export class E2eeKeyring {
     }
     if (
       request.targetUserId !== userId ||
-      request.targetDeviceId !== device.deviceId ||
+      (request.caseId === null && request.targetDeviceId !== device.deviceId) ||
       offlineResult.requestId !== request.id ||
       offlineResult.requestDigest !== request.requestDigest ||
       offlineResult.vaultId !== request.vaultId ||
@@ -1608,7 +1641,7 @@ export class E2eeKeyring {
       offlineResult.targetUserId !== userId ||
       offlineResult.targetCapability !== request.targetCapability
     ) {
-      throw new Error('离线恢复结果与当前请求或设备不匹配');
+      throw new Error('离线恢复结果与当前恢复协助不匹配');
     }
     const unsignedEnvelope = offlineResult.recoveredEnvelope;
     const expectedEvidenceDigest = await enterpriseRecoveryTransferEvidenceDigest({
@@ -1663,7 +1696,7 @@ export class E2eeKeyring {
         blob: header.blob,
       }));
       const unsigned = {
-        idempotencyKey: crypto.randomUUID(),
+        idempotencyKey,
         requestDigest: request.requestDigest,
         recoveredEnvelope,
         actorDeviceId: device.deviceId,
@@ -1678,14 +1711,40 @@ export class E2eeKeyring {
           { requestId: request.id, ...unsigned },
         ),
       };
-      const previous = this.vaultKeys.get(request.vaultId);
-      if (previous) await destroyVaultKeys(previous);
-      this.vaultKeys.set(request.vaultId, keys);
+      await this.abortRecovery(request.id);
+      this.pendingRecoveries.set(request.id, { vaultId: request.vaultId, keys });
       return result;
     } catch (error) {
       await destroyVaultKeys(keys);
       throw error;
     }
+  }
+
+  async commitRecovery(requestId: string): Promise<void> {
+    const pending = this.pendingRecoveries.get(requestId);
+    if (!pending) throw new Error('没有待完成的恢复结果');
+    this.pendingRecoveries.delete(requestId);
+    const previous = this.vaultKeys.get(pending.vaultId);
+    if (previous) await destroyVaultKeys(previous);
+    this.vaultKeys.set(pending.vaultId, pending.keys);
+  }
+
+  async abortRecovery(requestId: string): Promise<void> {
+    const pending = this.pendingRecoveries.get(requestId);
+    this.pendingRecoveries.delete(requestId);
+    if (pending) await destroyVaultKeys(pending.keys);
+  }
+
+  async completeRecovery(
+    userId: string,
+    request: EnterpriseRecoveryRequest,
+    recoveryKey: EnterpriseRecoveryKey,
+    header: EncryptedVaultHeader,
+    offlineResult: OfflineRecoveryResult,
+  ): Promise<CompleteEnterpriseRecoveryRequest> {
+    const result = await this.prepareRecovery(userId, request, recoveryKey, header, offlineResult);
+    await this.commitRecovery(request.id);
+    return result;
   }
 
   async encryptVaultRename(
@@ -2571,10 +2630,13 @@ export class E2eeKeyring {
     this.pendingVaultRekeys.clear();
     const pendingLegacyMigrations = [...this.pendingLegacyMigrations.values()];
     this.pendingLegacyMigrations.clear();
+    const pendingRecoveries = [...this.pendingRecoveries.values()];
+    this.pendingRecoveries.clear();
     this.generation += 1;
     await Promise.all(vaults.map((keys) => destroyVaultKeys(keys)));
     await Promise.all(pendingVaultRekeys.map((keys) => destroyVaultKeys(keys)));
     await Promise.all(pendingLegacyMigrations.map((pending) => destroyVaultKeys(pending.keys)));
+    await Promise.all(pendingRecoveries.map((pending) => destroyVaultKeys(pending.keys)));
     if (account) await destroyUnlockedAccount(account);
     if (pendingIdentityRotation) await destroyUnlockedAccount(pendingIdentityRotation);
     if (pendingAccountCryptoReset) await destroyUnlockedAccount(pendingAccountCryptoReset);
@@ -2679,7 +2741,10 @@ export type E2eeKeyringPort = Pick<E2eeKeyring,
   | 'encryptVaultDetails'
   | 'encryptVaultDirectories'
   | 'prepareEnterpriseRecoveryEnvelope'
-  | 'completeRecovery'
+  | 'prepareInterruptedHandoffRecoveryCase'
+  | 'prepareRecovery'
+  | 'commitRecovery'
+  | 'abortRecovery'
   | 'approveExtensionEnrollment'
   | 'prepareExtensionTrustedUnlock'
   | 'prepareExtensionSessionResume'

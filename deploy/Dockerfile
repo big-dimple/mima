@@ -27,6 +27,7 @@ ARG MIMA_EXTENSION_PUBLIC_KEY
 ARG MIMA_EXTENSION_ID
 ENV NODE_ENV=production
 COPY --from=recovery-tool-build /app/apps/recovery-tool/dist/cli.js /tmp/recovery-tool/mima-recovery-tool.mjs
+COPY --from=recovery-tool-build /app/apps/recovery-tool/dist/打开企业恢复向导.html /tmp/recovery-tool/打开企业恢复向导.html
 COPY apps/recovery-tool/OFFLINE-USAGE.txt /tmp/recovery-tool/OFFLINE-USAGE.txt
 RUN test -n "$MIMA_EXTENSION_PUBLIC_KEY" \
   && test -n "$MIMA_EXTENSION_ID" \
@@ -43,6 +44,7 @@ RUN test -n "$MIMA_EXTENSION_PUBLIC_KEY" \
     --version 0.2.0 \
     --extension-dir apps/extension/dist \
     --recovery-tool-file /tmp/recovery-tool/mima-recovery-tool.mjs \
+    --recovery-wizard-file /tmp/recovery-tool/打开企业恢复向导.html \
     --offline-usage-file /tmp/recovery-tool/OFFLINE-USAGE.txt \
     --output-dir apps/web/dist/downloads
 
@@ -86,7 +88,7 @@ LABEL org.opencontainers.image.version="0.2.0" \
   mima.e2ee-protocol="lm-e2ee-v1" \
   mima.component="api" \
   mima.runtime="strict-api" \
-  mima.schema-head="0023_enterprise_recovery_integrity" \
+  mima.schema-head="0024_enterprise_recovery_cases" \
   mima.source-snapshot-sha256="${MIMA_SOURCE_SNAPSHOT_SHA256}"
 ENV NODE_ENV=production
 WORKDIR /app
@@ -126,7 +128,7 @@ LABEL org.opencontainers.image.version="0.2.0" \
   mima.e2ee-protocol="lm-e2ee-v1" \
   mima.component="migration-worker" \
   mima.runtime="isolated-migration-worker" \
-  mima.schema-head="0023_enterprise_recovery_integrity" \
+  mima.schema-head="0024_enterprise_recovery_cases" \
   mima.source-snapshot-sha256="${MIMA_SOURCE_SNAPSHOT_SHA256}"
 ENV NODE_ENV=production
 WORKDIR /app

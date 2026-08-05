@@ -66,7 +66,40 @@ describe('master password browser form contract', () => {
     expect(screen.getByLabelText('账号')).toHaveValue(user.username);
     expect(screen.getByLabelText('主密码（本机解密）')).toHaveAttribute('autocomplete', 'new-password');
     expect(screen.getByLabelText('再次输入主密码（本机解密）')).toHaveAttribute('name', 'password-confirmation');
-    expect(screen.getByText(/包括平台管理员也不能从平台直接查看/)).toBeVisible();
+    expect(screen.getByText(/包括平台管理员也绝对无法查看受保护库/)).toBeVisible();
+  });
+
+  it('does not bind an approved recovery case to the browser that set the new password', async () => {
+    const caseId = '70000000-0000-4000-8000-000000000009';
+    const activatePreparedAccountCryptoReset = vi.fn();
+    const store = createMetaStore();
+    const services = {
+      store,
+      api: {
+        recoveryCases: vi.fn(async () => [{ id: caseId }]),
+      },
+      zeroKnowledge: {
+        accountCryptoResetRequests: vi.fn(async () => [{
+          id: '73000000-0000-4000-8000-000000000009',
+          caseId,
+          targetUserId: user.id,
+          status: 'approved',
+          approvalUserIds: ['u-admin-1', 'u-admin-2'],
+          expiresAt: new Date(Date.now() + 60_000).toISOString(),
+        }]),
+        activatePreparedAccountCryptoReset,
+      },
+    } as unknown as AppServices;
+
+    render(
+      <AppContext.Provider value={services}>
+        <SecurityGate phase="account-reset" user={user} onLoggedOut={vi.fn()} />
+      </AppContext.Provider>,
+    );
+
+    expect(await screen.findByText(/之后可在任意浏览器重新登录/)).toBeVisible();
+    await waitFor(() => expect(services.zeroKnowledge.accountCryptoResetRequests).toHaveBeenCalled());
+    expect(activatePreparedAccountCryptoReset).not.toHaveBeenCalled();
   });
 });
 
@@ -310,7 +343,7 @@ describe('legacy migration security gate', () => {
     });
     const services = {
       store,
-      api: { recoveryRequests: vi.fn(async () => []) },
+      api: { recoveryCases: vi.fn(async () => []) },
       zeroKnowledge: {
         completeVaultRekey,
         rekeyTaskId: vi.fn(() => null),
@@ -327,7 +360,7 @@ describe('legacy migration security gate', () => {
 
     expect(await screen.findByRole('heading', { name: '部分密码库需要企业恢复' })).toBeInTheDocument();
     expect(screen.getByText(/系统不会返回对应条目/)).toBeInTheDocument();
-    expect(screen.getByText(/仍需两名不同管理员审批/)).toBeInTheDocument();
+    expect(screen.getByText(/两位管理员确认后/)).toBeInTheDocument();
     expect(screen.getAllByRole('button', { name: '刷新状态' }).length).toBeGreaterThan(0);
     expect(screen.queryByRole('button', { name: '完成安全更新' })).not.toBeInTheDocument();
     expect(completeVaultRekey).not.toHaveBeenCalled();
@@ -390,7 +423,7 @@ describe('legacy migration security gate', () => {
     await waitFor(() => expect(completeVaultRekey).toHaveBeenCalledWith(vaultId));
   });
 
-  it('lets a platform admin start the standard recovery workflow for a detected personal vault', async () => {
+  it('lets a platform admin start one recovery case for a colleague', async () => {
     const adminUser = {
       ...user,
       id: 'u-admin',
@@ -400,26 +433,14 @@ describe('legacy migration security gate', () => {
     };
     const store = createMetaStore();
     store.getState().setUser(adminUser);
-    const createRecoveryRequest = vi.fn(async () => ({}));
-    const recoveryCandidates = vi.fn(async () => [{
-      vaultId,
-      targetUserId: user.id,
-      targetDisplayName: user.displayName,
-      targetUsername: user.username,
-      targetDeviceId: '40000000-0000-4000-8000-000000000001',
-      targetEncryptionPublicKey: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
-      targetKeyVersion: 1,
-      targetCapability: 'full' as const,
-      reason: 'personal_owner_missing_current_full_envelope' as const,
-    }]);
+    const createRecoveryCase = vi.fn(async () => ({}));
     const services = {
       store,
       api: {
-        recoveryRequests: vi.fn(async () => []),
-        recoveryCandidates,
-        createRecoveryRequest,
+        recoveryCases: vi.fn(async () => []),
+        directory: vi.fn(async () => ({ users: [user] })),
+        createRecoveryCase,
       },
-      zeroKnowledge: { accountCryptoResetRequests: vi.fn(async () => []) },
     } as unknown as AppServices;
 
     render(
@@ -428,17 +449,16 @@ describe('legacy migration security gate', () => {
       </AppContext.Provider>,
     );
 
-    expect(await screen.findByText('Owner · 个人密码库需要企业恢复')).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: '核对后发起恢复' }));
-    await waitFor(() => expect(createRecoveryRequest).toHaveBeenCalledWith(expect.objectContaining({
-      vaultId,
+    expect(await screen.findByRole('option', { name: 'Owner（owner）' })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: '发起恢复协助' }));
+    await waitFor(() => expect(createRecoveryCase).toHaveBeenCalledWith({
+      idempotencyKey: expect.any(String),
+      kind: 'forgot_password',
       targetUserId: user.id,
-      reason: 'lost_all_devices',
-    })));
-    expect(recoveryCandidates).toHaveBeenCalled();
+    }));
   });
 
-  it('requires the administrator to verify the full reset digest before approval', async () => {
+  it('requires a second administrator to confirm the colleague identity', async () => {
     const adminUser = {
       ...user,
       id: 'u-admin',
@@ -446,27 +466,43 @@ describe('legacy migration security gate', () => {
       isPlatformAdmin: true,
       isLocalPlatformAdmin: true,
     };
-    const request = {
+    const recoveryCase = {
       id: '70000000-0000-4000-8000-000000000001',
+      kind: 'forgot_password',
       targetUserId: 'u-applicant',
-      requestDigest: 'FULL_REQUEST_DIGEST_MUST_BE_VERIFIED',
-      status: 'pending',
+      targetUsername: 'applicant',
+      targetDisplayName: 'Applicant',
+      recoveryKeyId: '71000000-0000-4000-8000-000000000001',
+      status: 'pending_approval',
+      caseDigest: 'FULL_CASE_DIGEST_IS_BOUND_BUT_NOT_SHOWN',
+      targetDeviceId: '72000000-0000-4000-8000-000000000001',
+      targetKeyVersion: 2,
+      accountResetRequestId: '73000000-0000-4000-8000-000000000001',
       approvalUserIds: [],
-      affectedVaultIds: [],
+      items: [{ id: '74000000-0000-4000-8000-000000000001' }],
+      resolvedItemCount: 0,
+      skippedItemCount: 0,
+      hasOfflineResult: false,
+      createdByUserId: 'u-first-admin',
+      createdAt: new Date().toISOString(),
       expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      finalizedAt: new Date().toISOString(),
+      approvedAt: null,
+      processingAt: null,
+      completedAt: null,
+      cancelledAt: null,
+      expiredAt: null,
+      lastErrorCode: null,
     };
-    const approveAccountCryptoReset = vi.fn().mockResolvedValue(undefined);
+    const approveRecoveryCase = vi.fn().mockResolvedValue(undefined);
     const store = createMetaStore();
     store.getState().setUser(adminUser);
     const services = {
       store,
       api: {
-        recoveryRequests: vi.fn().mockResolvedValue([]),
-        recoveryCandidates: vi.fn().mockResolvedValue([]),
-      },
-      zeroKnowledge: {
-        accountCryptoResetRequests: vi.fn().mockResolvedValue([request]),
-        approveAccountCryptoReset,
+        recoveryCases: vi.fn().mockResolvedValue([recoveryCase]),
+        directory: vi.fn().mockResolvedValue({ users: [] }),
+        approveRecoveryCase,
       },
     } as unknown as AppServices;
     render(
@@ -476,15 +512,15 @@ describe('legacy migration security gate', () => {
       </AppContext.Provider>,
     );
 
-    await userEvent.click(await screen.findByRole('button', { name: '核对后批准' }));
-    expect(screen.getByText(/FULL_REQUEST_DIGEST_MUST_BE_VERIFIED/)).toBeVisible();
-    expect(approveAccountCryptoReset).not.toHaveBeenCalled();
-    await userEvent.click(screen.getByRole('button', { name: '返回核对' }));
-    expect(approveAccountCryptoReset).not.toHaveBeenCalled();
-
-    await userEvent.click(screen.getByRole('button', { name: '核对后批准' }));
-    await userEvent.click(screen.getByRole('button', { name: '摘要一致，批准' }));
-    await waitFor(() => expect(approveAccountCryptoReset).toHaveBeenCalledWith(request));
+    await userEvent.click(await screen.findByRole('button', { name: '确认身份并同意协助' }));
+    expect(screen.getByText(/请先通过公司沟通渠道确认本人身份/)).toBeVisible();
+    expect(screen.queryByText(/FULL_CASE_DIGEST_IS_BOUND_BUT_NOT_SHOWN/)).not.toBeInTheDocument();
+    const confirmButtons = screen.getAllByRole('button', { name: '身份已确认，同意协助' });
+    await userEvent.click(confirmButtons.at(-1)!);
+    await waitFor(() => expect(approveRecoveryCase).toHaveBeenCalledWith(recoveryCase.id, {
+      idempotencyKey: expect.any(String),
+      caseDigest: recoveryCase.caseDigest,
+    }));
   });
 });
 

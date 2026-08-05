@@ -1,5 +1,6 @@
 import type {
   CipherBlob,
+  ActivateAccountCryptoResetRequest,
   CryptoDevice,
   EncryptedBootstrapResponse,
   EncryptedItemMetadata,
@@ -106,6 +107,8 @@ export interface CachedAccountLocator {
 export interface PendingAccountCryptoResetLocator {
   accountId: string;
   request: AccountCryptoResetRequest;
+  recoveryCaseId?: string | null;
+  activationRequest?: ActivateAccountCryptoResetRequest;
   accountBundle: AccountBundle;
   deviceBundle: DeviceKeyBundle;
   cachedAt: string;

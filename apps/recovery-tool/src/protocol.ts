@@ -23,6 +23,15 @@ export interface RecoveryInput {
   };
 }
 
+export interface RecoveryCaseInput {
+  protocol: 'mima-e2ee-v2';
+  kind: 'enterprise-recovery-case-package';
+  caseId: string;
+  caseDigest: string;
+  recovery: RecoveryInput['recovery'];
+  items: RecoveryInput[];
+}
+
 export function parseRecoveryInput(value: string): RecoveryInput {
   const parsed = JSON.parse(value) as unknown;
   const normalized = normalizeApiPackage(parsed) ?? parsed;
@@ -50,6 +59,45 @@ export function parseRecoveryInput(value: string): RecoveryInput {
     throw new Error('invalid enterprise recovery request package');
   }
   return normalized as unknown as RecoveryInput;
+}
+
+export function parseRecoveryCaseInput(value: string): RecoveryCaseInput {
+  const parsed = JSON.parse(value) as unknown;
+  if (!isRecord(parsed)
+    || parsed.protocol !== 'mima-e2ee-v2'
+    || parsed.kind !== 'enterprise-recovery-case-package'
+    || typeof parsed.caseId !== 'string'
+    || typeof parsed.caseDigest !== 'string'
+    || !isRecord(parsed.recoveryKey)
+    || typeof parsed.recoveryKey.id !== 'string'
+    || typeof parsed.recoveryKey.ceremonyId !== 'string'
+    || typeof parsed.recoveryKey.ceremonyEvidenceDigest !== 'string'
+    || typeof parsed.recoveryKey.publicEncryptionKey !== 'string'
+    || !Array.isArray(parsed.items)
+    || parsed.items.length === 0
+  ) throw new Error('这不是有效的企业恢复处理包');
+  const recovery = {
+    keyId: parsed.recoveryKey.id,
+    ceremonyId: parsed.recoveryKey.ceremonyId,
+    ceremonyDigest: parsed.recoveryKey.ceremonyEvidenceDigest,
+    publicKey: parsed.recoveryKey.publicEncryptionKey,
+  };
+  const items = parsed.items.map((item) => parseRecoveryInput(JSON.stringify({
+    ...(isRecord(item) ? item : {}),
+    protocol: 'lm-e2ee-v1',
+    kind: 'enterprise-recovery-request-package',
+    recoveryKey: parsed.recoveryKey,
+  })));
+  const uniqueRequestIds = new Set(items.map((item) => item.requestId));
+  if (uniqueRequestIds.size !== items.length) throw new Error('恢复处理包包含重复内容');
+  return {
+    protocol: 'mima-e2ee-v2',
+    kind: 'enterprise-recovery-case-package',
+    caseId: parsed.caseId,
+    caseDigest: parsed.caseDigest,
+    recovery,
+    items,
+  };
 }
 
 function normalizeApiPackage(value: unknown): RecoveryInput | null {

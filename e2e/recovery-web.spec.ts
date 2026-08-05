@@ -36,18 +36,20 @@ test('企业恢复中心在桌面、平板和手机视口保持可用', async ({
     const overview = dialog.getByRole('button', { name: '总览', exact: true });
     await overview.click();
     await expect(overview).toHaveAttribute('aria-current', 'page');
-    await expect(dialog.getByText('企业恢复保障状态')).toBeVisible();
+    await expect(dialog.getByRole('heading', {
+      name: '忘记主密码时，管理员可以帮你恢复原有访问',
+    })).toBeVisible();
+    await expect(dialog.getByText('管理员不能代替你')).toBeVisible();
+    await expect(dialog.getByText('只恢复原有权限')).toBeVisible();
 
-    const setup = dialog.getByRole('button', { name: '准备恢复能力', exact: true });
+    const setup = dialog.getByRole('button', { name: '准备恢复', exact: true });
     await setup.click();
     await expect(setup).toHaveAttribute('aria-current', 'page');
-    await expect(dialog.getByRole('heading', { name: '企业恢复设置' })).toBeVisible();
+    await expect(dialog.getByRole('heading', { name: '准备企业恢复' })).toBeVisible();
     for (const heading of [
-      '准备三位管理员',
-      '分发三份离线材料',
-      '两位管理员确认启用',
-      '纳入密码库保护',
-      '正式启用',
+      '1. 下载离线向导',
+      '2. 登记公开清单',
+      '3. 由另一位管理员确认',
     ]) {
       await expect(dialog.getByRole('heading', { name: heading })).toBeVisible();
     }
@@ -59,17 +61,15 @@ test('企业恢复中心在桌面、平板和手机视口保持可用', async ({
     await pane.evaluate((element) => {
       element.scrollTop = element.scrollHeight;
     });
-    await expect(dialog.getByRole('heading', { name: '正式启用' })).toBeInViewport();
+    await expect(dialog.getByText(/企业恢复已经准备完成|系统正在后台保护现有密码库|两人确认后/)).toBeInViewport();
     await page.screenshot({
       path: join(SCREENSHOT_DIR, `enterprise-recovery-setup-bottom-${viewport.name}-${viewport.width}x${viewport.height}.png`),
       animations: 'disabled',
     });
 
     for (const section of [
-      { navigation: '待办审批', heading: '待办审批' },
-      { navigation: '密码库保护', heading: '密码库保护' },
-      { navigation: '高级维护', heading: '高级维护' },
-      { navigation: '我的恢复', heading: '我的恢复' },
+      { navigation: '恢复案件', heading: '恢复案件' },
+      { navigation: '历史记录', heading: '历史记录' },
     ]) {
       const button = dialog.getByRole('button', { name: section.navigation, exact: true });
       await button.click();

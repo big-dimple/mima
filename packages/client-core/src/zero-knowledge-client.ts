@@ -8,6 +8,7 @@ import type {
   EncryptedItemMetadata,
   EncryptedSyncEvent,
   EnterpriseRecoveryCoverage,
+  EnterpriseRecoveryCase,
   EnterpriseRecoveryKey,
   EnterpriseRecoveryRequest,
   ExtensionSessionResponse,
@@ -34,10 +35,11 @@ import {
 import { normalizeVaultGroupName, type VaultDirectoryEntry } from '@mima/domain';
 import { ApiRequestError } from './api-client.ts';
 import type { ZeroKnowledgeApi } from './zero-knowledge-api-client.ts';
-import type {
-  E2eeKeyringPort,
-  EncryptedOfflineSnapshot,
-  OfflineRecoveryResult,
+import {
+  parseOfflineRecoveryResult,
+  type E2eeKeyringPort,
+  type EncryptedOfflineSnapshot,
+  type OfflineRecoveryResult,
 } from './e2ee-keyring.ts';
 import type { ExtensionEnrollment } from './e2ee-keyring.ts';
 import type { EncryptedSyncClient } from './encrypted-sync.ts';
@@ -121,6 +123,10 @@ export class ZeroKnowledgeClient {
   private automaticEnvelopeGeneration = 0;
   private automaticEnvelopeRequests = new Set<string>();
   private automaticEnvelopeWorkers = new Map<string, Promise<void>>();
+  private automaticRecoveryCoverageRequested = false;
+  private automaticRecoveryCoverageWorker: Promise<void> | null = null;
+  private automaticRecoveryCaseRequested = false;
+  private automaticRecoveryCaseWorker: Promise<void> | null = null;
   private readonly onDeviceRevoked?: (deviceId: string) => void;
 
   constructor(options: ZeroKnowledgeClientOptions) {
@@ -283,6 +289,54 @@ export class ZeroKnowledgeClient {
   }
 
   async startAccountCryptoReset(mainPassword: string, confirmation: string): Promise<AccountCryptoResetRequest> {
+    const created = await this.prepareAccountCryptoResetCandidate(mainPassword, confirmation, null);
+    this.outbox.setOnline(false);
+    this.setPhase('account-reset');
+    return created;
+  }
+
+  async startForgotPasswordRecoveryCase(
+    caseId: string,
+    mainPassword: string,
+    confirmation: string,
+  ): Promise<EnterpriseRecoveryCase> {
+    const created = await this.prepareAccountCryptoResetCandidate(mainPassword, confirmation, caseId);
+    const user = this.requireUser();
+    try {
+      const pending = await this.storage.getPendingAccountCryptoReset(user.id);
+      if (!pending || pending.request.id !== created.id || !pending.activationRequest) {
+        throw new Error('新主密码的自动启用信息没有保存成功');
+      }
+      const recoveryCase = await this.api.finalizeRecoveryCase(caseId, {
+        idempotencyKey: crypto.randomUUID(),
+        kind: 'forgot_password',
+        accountResetRequestId: created.id,
+        activation: pending.activationRequest,
+      });
+      await this.storage.putPendingAccountCryptoReset({
+        ...pending,
+        request: { ...pending.request, caseId },
+        recoveryCaseId: caseId,
+      });
+      this.outbox.setOnline(false);
+      this.setPhase('account-reset');
+      return recoveryCase;
+    } catch (error) {
+      await this.api.cancelAccountCryptoReset(created.id, {
+        idempotencyKey: crypto.randomUUID(),
+        requestDigest: created.requestDigest,
+      }).catch(() => undefined);
+      await this.keyring.abortAccountCryptoReset();
+      await this.storage.deletePendingAccountCryptoReset(user.id);
+      throw error;
+    }
+  }
+
+  private async prepareAccountCryptoResetCandidate(
+    mainPassword: string,
+    confirmation: string,
+    recoveryCaseId: string | null,
+  ): Promise<AccountCryptoResetRequest> {
     if (!this.online) throw new Error('提交解锁重置申请需要联网，请检查网络后重试');
     const user = this.requireUser();
     const profile = this.profile;
@@ -297,9 +351,12 @@ export class ZeroKnowledgeClient {
     let created: AccountCryptoResetRequest;
     try {
       created = await this.api.createAccountCryptoReset(prepared.request);
+      const activation = await this.keyring.prepareAccountCryptoResetActivation(user.id, created);
       await this.storage.putPendingAccountCryptoReset({
         accountId: user.id,
         request: created,
+        recoveryCaseId,
+        activationRequest: activation.request,
         accountBundle: prepared.accountBundle,
         deviceBundle: prepared.deviceBundle,
         cachedAt: new Date().toISOString(),
@@ -308,8 +365,6 @@ export class ZeroKnowledgeClient {
       await this.keyring.abortAccountCryptoReset();
       throw error;
     }
-    this.outbox.setOnline(false);
-    this.setPhase('account-reset');
     return created;
   }
 
@@ -342,22 +397,47 @@ export class ZeroKnowledgeClient {
     const user = this.requireUser();
     const pending = await this.storage.getPendingAccountCryptoReset(user.id);
     if (!pending || pending.request.id !== request.id || pending.request.requestDigest !== request.requestDigest) {
-      throw new Error('此浏览器没有这次重置所需的本机信息，请回到提交申请的浏览器完成');
+      throw new Error('这次主密码重置的准备信息已失效，请重新设置新主密码');
     }
     await this.keyring.unlockPendingAccountCryptoReset(
       mainPassword,
       pending.accountBundle,
       pending.deviceBundle,
     );
-    const activation = await this.keyring.prepareAccountCryptoResetActivation(user.id, request);
+    if (!pending.activationRequest) {
+      const activation = await this.keyring.prepareAccountCryptoResetActivation(user.id, request);
+      await this.storage.putPendingAccountCryptoReset({
+        ...pending,
+        activationRequest: activation.request,
+      });
+    }
+    await this.activatePreparedAccountCryptoReset(request);
+  }
+
+  async activatePreparedAccountCryptoReset(request: AccountCryptoResetRequest): Promise<void> {
+    if (!this.online) throw new Error('完成主密码重置需要联网，请检查网络后重试');
+    if (request.status !== 'approved') throw new Error('正在等待两位管理员确认');
+    const user = this.requireUser();
+    const pending = await this.storage.getPendingAccountCryptoReset(user.id);
+    if (!pending || pending.request.id !== request.id || pending.request.requestDigest !== request.requestDigest) {
+      throw new Error('恢复准备信息已失效，请重新设置新主密码');
+    }
+    if (!pending.activationRequest) {
+      throw new Error('这次恢复来自旧版本，请刷新后重新设置新主密码');
+    }
     let response;
     try {
-      response = await this.api.activateAccountCryptoReset(request.id, activation.request);
+      response = await this.api.activateAccountCryptoReset(request.id, pending.activationRequest);
     } catch (error) {
-      await this.keyring.abortAccountCryptoReset();
       throw friendlyUnlockError(error);
     }
-    await this.keyring.commitAccountCryptoReset();
+    let remainsUnlocked = true;
+    try {
+      await this.keyring.commitAccountCryptoReset();
+    } catch {
+      remainsUnlocked = false;
+      await this.keyring.lock();
+    }
     this.profile = response.profile;
     this.device = response.device;
     this.deviceBundle = pending.deviceBundle;
@@ -373,8 +453,12 @@ export class ZeroKnowledgeClient {
       encryptedBootstrap: null,
       cachedAt: new Date().toISOString(),
     });
-    this.bootstrap = await this.api.encryptedBootstrap();
-    await this.applyUnlockedBootstrap(this.bootstrap);
+    if (remainsUnlocked) {
+      this.bootstrap = await this.api.encryptedBootstrap();
+      await this.applyUnlockedBootstrap(this.bootstrap);
+    } else {
+      this.setPhase('authenticated-locked');
+    }
   }
 
   async unlock(mainPassword: string): Promise<void> {
@@ -434,7 +518,11 @@ export class ZeroKnowledgeClient {
     if (!this.online || !this.keyring.isUnlocked) return;
     if (this.refreshInFlight) {
       await this.refreshInFlight;
-      if (scheduleAutomaticEnvelopeDelivery) this.scheduleAutomaticEnvelopeDelivery();
+      if (scheduleAutomaticEnvelopeDelivery) {
+        this.scheduleAutomaticEnvelopeDelivery();
+        this.scheduleAutomaticRecoveryCoverage();
+        this.scheduleAutomaticRecoveryCaseCompletion();
+      }
       return;
     }
     const refresh = (async () => {
@@ -597,7 +685,7 @@ export class ZeroKnowledgeClient {
     const profile = this.profile;
     if (!normalizedName) throw new Error('密码库名称不能为空');
     if (!profile) throw new Error('当前账号安全信息不完整，请刷新后重试');
-    if (!this.keyring.isUnlocked) throw new Error('请先解锁当前设备');
+    if (!this.keyring.isUnlocked) throw new Error('请先在当前浏览器输入主密码');
     const recoveryKey = bootstrap.recoveryKey?.status === 'active' ? bootstrap.recoveryKey : null;
     const vaultId = crypto.randomUUID();
     const request = await this.keyring.prepareVaultCreation(
@@ -625,7 +713,7 @@ export class ZeroKnowledgeClient {
     if (!parent || parent.kind !== 'team' || parent.projectContext?.kind === 'project') {
       throw new Error('只能在上级团队密码库下新建项目');
     }
-    if (!this.keyring.isUnlocked) throw new Error('请先解锁当前设备');
+    if (!this.keyring.isUnlocked) throw new Error('请先输入主密码');
     const recoveryKey = bootstrap.recoveryKey?.status === 'active' ? bootstrap.recoveryKey : null;
     const vaultId = crypto.randomUUID();
     const request = await this.keyring.prepareVaultCreation(
@@ -1042,7 +1130,7 @@ export class ZeroKnowledgeClient {
   async startLegacyMigration(vaultId: string): Promise<LegacyMigrationStatusResponse> {
     if (!this.online) throw new Error('开始迁移需要连接服务器');
     const user = this.requireUser();
-    if (!this.keyring.isUnlocked) throw new Error('请先解锁当前设备');
+    if (!this.keyring.isUnlocked) throw new Error('请先输入主密码');
     const request = await this.keyring.migrationStartIntent(user.id, vaultId);
     await this.api.startLegacyMigration(vaultId, request);
     await this.refresh();
@@ -1154,18 +1242,45 @@ export class ZeroKnowledgeClient {
     const header = bootstrap.headers.find((entry) => entry.vaultId === request.vaultId);
     if (!header) throw new Error('当前设备没有收到该密码库的加密头');
     if (!bootstrap.recoveryKey) throw new Error('当前企业恢复公钥不可用');
-    const completeRequest = await this.keyring.completeRecovery(
+    const completeRequest = await this.keyring.prepareRecovery(
       user.id,
       request,
       bootstrap.recoveryKey,
       header,
       offlineResult,
     );
-    await this.api.completeRecovery(request.id, completeRequest);
+    try {
+      await this.api.completeRecovery(request.id, completeRequest);
+      await this.keyring.commitRecovery(request.id);
+    } catch (error) {
+      await this.keyring.abortRecovery(request.id);
+      throw error;
+    }
     await this.refresh();
     if (request.targetCapability === 'full') {
       this.store.getState().setSecurityPhase('rekey-blocked');
     }
+  }
+
+  async continueInterruptedHandoffRecoveryCase(
+    recoveryCase: EnterpriseRecoveryCase,
+  ): Promise<EnterpriseRecoveryCase> {
+    if (!this.online) throw new Error('继续恢复原有访问需要连接服务器');
+    if (!this.keyring.isUnlocked) throw new Error('请先输入主密码');
+    if (recoveryCase.kind !== 'interrupted_handoff' || recoveryCase.status !== 'waiting_for_target') {
+      throw new Error('这次恢复协助已经进入下一步或已经结束');
+    }
+    const user = this.requireUser();
+    const profile = this.profile;
+    if (!profile) throw new Error('当前账号安全信息不可用，请重新登录');
+    const request = await this.keyring.prepareInterruptedHandoffRecoveryCase(
+      user.id,
+      recoveryCase.id,
+      profile,
+    );
+    const finalized = await this.api.finalizeRecoveryCase(recoveryCase.id, request);
+    this.scheduleAutomaticRecoveryCaseCompletion();
+    return finalized;
   }
 
   async distributeEnterpriseRecoveryEnvelope(
@@ -1803,12 +1918,18 @@ export class ZeroKnowledgeClient {
       this.sync.stop();
       this.sync.start();
     }
-    if (this.online && scheduleAutomaticEnvelopeDelivery) this.scheduleAutomaticEnvelopeDelivery();
+    if (this.online && scheduleAutomaticEnvelopeDelivery) {
+      this.scheduleAutomaticEnvelopeDelivery();
+      this.scheduleAutomaticRecoveryCoverage();
+      this.scheduleAutomaticRecoveryCaseCompletion();
+    }
   }
 
   private invalidateAutomaticEnvelopeDelivery(): void {
     this.automaticEnvelopeGeneration += 1;
     this.automaticEnvelopeRequests.clear();
+    this.automaticRecoveryCoverageRequested = false;
+    this.automaticRecoveryCaseRequested = false;
   }
 
   private automaticEnvelopeVaultIds(requestedVaultIds?: Iterable<string>): string[] {
@@ -1833,6 +1954,177 @@ export class ZeroKnowledgeClient {
       this.automaticEnvelopeRequests.add(vaultId);
       if (this.automaticEnvelopeWorkers.has(vaultId)) continue;
       this.startAutomaticEnvelopeWorker(vaultId);
+    }
+  }
+
+  private scheduleAutomaticRecoveryCoverage(): void {
+    if (!this.online || !this.keyring.isUnlocked) return;
+    this.automaticRecoveryCoverageRequested = true;
+    if (this.automaticRecoveryCoverageWorker) return;
+    const generation = this.automaticEnvelopeGeneration;
+    const worker = this.runAutomaticRecoveryCoverage(generation)
+      .catch(() => undefined)
+      .finally(() => {
+        if (this.automaticRecoveryCoverageWorker !== worker) return;
+        this.automaticRecoveryCoverageWorker = null;
+        if (
+          this.automaticRecoveryCoverageRequested
+          && generation === this.automaticEnvelopeGeneration
+          && this.online
+          && this.keyring.isUnlocked
+        ) this.scheduleAutomaticRecoveryCoverage();
+      });
+    this.automaticRecoveryCoverageWorker = worker;
+  }
+
+  private async runAutomaticRecoveryCoverage(generation: number): Promise<void> {
+    while (
+      this.automaticRecoveryCoverageRequested
+      && generation === this.automaticEnvelopeGeneration
+      && this.online
+      && this.keyring.isUnlocked
+    ) {
+      this.automaticRecoveryCoverageRequested = false;
+      const keys = await this.api.recoveryKeys();
+      const recoveryKey = keys.find((entry) => entry.status === 'staged')
+        ?? keys.find((entry) => entry.status === 'active');
+      if (!recoveryKey) return;
+      const coverage = await this.api.recoveryCoverage(recoveryKey.id);
+      let refreshRequired = false;
+      for (const vault of coverage.vaults) {
+        if (
+          generation !== this.automaticEnvelopeGeneration
+          || !this.online
+          || !this.keyring.isUnlocked
+        ) return;
+        if (vault.covered || !vault.canManage || vault.epoch === null) continue;
+        try {
+          await this.distributeEnterpriseRecoveryEnvelope(recoveryKey, vault);
+          refreshRequired = true;
+        } catch (error) {
+          if (error instanceof ApiRequestError && (error.status === 404 || error.status === 409)) {
+            refreshRequired = true;
+            continue;
+          }
+          return;
+        }
+      }
+      if (refreshRequired) {
+        await this.refresh(false).catch(() => undefined);
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new Event('mima:recovery-coverage-updated'));
+        }
+      }
+    }
+  }
+
+  private scheduleAutomaticRecoveryCaseCompletion(): void {
+    if (!this.online || !this.keyring.isUnlocked) return;
+    this.automaticRecoveryCaseRequested = true;
+    if (this.automaticRecoveryCaseWorker) return;
+    const generation = this.automaticEnvelopeGeneration;
+    const worker = this.runAutomaticRecoveryCaseCompletion(generation)
+      .catch(() => undefined)
+      .finally(() => {
+        if (this.automaticRecoveryCaseWorker !== worker) return;
+        this.automaticRecoveryCaseWorker = null;
+        if (
+          this.automaticRecoveryCaseRequested
+          && generation === this.automaticEnvelopeGeneration
+          && this.online
+          && this.keyring.isUnlocked
+        ) this.scheduleAutomaticRecoveryCaseCompletion();
+      });
+    this.automaticRecoveryCaseWorker = worker;
+  }
+
+  private async runAutomaticRecoveryCaseCompletion(generation: number): Promise<void> {
+    this.automaticRecoveryCaseRequested = false;
+    const user = this.requireUser();
+    let cases = await this.api.recoveryCases();
+    let refreshCases = false;
+    let retryWaitingCase = false;
+    for (const recoveryCase of cases.filter((entry) => (
+      entry.targetUserId === user.id
+      && entry.kind === 'interrupted_handoff'
+      && entry.status === 'waiting_for_target'
+    ))) {
+      if (generation !== this.automaticEnvelopeGeneration || !this.online || !this.keyring.isUnlocked) return;
+      try {
+        await this.continueInterruptedHandoffRecoveryCase(recoveryCase);
+        refreshCases = true;
+      } catch (error) {
+        if (error instanceof ApiRequestError && (error.status === 404 || error.status === 409)) {
+          refreshCases = true;
+        } else {
+          retryWaitingCase = true;
+        }
+      }
+    }
+    if (refreshCases) cases = await this.api.recoveryCases();
+    const activeCases = cases.filter((entry) => (
+      entry.targetUserId === user.id
+      && (entry.status === 'approved' || entry.status === 'processing')
+    ));
+    const shouldPollAgain = retryWaitingCase || cases.some((entry) => (
+      entry.targetUserId === user.id
+      && entry.kind === 'interrupted_handoff'
+      && ['pending_approval', 'approved', 'processing'].includes(entry.status)
+    ));
+    for (const recoveryCase of activeCases) {
+      if (generation !== this.automaticEnvelopeGeneration || !this.online || !this.keyring.isUnlocked) return;
+      if (!recoveryCase.hasOfflineResult) continue;
+      const transfer = await this.api.recoveryCaseTransfer(recoveryCase.id);
+      if (!transfer) continue;
+      const bootstrap = this.requireBootstrap();
+      const recoveryKey = bootstrap.recoveryKey;
+      if (!recoveryKey || recoveryKey.id !== recoveryCase.recoveryKeyId || recoveryKey.status !== 'active') continue;
+      const approvedItems = recoveryCase.items.filter((item) => item.status === 'approved');
+      const resultByRequestId = new Map(transfer.results.map((result) => [result.requestId, result]));
+      const prepared: Array<{
+        request: EnterpriseRecoveryRequest;
+        completeRequest: Awaited<ReturnType<E2eeKeyringPort['prepareRecovery']>>;
+      }> = [];
+      try {
+        for (const request of approvedItems) {
+          const rawResult = resultByRequestId.get(request.id);
+          const header = bootstrap.headers.find((entry) => entry.vaultId === request.vaultId);
+          if (!rawResult || !header) throw new Error('恢复结果不完整');
+          const completeRequest = await this.keyring.prepareRecovery(
+            user.id,
+            request,
+            recoveryKey,
+            header,
+            parseOfflineRecoveryResult(rawResult),
+            `rc-${recoveryCase.id}-${request.id}`,
+          );
+          prepared.push({ request, completeRequest });
+        }
+      } catch {
+        await Promise.all(prepared.map(({ request }) => this.keyring.abortRecovery(request.id)));
+        continue;
+      }
+      for (const { request, completeRequest } of prepared) {
+        if (generation !== this.automaticEnvelopeGeneration || !this.online || !this.keyring.isUnlocked) {
+          await Promise.all(prepared.map(({ request: pending }) => this.keyring.abortRecovery(pending.id)));
+          return;
+        }
+        try {
+          await this.api.completeRecovery(request.id, completeRequest);
+          await this.keyring.commitRecovery(request.id);
+        } catch {
+          const latest = await this.api.recoveryCase(recoveryCase.id).catch(() => null);
+          const latestItem = latest?.items.find((item) => item.id === request.id);
+          if (latestItem?.status === 'completed') await this.keyring.commitRecovery(request.id);
+          else await this.keyring.abortRecovery(request.id);
+        }
+      }
+      await this.refresh(false).catch(() => undefined);
+    }
+    if (shouldPollAgain && generation === this.automaticEnvelopeGeneration) {
+      setTimeout(() => {
+        if (generation === this.automaticEnvelopeGeneration) this.scheduleAutomaticRecoveryCaseCompletion();
+      }, 10_000);
     }
   }
 

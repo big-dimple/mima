@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, max, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNotNull, max, sql } from 'drizzle-orm';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
@@ -641,11 +641,19 @@ export function registerE2eeVaultRoutes(app: FastifyInstance): void {
     },
   }, async (req, reply) => {
     reply.header('cache-control', 'no-store');
-    const [profile, accessible, authorized, recoveryCandidateRows] = await Promise.all([
+    const [profile, accessible, authorized, recoveryCandidateRows, activeCaseRecoveryRows] = await Promise.all([
       getCryptoProfile(db, req.user.id),
       listAccessibleVaults(db, req.user),
       listAuthorizedVaults(db, req.user),
       listPersonalVaultRecoveryCandidates(db, req.user.id),
+      db.select({
+        vaultId: enterpriseRecoveryRequests.vaultId,
+        targetKeyVersion: enterpriseRecoveryRequests.targetKeyVersion,
+      }).from(enterpriseRecoveryRequests).where(and(
+        eq(enterpriseRecoveryRequests.targetUserId, req.user.id),
+        eq(enterpriseRecoveryRequests.status, 'approved'),
+        isNotNull(enterpriseRecoveryRequests.caseId),
+      )),
     ]);
     const accessibleVaultIds = new Set(accessible.map((access) => access.vault.id));
     const pendingTeamAccess = authorized.filter((access) =>
@@ -654,6 +662,9 @@ export function registerE2eeVaultRoutes(app: FastifyInstance): void {
     const recoveryCandidates = recoveryCandidateRows.filter((candidate) =>
       !accessibleVaultIds.has(candidate.vault.id));
     const recoveryByVault = new Map(recoveryCandidates.map((candidate) => [candidate.vault.id, candidate]));
+    const activeCaseRecoveryVaultIds = new Set(activeCaseRecoveryRows
+      .filter((row) => profile?.cryptoGeneration === row.targetKeyVersion)
+      .map((row) => row.vaultId));
     const visible = [
       ...accessible,
       ...pendingTeamAccess,
@@ -665,6 +676,7 @@ export function registerE2eeVaultRoutes(app: FastifyInstance): void {
     const headerVaultIds = [
       ...accessibleVaultIds,
       ...recoveryCandidates.map((candidate) => candidate.vault.id),
+      ...activeCaseRecoveryVaultIds,
     ];
     const devices = await db.select().from(userDevices).where(eq(userDevices.userId, req.user.id));
     const activeDeviceIds = devices.filter((device) => device.status === 'active').map((device) => device.id);

@@ -13,8 +13,9 @@ import {
   openVaultKeyGrant,
   recoverEnterpriseRecoveryKey,
 } from '@mima/e2ee';
-import { parseRecoveryInput } from './protocol.ts';
+import { parseRecoveryCaseInput, parseRecoveryInput } from './protocol.ts';
 import { createRecoveryTransfer } from './transfer.ts';
+import { createRecoveryCaseTransfer } from './case-transfer.ts';
 
 const cliArguments = process.argv.slice(2);
 if (cliArguments[0] === '--') cliArguments.shift();
@@ -89,7 +90,20 @@ async function recover(argv: string[]): Promise<void> {
   const outputPath = requiredOption(argv, '--output');
   const sharePaths = repeatedOption(argv, '--share');
   if (sharePaths.length !== 2) throw new Error('recover requires exactly two independently held shares');
-  const input = parseRecoveryInput(readPrivateText(inputPath));
+  const inputText = readPrivateText(inputPath);
+  const parsed = JSON.parse(inputText) as { protocol?: unknown; kind?: unknown };
+  if (parsed.protocol === 'mima-e2ee-v2' && parsed.kind === 'enterprise-recovery-case-package') {
+    const input = parseRecoveryCaseInput(inputText);
+    const result = await createRecoveryCaseTransfer(input, sharePaths.map(readPrivateText));
+    writeExclusive(resolve(outputPath), `${canonicalJson(result as never)}\n`);
+    console.log(JSON.stringify({
+      caseId: input.caseId,
+      recoveredVaultCount: result.results.length,
+      output: resolve(outputPath),
+    }, null, 2));
+    return;
+  }
+  const input = parseRecoveryInput(inputText);
   const recoveryKey = await recoverEnterpriseRecoveryKey(
     sharePaths.map(readPrivateText),
     {

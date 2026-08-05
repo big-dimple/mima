@@ -50,7 +50,7 @@ export async function loginAndUnlock(
       );
     });
   }
-  await page.goto('/');
+  await gotoWithTransientRetry(page, '/');
 
   const loginInput = page.getByLabel('用户名');
   const workspace = page.getByRole('region', { name: '凭证列表' });
@@ -95,6 +95,22 @@ export async function loginAndUnlock(
   page.off('requestfailed', recordFailure);
   page.off('pageerror', recordPageError);
   page.off('console', recordConsoleError);
+}
+
+async function gotoWithTransientRetry(page: Page, url: string): Promise<void> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    try {
+      await page.goto(url);
+      return;
+    } catch (error) {
+      lastError = error;
+      const message = error instanceof Error ? error.message : String(error);
+      if (!/net::ERR_CONNECTION_(?:RESET|REFUSED)/.test(message)) throw error;
+      await page.waitForTimeout(250 * (attempt + 1));
+    }
+  }
+  throw lastError;
 }
 
 async function waitForAnyVisible(locators: Locator[], timeout: number): Promise<void> {
