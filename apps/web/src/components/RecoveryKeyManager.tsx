@@ -148,13 +148,15 @@ export function RecoveryKeyManager() {
     setBusyAction(`approve:${key.id}`);
     setActionError(null);
     try {
-      await api.approveRecoveryKey(key.id, {
+      const approved = await api.approveRecoveryKey(key.id, {
         idempotencyKey: crypto.randomUUID(),
         ceremonyEvidenceDigest: key.ceremonyEvidenceDigest,
       });
       void zeroKnowledge.refresh().catch(() => undefined);
       await load();
-      toast('info', '第二次确认已完成，企业恢复正在自动启用');
+      toast('info', approved.status === 'active'
+        ? '第二次确认已完成，企业恢复已经启用'
+        : '第二次确认已完成，企业恢复正在自动启用');
     } catch (error) {
       setActionError(error instanceof Error ? error.message : '确认失败');
     } finally {

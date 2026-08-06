@@ -259,6 +259,8 @@ export function registerE2eeRecoveryRoutes(app: FastifyInstance): void {
     if (!['pending', 'staged'].includes(key.status)) return conflict(reply, '该企业恢复公钥不再接受审批');
     try {
       const result = await runCommand(db, bus, audit, req.user.id, req.body.idempotencyKey, async (tx, collect) => {
+        await lockEnterpriseRecoveryCoverage(tx);
+        await lockEnterpriseRecoveryAdministration(tx);
         const lockedKey = (await tx.select().from(enterpriseRecoveryKeys)
           .where(eq(enterpriseRecoveryKeys.id, key.id)).for('update').limit(1))[0];
         if (!lockedKey || !['pending', 'staged'].includes(lockedKey.status)) {
@@ -278,6 +280,7 @@ export function registerE2eeRecoveryRoutes(app: FastifyInstance): void {
           approverUserId: req.user.id,
           ceremonyEvidenceDigest: evidenceDigest,
         });
+        let automaticallyActivated = false;
         if (approvals.length === 1) {
           const states = await tx.select({ vaultId: vaultCryptoStates.vaultId })
             .from(vaultCryptoStates)
@@ -291,6 +294,19 @@ export function registerE2eeRecoveryRoutes(app: FastifyInstance): void {
               payload: { recoveryCoverageRequested: true },
             }));
           }
+          const activeKey = (await tx.select({ id: enterpriseRecoveryKeys.id })
+            .from(enterpriseRecoveryKeys)
+            .where(eq(enterpriseRecoveryKeys.status, 'active'))
+            .orderBy(asc(enterpriseRecoveryKeys.id)).for('update').limit(1))[0];
+          if (!activeKey && (await enterpriseRecoveryReadinessDto(tx)).ready) {
+            automaticallyActivated = Boolean((await tx.update(enterpriseRecoveryKeys)
+              .set({ status: 'active' })
+              .where(and(
+                eq(enterpriseRecoveryKeys.id, lockedKey.id),
+                eq(enterpriseRecoveryKeys.status, 'staged'),
+              ))
+              .returning({ id: enterpriseRecoveryKeys.id }))[0]);
+          }
         }
         const updated = (await tx.select().from(enterpriseRecoveryKeys)
           .where(eq(enterpriseRecoveryKeys.id, lockedKey.id)).limit(1))[0]!;
@@ -300,6 +316,14 @@ export function registerE2eeRecoveryRoutes(app: FastifyInstance): void {
           success: true,
           details: {},
         });
+        if (automaticallyActivated) {
+          await appendAudit(tx, audit, {
+            actorUserId: req.user.id,
+            action: 'recovery.key.activate',
+            success: true,
+            details: { automatic: true, initialSetup: true },
+          });
+        }
         return { statusCode: 200, response: await recoveryKeyDto(tx, updated) };
       }, commandIdentity('recovery.key.approve', { keyId: req.params.keyId, ...req.body }));
       return reply.code(200).send(result.response);

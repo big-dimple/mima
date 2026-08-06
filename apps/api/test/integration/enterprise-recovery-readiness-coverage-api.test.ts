@@ -105,7 +105,7 @@ beforeAll(async () => {
     unsubscribe();
   }
   expect(recoveryKey).toMatchObject({
-    status: 'staged',
+    status: 'active',
     approvalUserIds: [administratorOne.userId, administratorTwo.userId],
   });
   stagedKey = recoveryKey;
@@ -223,9 +223,7 @@ describe('enterprise recovery readiness and initial coverage', () => {
       coveredVaultCount: 1,
       complete: false,
     });
-    const activated = await activateRecoveryKey();
-    expect(activated.statusCode, activated.body).toBe(200);
-    expect((activated.json() as EnterpriseRecoveryKey).status).toBe('active');
+    expect(stagedKey.status).toBe('active');
 
     const secondRequest = await ownerKeyring.prepareEnterpriseRecoveryEnvelope(
       owner.userId,
@@ -341,18 +339,6 @@ function uploadEnvelope(
     url: `/api/v2/recovery/keys/${stagedKey.id}/vaults/${vaultId}/envelope`,
     ...authed(owner),
     payload: request,
-  });
-}
-
-function activateRecoveryKey() {
-  return app.inject({
-    method: 'POST',
-    url: `/api/v2/recovery/keys/${stagedKey.id}/activate`,
-    ...authed(administratorOne),
-    payload: {
-      idempotencyKey: key(),
-      ceremonyEvidenceDigest: stagedKey.ceremonyEvidenceDigest,
-    },
   });
 }
 
