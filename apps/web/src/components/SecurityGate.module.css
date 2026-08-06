@@ -183,45 +183,6 @@
   font-size: 13px;
 }
 
-.adminTools {
-  margin-top: 16px;
-  border-top: 1px solid var(--border);
-}
-
-.adminTools summary {
-  min-height: var(--control-standard);
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  padding: 10px 0;
-  color: var(--muted);
-  cursor: pointer;
-  font-size: 13px;
-  font-weight: 600;
-  list-style: none;
-}
-
-.adminTools summary::-webkit-details-marker {
-  display: none;
-}
-
-.disclosureChevron {
-  flex: 0 0 auto;
-  transition: transform 140ms ease;
-}
-
-.adminTools[open] summary {
-  color: var(--text);
-}
-
-.adminTools[open] .disclosureChevron {
-  transform: rotate(90deg);
-}
-
-.adminTools > div {
-  padding-top: 4px;
-}
-
 .resetForm {
   display: grid;
   gap: 8px;

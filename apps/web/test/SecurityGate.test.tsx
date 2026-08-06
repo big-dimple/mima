@@ -51,6 +51,32 @@ describe('master password browser form contract', () => {
     await waitFor(() => expect(unlock).toHaveBeenCalledWith('saved-main-password'));
   });
 
+  it('keeps colleague recovery administration out of locked admin sessions', () => {
+    const adminUser = {
+      ...user,
+      isPlatformAdmin: true,
+      isLocalPlatformAdmin: true,
+    };
+    const recoveryCases = vi.fn(async () => []);
+    const store = createMetaStore();
+    store.getState().setConnection('online');
+    const services = {
+      store,
+      api: { recoveryCases },
+      zeroKnowledge: { unlock: vi.fn() },
+    } as unknown as AppServices;
+
+    render(
+      <AppContext.Provider value={services}>
+        <SecurityGate phase="authenticated-locked" user={adminUser} onLoggedOut={vi.fn()} />
+      </AppContext.Provider>,
+    );
+
+    expect(screen.getByRole('button', { name: '忘记主密码' })).toBeVisible();
+    expect(screen.queryByRole('heading', { name: '发起恢复协助' })).not.toBeInTheDocument();
+    expect(recoveryCases).not.toHaveBeenCalled();
+  });
+
   it('uses the same account identity when creating a saved main password', () => {
     const store = createMetaStore();
     const services = {

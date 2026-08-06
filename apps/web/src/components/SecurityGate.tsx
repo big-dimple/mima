@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from 'react';
 import {
   AlertTriangle,
   CheckCircle2,
-  ChevronRight,
   Copy,
   KeyRound,
   LockKeyhole,
@@ -27,7 +26,6 @@ import type { LocalAccessReason } from '../state/local-access.ts';
 import { useUi } from '../state/ui-store.ts';
 import { LoadingState } from './AsyncState.tsx';
 import { EnterpriseRecoveryRequestPanel } from './EnterpriseRecoveryRequestPanel.tsx';
-import { RecoveryKeyManager } from './RecoveryKeyManager.tsx';
 import { UserPicker } from './UserPicker.tsx';
 import { readTextFile } from '../utils/read-text-file.ts';
 import styles from './SecurityGate.module.css';
@@ -53,7 +51,7 @@ export function SecurityGate({
   }
   if (phase === 'setup-required') return <SetupPanel user={user} onLoggedOut={onLoggedOut} />;
   if (phase === 'account-reset') return <AccountResetPanel user={user} onLoggedOut={onLoggedOut} />;
-  if (phase === 'migration-required') return <MigrationPanel user={user} onLoggedOut={onLoggedOut} />;
+  if (phase === 'migration-required') return <MigrationPanel onLoggedOut={onLoggedOut} />;
   if (phase === 'rekey-blocked') return <RekeyPanel onLoggedOut={onLoggedOut} />;
   return (
     <UnlockPanel
@@ -129,12 +127,6 @@ function SetupPanel({ user, onLoggedOut }: { user: SessionUser | null; onLoggedO
       <div className={styles.boundary}>
         主密码、密码库名称和库内内容都不会以明文发送到服务器，包括平台管理员也绝对无法查看受保护库。
       </div>
-      {user?.isLocalPlatformAdmin && (
-        <AdminToolsDisclosure label="管理员设置（不影响主密码创建）">
-          <RecoveryKeyManager />
-          <AdminAccountResetApprovals />
-        </AdminToolsDisclosure>
-      )}
     </GateShell>
   );
 }
@@ -217,7 +209,6 @@ function UnlockPanel({
         {resetting ? '返回主密码解锁' : '忘记主密码'}
       </button>
       {resetting && <ForgotPasswordHelp />}
-      {user?.isLocalPlatformAdmin && <AdminAccountResetApprovals />}
     </GateShell>
   );
 }
@@ -399,7 +390,6 @@ function AccountResetPanel({ user, onLoggedOut }: { user: SessionUser | null; on
           </div>
         </>
       )}
-      {user?.isLocalPlatformAdmin && <AdminAccountResetApprovals />}
     </GateShell>
   );
 }
@@ -618,13 +608,7 @@ function downloadJson(fileName: string, value: unknown): void {
   URL.revokeObjectURL(url);
 }
 
-function MigrationPanel({
-  user,
-  onLoggedOut,
-}: {
-  user: SessionUser | null;
-  onLoggedOut: () => void;
-}) {
+function MigrationPanel({ onLoggedOut }: { onLoggedOut: () => void }) {
   const { zeroKnowledge } = useApp();
   const vaultCrypto = useMeta((state) => state.vaultCrypto);
   const vaults = useMeta((state) => state.vaults);
@@ -672,11 +656,6 @@ function MigrationPanel({
           />
         ))}
       </div>
-      {user?.isLocalPlatformAdmin && (
-        <AdminToolsDisclosure label="管理员：企业恢复设置">
-          <RecoveryKeyManager />
-        </AdminToolsDisclosure>
-      )}
       <button
         className={styles.secondary}
         onClick={() => void refreshAll().catch((error) => {
@@ -949,21 +928,6 @@ function PendingVaultInitializer({
         </button>
       )}
     </form>
-  );
-}
-
-function AdminToolsDisclosure({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <details className={styles.adminTools}>
-      <summary><ChevronRight className={styles.disclosureChevron} size={15} aria-hidden />{label}</summary>
-      <div>{children}</div>
-    </details>
   );
 }
 
