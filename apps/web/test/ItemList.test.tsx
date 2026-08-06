@@ -72,6 +72,11 @@ describe('ItemList encrypted metadata search', () => {
       'placeholder',
       '搜索标题/说明/凭证标识/关联信息',
     );
+    const clearSearch = screen.getByRole('button', { name: '清空搜索' });
+    fireEvent.click(clearSearch);
+    expect(screen.getByRole('textbox', { name: '搜索条目' })).toHaveValue('');
+    expect(screen.queryByRole('button', { name: '清空搜索' })).not.toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: '搜索条目' })).toHaveFocus();
     expect(screen.getByText('高敏')).toBeVisible();
     expect(screen.queryByText('普通')).not.toBeInTheDocument();
   });

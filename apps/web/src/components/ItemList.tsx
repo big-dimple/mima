@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef } from 'react';
-import { Plus, Search, Star, AlertTriangle, Clock, GripVertical } from 'lucide-react';
+import { Plus, Search, Star, AlertTriangle, Clock, GripVertical, X } from 'lucide-react';
 import type { DecryptedItemMeta } from '@mima/client-core';
 import type { ItemKind } from '@mima/contracts';
 import {
@@ -195,6 +195,20 @@ export function ItemList() {
               }
             }}
           />
+          {ui.search && (
+            <button
+              type="button"
+              className={styles.clearSearch}
+              aria-label="清空搜索"
+              title="清空搜索"
+              onClick={() => {
+                ui.setSearch('');
+                searchRef.current?.focus();
+              }}
+            >
+              <X size={14} aria-hidden />
+            </button>
+          )}
         </div>
         <ActionButton
           label="新建"

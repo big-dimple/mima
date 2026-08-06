@@ -31,7 +31,7 @@
   width: 100%;
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
-  padding: 6px 8px 6px 28px;
+  padding: 6px 36px 6px 28px;
   font-size: 13px;
   background: var(--panel);
 }
@@ -39,6 +39,25 @@
 .search::placeholder {
   color: var(--faint);
   opacity: 0.62;
+}
+
+.clearSearch {
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  width: 28px;
+  height: 28px;
+  display: inline-grid;
+  place-items: center;
+  transform: translateY(-50%);
+  border-radius: var(--radius-sm);
+  color: var(--faint);
+}
+
+.clearSearch:hover,
+.clearSearch:focus-visible {
+  background: var(--panel-2);
+  color: var(--text);
 }
 
 .filters {
