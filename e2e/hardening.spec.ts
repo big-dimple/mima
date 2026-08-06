@@ -1,6 +1,6 @@
 import pg from 'pg';
 import { expect, test } from '@playwright/test';
-import { ensureLoginItem, loginAndUnlock, MAIN_PASSWORDS } from './helpers.ts';
+import { ensureLoginItem, lockWorkspaceForTest, loginAndUnlock, MAIN_PASSWORDS } from './helpers.ts';
 
 const ITEM = {
   title: 'E2E 离线缓存条目',
@@ -26,7 +26,7 @@ test.describe.serial('零知识安全边界', () => {
     await pageB.getByRole('button', { name: '查看密码' }).click();
     await expect(pageB.getByText(ITEM.password, { exact: true })).toBeVisible();
 
-    await pageA.getByRole('button', { name: '锁定工作台' }).click();
+    await lockWorkspaceForTest(pageA);
     await expect(pageA.getByRole('heading', { name: '解锁你的密码库' })).toBeVisible();
     await expect(pageB.getByRole('heading', { name: '解锁你的密码库' })).toBeVisible({ timeout: 5_000 });
     await expect(pageB.getByText(ITEM.password, { exact: true })).toHaveCount(0);
@@ -47,7 +47,7 @@ test.describe.serial('零知识安全边界', () => {
 
     await context.setOffline(true);
     await expect(page.getByText(/网络暂时不可用/)).toBeVisible({ timeout: 10_000 });
-    await page.getByRole('button', { name: '锁定工作台' }).click();
+    await lockWorkspaceForTest(page, false);
     await page.locator('#main-password').fill(MAIN_PASSWORDS.bob);
     await page.getByRole('button', { name: '解锁密码库', exact: true }).click();
     const navigation = page.getByRole('navigation', { name: '库导航' });
@@ -74,7 +74,7 @@ test.describe.serial('零知识安全边界', () => {
     expect(persistedBeforeLock).not.toContain(ITEM.username);
     expect(persistedBeforeLock).not.toContain(ITEM.origin);
 
-    await page.getByRole('button', { name: '锁定工作台' }).click();
+    await lockWorkspaceForTest(page);
     const lockedDocument = await page.locator('html').innerText();
     expect(lockedDocument).not.toContain(ITEM.password);
     expect(lockedDocument).not.toContain(ITEM.title);

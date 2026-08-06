@@ -13,6 +13,29 @@ export const MAIN_PASSWORDS = {
   erin: 'Erin-e2e-main-password-2026',
 } as const satisfies Record<string, string>;
 
+export async function lockWorkspaceForTest(page: Page, notifyServer = true): Promise<void> {
+  if (notifyServer) {
+    await page.evaluate(async () => {
+      const sessionResponse = await fetch('/api/session', { credentials: 'same-origin' });
+      if (!sessionResponse.ok) throw new Error(`session status failed: ${sessionResponse.status}`);
+      const session = await sessionResponse.json() as { csrfToken?: unknown };
+      if (typeof session.csrfToken !== 'string') throw new Error('session csrf token missing');
+      const lockResponse = await fetch('/api/session/lock', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'x-mima-csrf': session.csrfToken },
+      });
+      if (!lockResponse.ok) throw new Error(`session lock failed: ${lockResponse.status}`);
+    });
+  }
+  await page.evaluate(async () => {
+    const channel = new BroadcastChannel('mima-session');
+    channel.postMessage('lock');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    channel.close();
+  });
+}
+
 export async function loginAndUnlock(
   page: Page,
   username: keyof typeof MAIN_PASSWORDS,

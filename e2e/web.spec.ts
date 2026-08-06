@@ -4,6 +4,7 @@ import {
   ensureLoginItem,
   enterIntentionalText,
   expectNoHorizontalOverflow,
+  lockWorkspaceForTest,
   loginAndUnlock,
   MAIN_PASSWORDS,
 } from './helpers.ts';
@@ -33,7 +34,9 @@ test.describe.serial('严格零知识工作台', () => {
     await page.getByRole('button', { name: '查看密码' }).click();
     await expect(page.getByText(PERSONAL_ITEM.password, { exact: true })).toBeVisible();
 
-    await page.getByRole('button', { name: '锁定工作台' }).click();
+    await expect(page.getByRole('button', { name: '旧密钥退役' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: '锁定工作台' })).toHaveCount(0);
+    await lockWorkspaceForTest(page);
     await expect(page.getByRole('heading', { name: '解锁你的密码库' })).toBeVisible();
     await expect(page.getByText(PERSONAL_ITEM.password, { exact: true })).toHaveCount(0);
 

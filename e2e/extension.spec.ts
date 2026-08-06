@@ -8,6 +8,7 @@ import {
   E2E_API_ORIGIN,
   ensureLoginItem,
   expectNoHorizontalOverflow,
+  lockWorkspaceForTest,
   loginAndUnlock,
   MAIN_PASSWORDS,
 } from './helpers.ts';
@@ -453,7 +454,7 @@ test.describe.serial('浏览器扩展零知识链路', () => {
     context.on('response', captureRecovery);
 
     await web.bringToFront();
-    await web.getByRole('button', { name: '锁定工作台' }).click();
+    await lockWorkspaceForTest(web);
     await expect(web.getByRole('heading', { name: '解锁你的密码库' })).toBeVisible();
     await expect(panel.getByRole('heading', { name: /恢复扩展连接|扩展已锁定/ })).toBeVisible();
 

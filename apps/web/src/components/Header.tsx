@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { ArchiveX, HardDrive, KeyRound, Lock, LogOut, PlugZap, Wifi, WifiOff, Loader2, BookOpen, UsersRound, ShieldAlert, MonitorSmartphone, MoreHorizontal } from 'lucide-react';
+import { HardDrive, KeyRound, LogOut, PlugZap, Wifi, WifiOff, Loader2, BookOpen, UsersRound, ShieldAlert, MonitorSmartphone, MoreHorizontal } from 'lucide-react';
 import { useApp, useMeta } from '../state/app-context.ts';
 import type { LocalAccessReason } from '../state/local-access.ts';
 import { useUi } from '../state/ui-store.ts';
@@ -22,8 +22,6 @@ export function Header({
   const setGroupsOpen = useUi((s) => s.setGroupsOpen);
   const setRecoveryOpen = useUi((s) => s.setRecoveryOpen);
   const setDevicesOpen = useUi((s) => s.setDevicesOpen);
-  const setRetirementOpen = useUi((s) => s.setRetirementOpen);
-  const toast = useUi((s) => s.toast);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const mobileMenuRef = useRef<HTMLDivElement>(null);
 
@@ -42,14 +40,6 @@ export function Header({
       document.removeEventListener('keydown', closeOnEscape);
     };
   }, [mobileMenuOpen]);
-
-  const handleLock = async () => {
-    try {
-      await actions.lock();
-    } catch (err) {
-      toast('error', err instanceof Error ? err.message : '锁定失败');
-    }
-  };
 
   const handleLogout = async () => {
     try {
@@ -109,11 +99,6 @@ export function Header({
         <IconButton label="已授权设备" onClick={() => setDevicesOpen(true)}>
           <MonitorSmartphone size={16} />
         </IconButton>
-        {user?.isPlatformAdmin && (
-          <IconButton label="旧密钥退役" onClick={() => setRetirementOpen(true)}>
-            <ArchiveX size={16} />
-          </IconButton>
-        )}
       </div>
       <div className={styles.mobileMenu} ref={mobileMenuRef}>
         <IconButton
@@ -132,15 +117,9 @@ export function Header({
             <MenuCommand icon={<PlugZap size={16} />} label="配对浏览器扩展" onClick={() => setPairingOpen(true)} />
             <MenuCommand icon={<ShieldAlert size={16} />} label="企业恢复" onClick={() => setRecoveryOpen(true)} />
             <MenuCommand icon={<MonitorSmartphone size={16} />} label="已授权设备" onClick={() => setDevicesOpen(true)} />
-            {user?.isPlatformAdmin && (
-              <MenuCommand icon={<ArchiveX size={16} />} label="旧密钥退役" onClick={() => setRetirementOpen(true)} />
-            )}
           </div>
         )}
       </div>
-      <IconButton label="锁定工作台" onClick={handleLock} tour="lock">
-        <Lock size={16} />
-      </IconButton>
       <IconButton label="退出登录" onClick={handleLogout}>
         <LogOut size={16} />
       </IconButton>
