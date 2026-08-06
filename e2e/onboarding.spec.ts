@@ -61,6 +61,7 @@ test.describe.serial('新手导览', () => {
       '创建团队库',
       '团队授权',
       '配对浏览器扩展',
+      '安全退出',
     ];
     for (let index = 0; index < stepTitles.length; index += 1) {
       const card = page.getByRole('dialog', { name: `引导：${stepTitles[index]}` });

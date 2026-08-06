@@ -258,7 +258,7 @@ export function registerE2eeRecoveryRoutes(app: FastifyInstance): void {
     }
     if (!['pending', 'staged'].includes(key.status)) return conflict(reply, '该企业恢复公钥不再接受审批');
     try {
-      const result = await runCommand(db, bus, audit, req.user.id, req.body.idempotencyKey, async (tx) => {
+      const result = await runCommand(db, bus, audit, req.user.id, req.body.idempotencyKey, async (tx, collect) => {
         const lockedKey = (await tx.select().from(enterpriseRecoveryKeys)
           .where(eq(enterpriseRecoveryKeys.id, key.id)).for('update').limit(1))[0];
         if (!lockedKey || !['pending', 'staged'].includes(lockedKey.status)) {
@@ -278,6 +278,20 @@ export function registerE2eeRecoveryRoutes(app: FastifyInstance): void {
           approverUserId: req.user.id,
           ceremonyEvidenceDigest: evidenceDigest,
         });
+        if (approvals.length === 1) {
+          const states = await tx.select({ vaultId: vaultCryptoStates.vaultId })
+            .from(vaultCryptoStates)
+            .where(eq(vaultCryptoStates.storageMode, 'e2ee'))
+            .orderBy(asc(vaultCryptoStates.vaultId));
+          for (const state of states) {
+            collect(await recordSyncEvent(tx, {
+              type: 'vault.crypto_changed',
+              vaultId: state.vaultId,
+              itemId: null,
+              payload: { recoveryCoverageRequested: true },
+            }));
+          }
+        }
         const updated = (await tx.select().from(enterpriseRecoveryKeys)
           .where(eq(enterpriseRecoveryKeys.id, lockedKey.id)).limit(1))[0]!;
         await appendAudit(tx, audit, {
@@ -548,7 +562,9 @@ export function registerE2eeRecoveryRoutes(app: FastifyInstance): void {
             isNotNull(vaultKeyEnvelopes.signerUserId),
           )) : [];
         const coveredEpochs = new Set(coveredRows.map((row) => `${row.vaultId}:${row.keyEpoch}`));
-        if (states.some((state) => !state.activeEpoch || !coveredEpochs.has(`${state.vaultId}:${state.activeEpoch}`))) {
+        if (previousIds.length > 0 && states.some((state) => (
+          !state.activeEpoch || !coveredEpochs.has(`${state.vaultId}:${state.activeEpoch}`)
+        ))) {
           throw new RecoveryKeyConflictError('仍有密码库尚未分发新的企业恢复公钥');
         }
         for (const row of previous) {

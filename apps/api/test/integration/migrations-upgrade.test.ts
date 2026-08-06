@@ -18,7 +18,7 @@ describe('versioned migration upgrade acceptance', () => {
     await resetDatabase(comparisonDatabaseName);
   });
 
-  it('preserves frozen 0001 data through 0024 and an idempotent replay', async () => {
+  it('preserves frozen 0001 data through 0025 and an idempotent replay', async () => {
     await resetDatabase();
     await createDatabase();
 
@@ -126,8 +126,8 @@ describe('versioned migration upgrade acceptance', () => {
         SELECT count(*)::int AS count, max(id) AS head FROM schema_migrations
       `);
       expect(migrations.rows[0]).toEqual({
-        count: 24,
-        head: '0024_enterprise_recovery_cases',
+        count: 25,
+        head: '0025_nonblocking_initial_recovery',
       });
 
       await verification.query(`

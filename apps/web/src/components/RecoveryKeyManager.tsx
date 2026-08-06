@@ -32,7 +32,7 @@ interface ManagerState {
 }
 
 export function RecoveryKeyManager() {
-  const { api } = useApp();
+  const { api, zeroKnowledge } = useApp();
   const currentUserId = useMeta((store) => store.user?.id ?? '');
   const toast = useUi((state) => state.toast);
   const recoveryWorkspace = useOptionalRecoveryWorkspace();
@@ -83,7 +83,9 @@ export function RecoveryKeyManager() {
 
   useEffect(() => {
     const key = state?.workflowKey;
-    if (!key || key.status !== 'staged' || !state?.readiness.ready || !state.coverage?.complete) return;
+    if (!key || key.status !== 'staged' || !state?.readiness.ready) return;
+    const replacingActiveKey = state.keys.some((entry) => entry.id !== key.id && entry.status === 'active');
+    if (replacingActiveKey && !state.coverage?.complete) return;
     if (automaticActivation.current === key.id) return;
     automaticActivation.current = key.id;
     setBusyAction(`activate:${key.id}`);
@@ -150,8 +152,9 @@ export function RecoveryKeyManager() {
         idempotencyKey: crypto.randomUUID(),
         ceremonyEvidenceDigest: key.ceremonyEvidenceDigest,
       });
+      void zeroKnowledge.refresh().catch(() => undefined);
       await load();
-      toast('info', '第二次确认已完成，系统正在后台保护现有密码库');
+      toast('info', '第二次确认已完成，企业恢复正在自动启用');
     } catch (error) {
       setActionError(error instanceof Error ? error.message : '确认失败');
     } finally {
@@ -224,13 +227,16 @@ export function RecoveryKeyManager() {
           {state.workflowKey && state.workflowKey.status !== 'active' && (
             <div className={styles.keyBoundary}>
               <RefreshCw className={busyAction?.startsWith('activate:') ? styles.spin : undefined} size={15} aria-hidden />
-              {state.coverage
-                ? `系统正在后台保护现有密码库：${state.coverage.coveredVaultCount}/${state.coverage.totalVaultCount}`
-                : '两人确认后，系统会在密码库拥有者下次解锁时自动完成保护。'}
+              两位管理员的设置已经完成，企业恢复正在自动启用。
             </div>
           )}
           {state.workflowKey?.status === 'active' && (
-            <div className={styles.keyBoundary}><ShieldCheck size={15} aria-hidden />企业恢复已经准备完成。</div>
+            <div className={styles.keyBoundary}>
+              <ShieldCheck size={15} aria-hidden />
+              {state.coverage?.complete
+                ? '企业恢复已经启用，现有密码库均已纳入保护。'
+                : `企业恢复已经启用；现有密码库已保护 ${state.coverage?.coveredVaultCount ?? 0}/${state.coverage?.totalVaultCount ?? 0}，其余会在对应拥有者下次解锁时自动补上。`}
+            </div>
           )}
           <RecoveryAdministratorGuide readiness={state.readiness} compact />
         </div>

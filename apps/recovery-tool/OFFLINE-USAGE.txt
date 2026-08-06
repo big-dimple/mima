@@ -8,6 +8,6 @@ Mima企业恢复高级命令行说明 0.2.0
 node mima-recovery-tool.mjs generate --ceremony-id <内部批次标识> --output-dir <新目录>
 
 处理平台下载的一次恢复案件
-node mima-recovery-tool.mjs recover --input <处理包.json> --share <材料一.mimashare> --share <材料二.mimashare> --output <处理结果.json>
+node mima-recovery-tool.mjs recover --input <案件文件.json> --share <材料一.mimashare> --share <材料二.mimashare> --output <处理结果.json>
 
-恢复材料不得上传、截图、发送到聊天工具或进入常规备份。处理完成后按公司介质清理要求删除处理包和处理结果。
+恢复材料不得上传、截图、发送到聊天工具或进入常规备份。处理完成后按公司介质清理要求删除案件文件和处理结果。

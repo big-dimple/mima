@@ -120,7 +120,7 @@ export function Header({
           </div>
         )}
       </div>
-      <IconButton label="退出登录" onClick={handleLogout}>
+      <IconButton label="退出登录" onClick={handleLogout} tour="logout">
         <LogOut size={16} />
       </IconButton>
     </header>

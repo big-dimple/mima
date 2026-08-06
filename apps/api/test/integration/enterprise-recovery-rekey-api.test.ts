@@ -180,6 +180,18 @@ describe('enterprise recovery rekey boundary', () => {
     const rotatedPair = await generateEncryptionKeyPair();
     try {
       const rotatedKey = await stageRecoveryKey('recovery-rekey-rotated', rotatedPair.publicKey, false);
+      const incompleteActivation = await app.inject({
+        method: 'POST',
+        url: `/api/v2/recovery/keys/${rotatedKey.id}/activate`,
+        ...authed(adminOne),
+        payload: {
+          idempotencyKey: key(),
+          ceremonyEvidenceDigest: rotatedKey.ceremonyEvidenceDigest,
+        },
+      });
+      expect(incompleteActivation.statusCode, incompleteActivation.body).toBe(409);
+      expect((incompleteActivation.json() as { message: string }).message).toContain('仍有密码库');
+
       for (const vaultId of [fullVaultId, metadataVaultId]) {
         const ciphertext = randomBytes(96);
         await app.ctx.db.insert(vaultKeyEnvelopes).values({

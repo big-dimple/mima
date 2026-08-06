@@ -12,8 +12,9 @@ export function RecoveryCoverageBanner() {
 
   const load = useCallback(() => {
     void api.recoveryKeys().then(async (keys) => {
-      const staged = keys.find((key) => key.status === 'staged');
-      return staged ? api.recoveryCoverage(staged.id) : null;
+      const recoveryKey = keys.find((key) => key.status === 'staged')
+        ?? keys.find((key) => key.status === 'active');
+      return recoveryKey ? api.recoveryCoverage(recoveryKey.id) : null;
     }).then(setCoverage, () => setCoverage(null));
   }, [api]);
 

@@ -17,7 +17,7 @@ describe('release download packaging', () => {
   it('uses the repository packager and current schema head in the public image build', () => {
     const dockerfile = readFileSync(resolve('deploy/Dockerfile'), 'utf8');
     expect(dockerfile).toContain('node scripts/package-release-downloads.mjs');
-    expect(dockerfile).toContain('mima.schema-head="0024_enterprise_recovery_cases"');
+    expect(dockerfile).toContain('mima.schema-head="0025_nonblocking_initial_recovery"');
     expect(dockerfile).toContain('打开企业恢复向导.html');
     expect(dockerfile).not.toContain('apt-get install');
     expect(dockerfile).not.toMatch(/\bzip -q/);

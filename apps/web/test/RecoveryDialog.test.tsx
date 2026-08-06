@@ -107,7 +107,7 @@ describe('enterprise recovery center', () => {
     await userEvent.click(casesButton);
     expect(await screen.findByText(/两人已确认，等待完成最后一步/)).toBeVisible();
     expect(screen.getByText(/避免恢复材料接触服务器或网络/)).toBeVisible();
-    expect(screen.getByRole('button', { name: '下载恢复包' })).toBeVisible();
+    expect(screen.getByRole('button', { name: '下载案件文件' })).toBeVisible();
     expect(screen.getByText('提交恢复结果')).toBeVisible();
   });
 });

@@ -83,4 +83,11 @@ describe('recovery tool package protocol', () => {
     ]);
     expect(parsed.items.every((entry) => entry.recovery.keyId === parsed.recovery.keyId)).toBe(true);
   });
+
+  it('explains when the setup manifest is selected instead of a recovery case file', () => {
+    expect(() => parseRecoveryCaseInput(JSON.stringify({
+      protocol: 'lm-e2ee-v1',
+      kind: 'enterprise-recovery-manifest',
+    }))).toThrow(/首次准备.*企业恢复公开清单.*下载案件文件/);
+  });
 });

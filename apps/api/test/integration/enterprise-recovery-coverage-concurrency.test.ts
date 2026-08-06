@@ -31,7 +31,7 @@ afterAll(async () => {
 });
 
 describe('enterprise recovery coverage serialization', () => {
-  it('blocks recovery activation until a concurrent e2ee cutover commits, then rejects incomplete coverage', async () => {
+  it('serializes first activation with a concurrent e2ee cutover without waiting for coverage', async () => {
     const deviceId = randomUUID();
     await app.ctx.db.insert(userDevices).values({
       id: deviceId,
@@ -124,12 +124,8 @@ describe('enterprise recovery coverage serialization', () => {
 
       await cutover.query('COMMIT');
       const activationResult = await activating;
-      expect(activationResult.status).toBe('rejected');
-      if (activationResult.status === 'rejected') {
-        expect(activationResult.reason).toBeInstanceOf(Error);
-        expect((activationResult.reason as Error).message).toMatch(/does not cover every e2ee vault/);
-      }
-      await activation.query('ROLLBACK');
+      expect(activationResult.status).toBe('fulfilled');
+      await activation.query('COMMIT');
     } finally {
       await Promise.all([
         cutover.query('ROLLBACK').catch(() => undefined),
@@ -139,7 +135,7 @@ describe('enterprise recovery coverage serialization', () => {
     }
 
     expect((await app.ctx.db.select().from(enterpriseRecoveryKeys)
-      .where(eq(enterpriseRecoveryKeys.id, recoveryKey.id)))[0]).toMatchObject({ status: 'staged' });
+      .where(eq(enterpriseRecoveryKeys.id, recoveryKey.id)))[0]).toMatchObject({ status: 'active' });
   });
 });
 

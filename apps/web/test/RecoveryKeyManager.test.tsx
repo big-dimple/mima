@@ -72,7 +72,7 @@ describe('enterprise recovery key manager', () => {
     expect(await screen.findByText(/你的确认已经完成/)).toBeVisible();
   });
 
-  it('automatically activates after the second approval and background coverage complete', async () => {
+  it('automatically activates after the second approval without waiting for every owner', async () => {
     const pending = recoveryKey('pending');
     const staged = recoveryKey('staged');
     const active = recoveryKey('active');
@@ -82,7 +82,7 @@ describe('enterprise recovery key manager', () => {
         .mockResolvedValueOnce([staged])
         .mockResolvedValueOnce([active]),
       recoveryReadiness: vi.fn().mockResolvedValue(readyAdministrators()),
-      recoveryCoverage: vi.fn().mockResolvedValue(coverage(2)),
+      recoveryCoverage: vi.fn().mockResolvedValue(coverage(1)),
       approveRecoveryKey: vi.fn().mockResolvedValue(staged),
       activateRecoveryKey: vi.fn().mockResolvedValue(active),
     };
@@ -98,20 +98,21 @@ describe('enterprise recovery key manager', () => {
       idempotencyKey: `activate-${pending.id}`,
       ceremonyEvidenceDigest: pending.ceremonyEvidenceDigest,
     }));
-    expect(await screen.findByText('企业恢复已经准备完成。')).toBeVisible();
+    expect(await screen.findByText(/企业恢复已经启用；现有密码库已保护 1\/2/)).toBeVisible();
   });
 
-  it('waits in the background while any existing vault is uncovered', async () => {
+  it('waits for complete coverage before replacing an active recovery key', async () => {
     const staged = recoveryKey('staged');
+    const active = { ...recoveryKey('active'), id: '10000000-0000-4000-8000-000000000099' };
     const api = {
-      recoveryKeys: vi.fn().mockResolvedValue([staged]),
+      recoveryKeys: vi.fn().mockResolvedValue([staged, active]),
       recoveryReadiness: vi.fn().mockResolvedValue(readyAdministrators()),
       recoveryCoverage: vi.fn().mockResolvedValue(coverage(1)),
       activateRecoveryKey: vi.fn(),
     };
     renderManager(api);
 
-    expect(await screen.findByText('系统正在后台保护现有密码库：1/2')).toBeVisible();
+    expect(await screen.findByText(/两位管理员的设置已经完成/)).toBeVisible();
     expect(screen.queryByRole('button', { name: /启用企业恢复/ })).not.toBeInTheDocument();
     expect(api.activateRecoveryKey).not.toHaveBeenCalled();
   });
@@ -148,7 +149,11 @@ function renderManager(api: Record<string, unknown>, withConfirmation = false, c
     isLocalPlatformAdmin: true,
   });
   render(
-    <AppContext.Provider value={{ api, store } as unknown as AppServices}>
+    <AppContext.Provider value={{
+      api,
+      store,
+      zeroKnowledge: { refresh: vi.fn().mockResolvedValue(undefined) },
+    } as unknown as AppServices}>
       <RecoveryKeyManager />
       {withConfirmation && <ConfirmDialog />}
     </AppContext.Provider>,

@@ -21,6 +21,7 @@ import {
   vaultRekeyJobs,
 } from '../../src/db/schema.ts';
 import { authed, freshStrictTestApp, key, login, type TestSession } from './helpers.ts';
+import type { SyncEventRow } from '../../src/services/bus.ts';
 
 let app: FastifyInstance;
 let owner: TestSession;
@@ -31,6 +32,7 @@ let ownerKeyring: E2eeKeyring;
 let ownerProfile: UserCryptoProfile;
 let vaultIds: string[];
 let stagedKey: EnterpriseRecoveryKey;
+let stagingEvents: SyncEventRow[];
 
 beforeAll(async () => {
   app = await freshStrictTestApp('mima_test_enterprise_recovery_readiness_coverage');
@@ -83,18 +85,24 @@ beforeAll(async () => {
   expect(registered.statusCode, registered.body).toBe(201);
   let recoveryKey = registered.json() as EnterpriseRecoveryKey;
   expect(recoveryKey.approvalUserIds).toEqual([]);
-  for (const administrator of [administratorOne, administratorTwo]) {
-    const approved = await app.inject({
-      method: 'POST',
-      url: `/api/v2/recovery/keys/${recoveryKey.id}/approve`,
-      ...authed(administrator),
-      payload: {
-        idempotencyKey: key(),
-        ceremonyEvidenceDigest: recoveryKey.ceremonyEvidenceDigest,
-      },
-    });
-    expect(approved.statusCode, approved.body).toBe(200);
-    recoveryKey = approved.json() as EnterpriseRecoveryKey;
+  stagingEvents = [];
+  const unsubscribe = app.ctx.bus.subscribe((event) => stagingEvents.push(event));
+  try {
+    for (const administrator of [administratorOne, administratorTwo]) {
+      const approved = await app.inject({
+        method: 'POST',
+        url: `/api/v2/recovery/keys/${recoveryKey.id}/approve`,
+        ...authed(administrator),
+        payload: {
+          idempotencyKey: key(),
+          ceremonyEvidenceDigest: recoveryKey.ceremonyEvidenceDigest,
+        },
+      });
+      expect(approved.statusCode, approved.body).toBe(200);
+      recoveryKey = approved.json() as EnterpriseRecoveryKey;
+    }
+  } finally {
+    unsubscribe();
   }
   expect(recoveryKey).toMatchObject({
     status: 'staged',
@@ -109,7 +117,12 @@ afterAll(async () => {
 });
 
 describe('enterprise recovery readiness and initial coverage', () => {
-  it('requires three ready administrators and complete opaque vault coverage before first activation', async () => {
+  it('notifies online owners when the second administrator confirms', () => {
+    expect(stagingEvents.filter((event) => event.type === 'vault.crypto_changed')
+      .map((event) => event.vaultId).sort()).toEqual([...vaultIds].sort());
+  });
+
+  it('requires three ready administrators but does not block first activation on offline owners', async () => {
     const readinessResponse = await app.inject({
       method: 'GET',
       url: '/api/v2/recovery/readiness',
@@ -210,9 +223,9 @@ describe('enterprise recovery readiness and initial coverage', () => {
       coveredVaultCount: 1,
       complete: false,
     });
-    const incompleteActivation = await activateRecoveryKey();
-    expect(incompleteActivation.statusCode, incompleteActivation.body).toBe(409);
-    expect((incompleteActivation.json() as { message: string }).message).toContain('仍有密码库');
+    const activated = await activateRecoveryKey();
+    expect(activated.statusCode, activated.body).toBe(200);
+    expect((activated.json() as EnterpriseRecoveryKey).status).toBe('active');
 
     const secondRequest = await ownerKeyring.prepareEnterpriseRecoveryEnvelope(
       owner.userId,
@@ -229,9 +242,6 @@ describe('enterprise recovery readiness and initial coverage', () => {
       complete: true,
     });
 
-    const activated = await activateRecoveryKey();
-    expect(activated.statusCode, activated.body).toBe(200);
-    expect((activated.json() as EnterpriseRecoveryKey).status).toBe('active');
     expect(await app.ctx.db.select().from(vaultRekeyJobs)).toHaveLength(0);
     const states = await app.ctx.db.select().from(vaultCryptoStates)
       .where(inArray(vaultCryptoStates.vaultId, vaultIds));

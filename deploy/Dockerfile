@@ -88,7 +88,7 @@ LABEL org.opencontainers.image.version="0.2.0" \
   mima.e2ee-protocol="lm-e2ee-v1" \
   mima.component="api" \
   mima.runtime="strict-api" \
-  mima.schema-head="0024_enterprise_recovery_cases" \
+  mima.schema-head="0025_nonblocking_initial_recovery" \
   mima.source-snapshot-sha256="${MIMA_SOURCE_SNAPSHOT_SHA256}"
 ENV NODE_ENV=production
 WORKDIR /app
@@ -128,7 +128,7 @@ LABEL org.opencontainers.image.version="0.2.0" \
   mima.e2ee-protocol="lm-e2ee-v1" \
   mima.component="migration-worker" \
   mima.runtime="isolated-migration-worker" \
-  mima.schema-head="0024_enterprise_recovery_cases" \
+  mima.schema-head="0025_nonblocking_initial_recovery" \
   mima.source-snapshot-sha256="${MIMA_SOURCE_SNAPSHOT_SHA256}"
 ENV NODE_ENV=production
 WORKDIR /app

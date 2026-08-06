@@ -61,7 +61,7 @@ test('企业恢复中心在桌面、平板和手机视口保持可用', async ({
     await pane.evaluate((element) => {
       element.scrollTop = element.scrollHeight;
     });
-    await expect(dialog.getByText(/企业恢复已经准备完成|系统正在后台保护现有密码库|两人确认后/)).toBeInViewport();
+    await expect(dialog.getByText(/企业恢复已经启用|企业恢复正在自动启用|两人确认后/)).toBeInViewport();
     await page.screenshot({
       path: join(SCREENSHOT_DIR, `enterprise-recovery-setup-bottom-${viewport.name}-${viewport.width}x${viewport.height}.png`),
       animations: 'disabled',

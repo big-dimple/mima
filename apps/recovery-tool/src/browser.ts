@@ -13,6 +13,10 @@ type ChosenDirectory = {
   getFileHandle(name: string, options: { create: true }): Promise<ChosenFile>;
 };
 
+const setupModeButton = element<HTMLButtonElement>('mode-setup');
+const caseModeButton = element<HTMLButtonElement>('mode-case');
+const setupPanel = element<HTMLElement>('setup-panel');
+const casePanel = element<HTMLElement>('case-panel');
 const generateButton = element<HTMLButtonElement>('generate-kit');
 const generateResult = element<HTMLDivElement>('generate-result');
 const recoveryForm = element<HTMLFormElement>('recovery-form');
@@ -24,9 +28,19 @@ const recoverySubmit = element<HTMLButtonElement>('recovery-submit');
 
 generateButton.addEventListener('click', () => void generateKit());
 recoveryForm.addEventListener('submit', (event) => void processRecovery(event));
+setupModeButton.addEventListener('click', () => setMode('setup'));
+caseModeButton.addEventListener('click', () => setMode('case'));
 bindFileName(packageInput, 'case-package-name');
 bindFileName(firstShareInput, 'share-one-name');
 bindFileName(secondShareInput, 'share-two-name');
+
+function setMode(mode: 'setup' | 'case'): void {
+  const setup = mode === 'setup';
+  setupModeButton.setAttribute('aria-selected', String(setup));
+  caseModeButton.setAttribute('aria-selected', String(!setup));
+  setupPanel.hidden = !setup;
+  casePanel.hidden = setup;
+}
 
 async function generateKit(): Promise<void> {
   generateButton.disabled = true;
@@ -94,7 +108,7 @@ async function processRecovery(event: Event): Promise<void> {
   const firstShare = firstShareInput.files?.[0];
   const secondShare = secondShareInput.files?.[0];
   if (!packageFile || !firstShare || !secondShare) {
-    setRecoveryStatus('error', '请选择管理员下载的处理包，以及两份不同的恢复材料。');
+    setRecoveryStatus('error', '请选择平台恢复案件中下载的 JSON 文件，以及两份不同的恢复材料。');
     return;
   }
   recoverySubmit.disabled = true;

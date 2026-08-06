@@ -479,8 +479,8 @@ export function AdminAccountResetApprovals({
     setBusyId(`download:${recoveryCase.id}`);
     try {
       const value = await api.recoveryCasePackage(recoveryCase.id);
-      downloadJson(`企业恢复-${recoveryCase.targetUsername}-${recoveryCase.id.slice(0, 8)}.json`, value);
-      toast('info', '恢复包已下载，请在离线电脑中双击打开恢复向导');
+      downloadJson(`企业恢复案件-${recoveryCase.targetUsername}-${recoveryCase.id.slice(0, 8)}.json`, value);
+      toast('info', '案件文件已下载，请带到断网电脑并在恢复向导中选择“处理恢复案件”');
     } catch (error) {
       toast('error', error instanceof Error ? error.message : '恢复包下载失败');
     } finally {
@@ -553,10 +553,10 @@ export function AdminAccountResetApprovals({
             {recoveryCase.status === 'pending_approval' && approvedByMe && <div className={styles.notice}>你已确认，等待另一位管理员。</div>}
             {['approved', 'processing'].includes(recoveryCase.status) && unresolved > 0 && !recoveryCase.hasOfflineResult && (
               <>
-                <div className={styles.boundary}>最后一步：在断网电脑上用恢复向导打开恢复包（避免恢复材料接触服务器或网络），再把向导生成的结果提交回来。</div>
+                <div className={styles.boundary}>最后一步：下载本案件的 JSON 文件，带到断网电脑，在恢复向导中选择“处理恢复案件”（避免恢复材料接触服务器或网络），再把生成的结果提交回来。</div>
                 <div className={styles.actions}>
                   <button type="button" disabled={busyId !== null} onClick={() => void downloadPackage(recoveryCase)}>
-                    {busyId === `download:${recoveryCase.id}` ? '正在准备…' : '下载恢复包'}
+                    {busyId === `download:${recoveryCase.id}` ? '正在准备…' : '下载案件文件'}
                   </button>
                   <label className={styles.secondary}>
                     提交恢复结果

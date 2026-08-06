@@ -63,6 +63,9 @@ export function parseRecoveryInput(value: string): RecoveryInput {
 
 export function parseRecoveryCaseInput(value: string): RecoveryCaseInput {
   const parsed = JSON.parse(value) as unknown;
+  if (isRecord(parsed) && parsed.kind === 'enterprise-recovery-manifest') {
+    throw new Error('你选择的是首次准备时的“企业恢复公开清单”。这里需要从平台中的具体恢复案件点击“下载案件文件”得到的 JSON 文件。');
+  }
   if (!isRecord(parsed)
     || parsed.protocol !== 'mima-e2ee-v2'
     || parsed.kind !== 'enterprise-recovery-case-package'
