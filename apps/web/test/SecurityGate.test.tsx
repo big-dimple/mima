@@ -1,3 +1,4 @@
+import * as Tooltip from '@radix-ui/react-tooltip';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -434,23 +435,35 @@ describe('legacy migration security gate', () => {
     const store = createMetaStore();
     store.getState().setUser(adminUser);
     const createRecoveryCase = vi.fn(async () => ({}));
+    const searchUsers = vi.fn(async (query: string) => ({
+      syncedAt: '2026-08-06T00:00:00.000Z',
+      users: query ? [user] : [],
+    }));
     const services = {
       store,
       api: {
         recoveryCases: vi.fn(async () => []),
-        directory: vi.fn(async () => ({ users: [user] })),
+        searchUsers,
         createRecoveryCase,
       },
     } as unknown as AppServices;
 
     render(
       <AppContext.Provider value={services}>
-        <AdminAccountResetApprovals />
+        <Tooltip.Provider>
+          <AdminAccountResetApprovals />
+        </Tooltip.Provider>
       </AppContext.Provider>,
     );
 
-    expect(await screen.findByRole('option', { name: 'Owner（owner）' })).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: '发起恢复协助' }));
+    const createButton = await screen.findByRole('button', { name: '发起恢复协助' });
+    expect(createButton).toBeDisabled();
+    const picker = screen.getByRole('combobox', { name: '需要帮助的同事' });
+    expect(picker).toHaveAttribute('placeholder', '搜索姓名、拼音或域账号');
+    await userEvent.type(picker, 'owner');
+    await userEvent.click(await screen.findByRole('option', { name: /Owner.*owner/i }));
+    expect(searchUsers).toHaveBeenCalledWith('owner', []);
+    await userEvent.click(createButton);
     await waitFor(() => expect(createRecoveryCase).toHaveBeenCalledWith({
       idempotencyKey: expect.any(String),
       kind: 'forgot_password',
@@ -501,7 +514,6 @@ describe('legacy migration security gate', () => {
       store,
       api: {
         recoveryCases: vi.fn().mockResolvedValue([recoveryCase]),
-        directory: vi.fn().mockResolvedValue({ users: [] }),
         approveRecoveryCase,
       },
     } as unknown as AppServices;

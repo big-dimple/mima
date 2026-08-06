@@ -33,6 +33,9 @@ describe('enterprise recovery key manager', () => {
     renderManager(api);
 
     expect(await screen.findByText(/只需准备一次/)).toBeVisible();
+    expect(screen.getByText(/生成和使用恢复材料时，它们始终不会接触服务器或网络/)).toBeVisible();
+    expect(screen.getByText(/每次帮助普通用户恢复只需要其中两位/)).toBeVisible();
+    for (const name of ['Alice', 'Bob', 'Carol']) expect(screen.getByText(name)).toBeVisible();
     expect(screen.getByText(/恢复材料绝不能上传/)).toBeVisible();
     const input = screen.getByLabelText('选择企业恢复公开清单');
 

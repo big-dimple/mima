@@ -173,7 +173,7 @@ export function RecoveryKeyManager() {
       {state && (
         <div className={styles.workflowSteps}>
           <SimpleStep icon={<Download size={17} aria-hidden />} title="1. 下载离线向导" complete={Boolean(state.workflowKey)}>
-            <p>把 ZIP 带到一台断网电脑，解压后双击“打开企业恢复向导.html”。无需安装软件，也不用填写编号、目录或文件名。</p>
+            <p>把 ZIP 带到一台断网电脑（这样生成和使用恢复材料时，它们始终不会接触服务器或网络），解压后双击“打开企业恢复向导.html”。无需安装软件，也不用填写编号、目录或文件名。</p>
             <button type="button" disabled={busyAction !== null} onClick={() => void downloadVerifiedRecoveryTool(setBusyAction, setActionError)}>
               <Download size={15} aria-hidden />下载并自动校验
             </button>
@@ -232,7 +232,7 @@ export function RecoveryKeyManager() {
           {state.workflowKey?.status === 'active' && (
             <div className={styles.keyBoundary}><ShieldCheck size={15} aria-hidden />企业恢复已经准备完成。</div>
           )}
-          {!state.readiness.ready && <RecoveryAdministratorGuide readiness={state.readiness} compact />}
+          <RecoveryAdministratorGuide readiness={state.readiness} compact />
         </div>
       )}
     </section>

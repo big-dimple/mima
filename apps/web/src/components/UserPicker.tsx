@@ -8,6 +8,7 @@ import styles from './UserPicker.module.css';
 interface UserPickerProps {
   value: string;
   onChange: (userId: string, user?: UserSearchResult) => void;
+  inputId?: string;
   excludeIds?: string[];
   placeholder?: string;
   disabled?: boolean;
@@ -18,6 +19,7 @@ interface UserPickerProps {
 export function UserPicker({
   value,
   onChange,
+  inputId,
   excludeIds = [],
   placeholder = '搜索姓名或域账号',
   disabled = false,
@@ -36,7 +38,8 @@ export function UserPicker({
   const requestSequence = useRef(0);
   const hydrationSequence = useRef(0);
   const rootRef = useRef<HTMLDivElement>(null);
-  const optionsId = `${useId().replace(/:/g, '')}-options`;
+  const pickerId = useId().replace(/:/g, '');
+  const optionsId = `${pickerId}-options`;
   const excludedIdsKey = excludeIds.join('\u0000');
 
   useEffect(() => {
@@ -113,6 +116,7 @@ export function UserPicker({
       <div className={styles.inputWrap}>
         <Search size={15} aria-hidden />
         <input
+          id={inputId ?? `${pickerId}-input`}
           className={styles.input}
           aria-label={label}
           role="combobox"

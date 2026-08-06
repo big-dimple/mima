@@ -75,8 +75,14 @@ function RecoveryWorkspaceCenter() {
     cases: isLocalPlatformAdmin
       ? activeCases.filter((entry) => (
         entry.targetUserId !== currentUserId
-        && entry.status === 'pending_approval'
-        && !entry.approvalUserIds.includes(currentUserId)
+        && (
+          (entry.status === 'pending_approval' && !entry.approvalUserIds.includes(currentUserId))
+          || (
+            ['approved', 'processing'].includes(entry.status)
+            && entry.items.length - entry.resolvedItemCount - entry.skippedItemCount > 0
+            && !entry.hasOfflineResult
+          )
+        )
       )).length
       : activeCases.filter((entry) => entry.targetUserId === currentUserId).length,
   }), [activeCases, currentUserId, isLocalPlatformAdmin]);
@@ -162,8 +168,8 @@ function RecoveryWorkspaceCenter() {
                 <span>{isLocalPlatformAdmin ? '管理员协助' : '我的协助'}</span>
                 <h2 id="recovery-cases-heading">恢复案件</h2>
                 <p>{isLocalPlatformAdmin
-                  ? '同事在公司群里求助后，从这里发起；两位管理员分别确认即可。'
-                  : '管理员发起后，你只需要设置新主密码，后续会自动完成。'}</p>
+                  ? '同事在公司群里求助后，从这里发起；两位管理员分别确认，页面会继续提示完成最后一步。'
+                  : '管理员发起后，你只需要设置新主密码；后续由管理员继续处理。'}</p>
               </div>
               {isLocalPlatformAdmin ? (
                 <AdminAccountResetApprovals
@@ -238,7 +244,7 @@ function caseStatusLabel(entry: import('@mima/contracts').EnterpriseRecoveryCase
     return entry.kind === 'forgot_password' ? '等待用户设置新主密码' : '正在自动准备恢复';
   }
   if (entry.status === 'pending_approval') return '等待两位管理员确认';
-  if (entry.status === 'approved' || entry.status === 'processing') return '正在自动恢复';
+  if (entry.status === 'approved' || entry.status === 'processing') return '管理员正在完成恢复';
   if (entry.status === 'completed') return '已完成';
   if (entry.status === 'completed_with_skips') return '已完成，失效权限已跳过';
   if (entry.status === 'expired') return '已过期';

@@ -64,7 +64,8 @@
 
 .account,
 .notice,
-.boundary {
+.boundary,
+.emptyState {
   margin-bottom: 16px;
   padding: 9px 10px;
   border: 1px solid var(--border);
@@ -112,6 +113,10 @@
 }
 
 .boundary {
+  color: var(--muted);
+}
+
+.emptyState {
   color: var(--muted);
 }
 

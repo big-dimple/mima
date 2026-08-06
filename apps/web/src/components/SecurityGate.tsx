@@ -28,6 +28,7 @@ import { useUi } from '../state/ui-store.ts';
 import { LoadingState } from './AsyncState.tsx';
 import { EnterpriseRecoveryRequestPanel } from './EnterpriseRecoveryRequestPanel.tsx';
 import { RecoveryKeyManager } from './RecoveryKeyManager.tsx';
+import { UserPicker } from './UserPicker.tsx';
 import { readTextFile } from '../utils/read-text-file.ts';
 import styles from './SecurityGate.module.css';
 
@@ -382,7 +383,7 @@ function AccountResetPanel({ user, onLoggedOut }: { user: SessionUser | null; on
     <GateShell onLoggedOut={onLoggedOut}>
       <UserRoundCheck size={24} className={styles.icon} aria-hidden />
       <h1>正在恢复访问</h1>
-      <p>你已经设置好新主密码。两位管理员确认后，系统会自动完成后续步骤；之后可在任意浏览器重新登录。</p>
+      <p>你已经设置好新主密码。两位管理员确认后，新主密码会启用；需要恢复的原有访问由管理员继续处理。之后可在任意浏览器重新登录。</p>
       {loading && <LoadingState label="正在查看管理员确认进度…" />}
       {!loading && !request && <div className={styles.notice}>这次协助已经结束，请返回登录页重新进入。</div>}
       {request && (
@@ -416,7 +417,6 @@ export function AdminAccountResetApprovals({
   const currentUserId = useMeta((state) => state.user?.id ?? '');
   const toast = useUi((state) => state.toast);
   const [cases, setCases] = useState<EnterpriseRecoveryCase[]>(recoveryWorkspace?.cases ?? []);
-  const [users, setUsers] = useState<Array<{ id: string; username: string; displayName: string }>>([]);
   const [targetUserId, setTargetUserId] = useState('');
   const [kind, setKind] = useState<EnterpriseRecoveryCase['kind']>('forgot_password');
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -424,21 +424,22 @@ export function AdminAccountResetApprovals({
   const load = async () => {
     setLoading(true);
     try {
-      const [caseValues, directory] = await Promise.all([
-        api.recoveryCases(),
-        api.directory(),
-      ]);
-      setCases(caseValues);
-      const availableUsers = directory.users.filter((entry) => entry.id !== currentUserId);
-      setUsers(availableUsers);
-      setTargetUserId((current) => current || availableUsers[0]?.id || '');
+      setCases(await api.recoveryCases());
     } catch (error) {
       toast('error', error instanceof Error ? error.message : '恢复协助加载失败');
     } finally {
       setLoading(false);
     }
   };
-  useEffect(() => { void load(); }, [currentUserId, recoveryWorkspace]);
+  useEffect(() => setTargetUserId(''), [currentUserId]);
+  useEffect(() => {
+    if (recoveryWorkspace) {
+      setCases(recoveryWorkspace.cases);
+      setLoading(false);
+      return;
+    }
+    void load();
+  }, [currentUserId, recoveryWorkspace]);
   const create = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!targetUserId) return;
@@ -449,9 +450,10 @@ export function AdminAccountResetApprovals({
         kind,
         targetUserId,
       });
+      setTargetUserId('');
       toast('info', '恢复协助已发起，等待用户设置新主密码');
-      await load();
-      await onRecoveryChanged?.();
+      if (onRecoveryChanged) await onRecoveryChanged();
+      else await load();
     } catch (error) {
       toast('error', error instanceof Error ? error.message : '恢复协助发起失败');
     } finally {
@@ -474,9 +476,9 @@ export function AdminAccountResetApprovals({
         idempotencyKey: crypto.randomUUID(),
         caseDigest: recoveryCase.caseDigest,
       });
-      toast('info', '你的确认已记录，系统会在两人确认后自动继续');
-      await load();
-      await onRecoveryChanged?.();
+      toast('info', '你的确认已记录；两人确认后，页面会提示下一步');
+      if (onRecoveryChanged) await onRecoveryChanged();
+      else await load();
     } catch (error) {
       toast('error', error instanceof Error ? error.message : '审批失败');
     } finally {
@@ -488,9 +490,9 @@ export function AdminAccountResetApprovals({
     try {
       const value = await api.recoveryCasePackage(recoveryCase.id);
       downloadJson(`企业恢复-${recoveryCase.targetUsername}-${recoveryCase.id.slice(0, 8)}.json`, value);
-      toast('info', '处理包已下载，请在离线电脑中双击打开恢复向导');
+      toast('info', '恢复包已下载，请在离线电脑中双击打开恢复向导');
     } catch (error) {
-      toast('error', error instanceof Error ? error.message : '处理包下载失败');
+      toast('error', error instanceof Error ? error.message : '恢复包下载失败');
     } finally {
       setBusyId(null);
     }
@@ -505,37 +507,46 @@ export function AdminAccountResetApprovals({
         caseDigest: recoveryCase.caseDigest,
         transfer,
       });
-      toast('info', '处理结果已提交，系统会自动完成恢复');
-      await load();
-      await onRecoveryChanged?.();
+      toast('info', '恢复结果已提交，系统会自动完成恢复');
+      if (onRecoveryChanged) await onRecoveryChanged();
+      else await load();
     } catch (error) {
-      toast('error', error instanceof Error ? error.message : '处理结果不匹配或已失效');
+      toast('error', error instanceof Error ? error.message : '恢复结果不匹配或已失效');
     } finally {
       setBusyId(null);
     }
   };
-  if (loading) return <LoadingState label="正在核对待审批请求…" />;
   const activeCases = cases.filter((entry) => ['waiting_for_target', 'pending_approval', 'approved', 'processing'].includes(entry.status));
+  const recoveryReady = recoveryWorkspace === null
+    || recoveryWorkspace.keys.some((key) => key.status === 'active');
+  if (loading) return <LoadingState label="正在查看恢复协助…" />;
   return (
     <section className={styles.adminSection} aria-label="恢复协助">
       <h2>发起恢复协助</h2>
       <p>同事忘记主密码或交接中断时，由管理员在这里发起。一次协助覆盖其仍然有效的原有权限，不需要逐个密码库操作。</p>
+      {!recoveryReady && <div className={styles.notice}>企业恢复尚未准备完成，请先打开“准备恢复”完成设置。</div>}
       <form className={styles.resetForm} onSubmit={create}>
         <label htmlFor="recovery-target-user">需要帮助的同事</label>
-        <select id="recovery-target-user" value={targetUserId} onChange={(event) => setTargetUserId(event.target.value)}>
-          {users.map((entry) => <option key={entry.id} value={entry.id}>{entry.displayName}（{entry.username}）</option>)}
-        </select>
+        <UserPicker
+          inputId="recovery-target-user"
+          value={targetUserId}
+          onChange={setTargetUserId}
+          excludeIds={[currentUserId, ...activeCases.map((entry) => entry.targetUserId)]}
+          placeholder="搜索姓名、拼音或域账号"
+          label="需要帮助的同事"
+          disabled={!recoveryReady || busyId !== null}
+        />
         <label htmlFor="recovery-case-kind">遇到的问题</label>
         <select id="recovery-case-kind" value={kind} onChange={(event) => setKind(event.target.value as EnterpriseRecoveryCase['kind'])}>
           <option value="forgot_password">忘记主密码</option>
           <option value="interrupted_handoff">已有权限，但交接中断后打不开</option>
         </select>
-        <button className={styles.primary} type="submit" disabled={!targetUserId || busyId !== null}>
+        <button className={styles.primary} type="submit" disabled={!recoveryReady || !targetUserId || busyId !== null}>
           {busyId === 'create' ? '正在发起…' : '发起恢复协助'}
         </button>
       </form>
       <h2>正在处理</h2>
-      {activeCases.length === 0 && showEmpty && <div className={styles.notice}>当前没有进行中的恢复协助。</div>}
+      {activeCases.length === 0 && showEmpty && <div className={styles.emptyState}>当前没有进行中的恢复协助。</div>}
       {activeCases.map((recoveryCase) => {
         const approvedByMe = recoveryCase.approvalUserIds.includes(currentUserId);
         const canApprove = recoveryCase.status === 'pending_approval' && !approvedByMe;
@@ -551,25 +562,28 @@ export function AdminAccountResetApprovals({
             )}
             {recoveryCase.status === 'pending_approval' && approvedByMe && <div className={styles.notice}>你已确认，等待另一位管理员。</div>}
             {['approved', 'processing'].includes(recoveryCase.status) && unresolved > 0 && !recoveryCase.hasOfflineResult && (
-              <div className={styles.actions}>
-                <button type="button" disabled={busyId !== null} onClick={() => void downloadPackage(recoveryCase)}>
-                  {busyId === `download:${recoveryCase.id}` ? '正在准备…' : '下载离线处理包'}
-                </button>
-                <label className={styles.secondary}>
-                  上传离线处理结果
-                  <input
-                    type="file"
-                    accept="application/json,.json"
-                    hidden
-                    disabled={busyId !== null}
-                    onChange={(event) => {
-                      const file = event.target.files?.[0];
-                      if (file) void uploadTransfer(recoveryCase, file);
-                      event.target.value = '';
-                    }}
-                  />
-                </label>
-              </div>
+              <>
+                <div className={styles.boundary}>最后一步：在断网电脑上用恢复向导打开恢复包（避免恢复材料接触服务器或网络），再把向导生成的结果提交回来。</div>
+                <div className={styles.actions}>
+                  <button type="button" disabled={busyId !== null} onClick={() => void downloadPackage(recoveryCase)}>
+                    {busyId === `download:${recoveryCase.id}` ? '正在准备…' : '下载恢复包'}
+                  </button>
+                  <label className={styles.secondary}>
+                    提交恢复结果
+                    <input
+                      type="file"
+                      accept="application/json,.json"
+                      hidden
+                      disabled={busyId !== null}
+                      onChange={(event) => {
+                        const file = event.target.files?.[0];
+                        if (file) void uploadTransfer(recoveryCase, file);
+                        event.target.value = '';
+                      }}
+                    />
+                  </label>
+                </div>
+              </>
             )}
             {recoveryCase.hasOfflineResult && <div className={styles.notice}>离线处理已完成，系统正在自动完成恢复。</div>}
           </div>
@@ -582,7 +596,11 @@ export function AdminAccountResetApprovals({
 function recoveryCaseStatusText(recoveryCase: EnterpriseRecoveryCase): string {
   if (recoveryCase.status === 'waiting_for_target') return '等待用户设置新主密码';
   if (recoveryCase.status === 'pending_approval') return `管理员已确认 ${recoveryCase.approvalUserIds.length}/2 人`;
-  if (recoveryCase.status === 'approved') return '两人已确认，正在自动处理';
+  const unresolved = recoveryCase.items.length - recoveryCase.resolvedItemCount - recoveryCase.skippedItemCount;
+  if (['approved', 'processing'].includes(recoveryCase.status) && unresolved > 0 && !recoveryCase.hasOfflineResult) {
+    return '两人已确认，等待完成最后一步';
+  }
+  if (recoveryCase.status === 'approved') return '两人已确认，正在继续处理';
   if (recoveryCase.status === 'processing') return '正在恢复原有访问';
   if (recoveryCase.status === 'completed') return '已经完成';
   if (recoveryCase.status === 'completed_with_skips') return '已完成，失效权限已跳过';

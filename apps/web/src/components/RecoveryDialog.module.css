@@ -334,6 +334,14 @@
   background: var(--panel-2);
 }
 
+.adminProvisioningGuide[data-compact='true'][data-ready='true'] {
+  border-color: var(--border);
+}
+
+.adminProvisioningGuide[data-ready='true'] .adminProvisioningHeading svg {
+  color: var(--accent);
+}
+
 .adminProvisioningHeading {
   min-width: 0;
   display: flex;
