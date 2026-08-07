@@ -20,14 +20,12 @@ import type {
   SessionUser,
   VaultCryptoState,
 } from '@mima/contracts';
-import { EnterpriseRecoveryCaseTransferSchema } from '@mima/contracts';
 import { useApp, useMeta } from '../state/app-context.ts';
 import type { LocalAccessReason } from '../state/local-access.ts';
 import { useUi } from '../state/ui-store.ts';
 import { LoadingState } from './AsyncState.tsx';
 import { EnterpriseRecoveryRequestPanel } from './EnterpriseRecoveryRequestPanel.tsx';
 import { UserPicker } from './UserPicker.tsx';
-import { readTextFile } from '../utils/read-text-file.ts';
 import styles from './SecurityGate.module.css';
 
 export function SecurityGate({
@@ -403,7 +401,7 @@ export function AdminAccountResetApprovals({
   recoveryWorkspace?: EnterpriseRecoveryWorkspace | null;
   onRecoveryChanged?: () => void | Promise<void>;
 } = {}) {
-  const { api } = useApp();
+  const { api, zeroKnowledge } = useApp();
   const currentUserId = useMeta((state) => state.user?.id ?? '');
   const toast = useUi((state) => state.toast);
   const [cases, setCases] = useState<EnterpriseRecoveryCase[]>(recoveryWorkspace?.cases ?? []);
@@ -453,7 +451,7 @@ export function AdminAccountResetApprovals({
   const approve = async (recoveryCase: EnterpriseRecoveryCase) => {
     const confirmed = await useUi.getState().requestConfirm({
       title: '确认帮助这位同事恢复？',
-      body: `用户：${recoveryCase.targetDisplayName}（${recoveryCase.targetUsername}）\n场景：${recoveryCase.kind === 'forgot_password' ? '忘记主密码' : '交接中断后恢复原有权限'}\n涉及 ${recoveryCase.items.length} 个原本已有权限的密码库。请先通过公司沟通渠道确认本人身份。`,
+      body: `用户：${recoveryCase.targetDisplayName}（${recoveryCase.targetUsername}）\n场景：${recoveryCase.kind === 'forgot_password' ? '忘记主密码' : '交接中断后恢复原有权限'}\n${recoveryCase.resolutionKind === 'replace_empty_personal' ? '原个人库没有任何条目，将放弃旧空库并自动创建新的“我的密码库”。' : `只恢复仍然有效的原有密码库权限，共 ${recoveryCase.items.length} 个。`}\n请先通过公司沟通渠道确认本人身份。`,
       confirmText: '身份已确认，同意协助',
       cancelText: '暂不确认',
       danger: true,
@@ -462,11 +460,12 @@ export function AdminAccountResetApprovals({
     setBusyId(recoveryCase.id);
     try {
       if (!recoveryCase.caseDigest) throw new Error('用户还没有设置新主密码');
-      await api.approveRecoveryCase(recoveryCase.id, {
-        idempotencyKey: crypto.randomUUID(),
-        caseDigest: recoveryCase.caseDigest,
-      });
-      toast('info', '你的确认已记录；两人确认后，页面会提示下一步');
+      const material = await api.recoveryCaseApprovalMaterial(recoveryCase.id);
+      const request = await zeroKnowledge.prepareManagedRecoveryCaseApproval(material);
+      const updated = await api.approveRecoveryCase(recoveryCase.id, request);
+      toast('info', updated.approvalUserIds.length >= 2
+        ? '两位管理员已确认，系统已完成管理员侧处理'
+        : '你的确认已记录，等待另一位管理员确认');
       if (onRecoveryChanged) await onRecoveryChanged();
       else await load();
     } catch (error) {
@@ -475,40 +474,11 @@ export function AdminAccountResetApprovals({
       setBusyId(null);
     }
   };
-  const downloadPackage = async (recoveryCase: EnterpriseRecoveryCase) => {
-    setBusyId(`download:${recoveryCase.id}`);
-    try {
-      const value = await api.recoveryCasePackage(recoveryCase.id);
-      downloadJson(`企业恢复案件-${recoveryCase.targetUsername}-${recoveryCase.id.slice(0, 8)}.json`, value);
-      toast('info', '案件文件已下载，请带到断网电脑并在恢复向导中选择“处理恢复案件”');
-    } catch (error) {
-      toast('error', error instanceof Error ? error.message : '恢复包下载失败');
-    } finally {
-      setBusyId(null);
-    }
-  };
-  const uploadTransfer = async (recoveryCase: EnterpriseRecoveryCase, file: File) => {
-    setBusyId(`upload:${recoveryCase.id}`);
-    try {
-      const transfer = EnterpriseRecoveryCaseTransferSchema.parse(JSON.parse(await readTextFile(file)));
-      if (!recoveryCase.caseDigest) throw new Error('这次协助还没有准备完成');
-      await api.uploadRecoveryCaseTransfer(recoveryCase.id, {
-        idempotencyKey: crypto.randomUUID(),
-        caseDigest: recoveryCase.caseDigest,
-        transfer,
-      });
-      toast('info', '恢复结果已提交，系统会自动完成恢复');
-      if (onRecoveryChanged) await onRecoveryChanged();
-      else await load();
-    } catch (error) {
-      toast('error', error instanceof Error ? error.message : '恢复结果不匹配或已失效');
-    } finally {
-      setBusyId(null);
-    }
-  };
   const activeCases = cases.filter((entry) => ['waiting_for_target', 'pending_approval', 'approved', 'processing'].includes(entry.status));
   const recoveryReady = recoveryWorkspace === null
-    || recoveryWorkspace.keys.some((key) => key.status === 'active');
+    || recoveryWorkspace.keys.some((key) => (
+      key.status === 'active' && key.custodyMode === 'administrator_accounts'
+    ));
   if (loading) return <LoadingState label="正在查看恢复协助…" />;
   return (
     <section className={styles.adminSection} aria-label="恢复协助">
@@ -540,42 +510,19 @@ export function AdminAccountResetApprovals({
       {activeCases.map((recoveryCase) => {
         const approvedByMe = recoveryCase.approvalUserIds.includes(currentUserId);
         const canApprove = recoveryCase.status === 'pending_approval' && !approvedByMe;
-        const unresolved = recoveryCase.items.length - recoveryCase.resolvedItemCount - recoveryCase.skippedItemCount;
         return (
           <div className={styles.recoveryGroup} key={recoveryCase.id}>
             <strong>{recoveryCase.targetDisplayName} · {recoveryCase.kind === 'forgot_password' ? '忘记主密码' : '交接中断'}</strong>
-            <span>{recoveryCaseStatusText(recoveryCase)} · 原有密码库 {recoveryCase.items.length} 个</span>
+            <span>{recoveryCaseStatusText(recoveryCase)} · {recoveryCase.resolutionKind === 'replace_empty_personal' ? '重新创建空的个人库' : `恢复原有密码库 ${recoveryCase.items.length} 个`}</span>
             {canApprove && (
               <button type="button" disabled={busyId !== null} onClick={() => void approve(recoveryCase)}>
                 {busyId === recoveryCase.id ? '正在确认…' : '确认身份并同意协助'}
               </button>
             )}
             {recoveryCase.status === 'pending_approval' && approvedByMe && <div className={styles.notice}>你已确认，等待另一位管理员。</div>}
-            {['approved', 'processing'].includes(recoveryCase.status) && unresolved > 0 && !recoveryCase.hasOfflineResult && (
-              <>
-                <div className={styles.boundary}>最后一步：下载本案件的 JSON 文件，带到断网电脑，在恢复向导中选择“处理恢复案件”（避免恢复材料接触服务器或网络），再把生成的结果提交回来。</div>
-                <div className={styles.actions}>
-                  <button type="button" disabled={busyId !== null} onClick={() => void downloadPackage(recoveryCase)}>
-                    {busyId === `download:${recoveryCase.id}` ? '正在准备…' : '下载案件文件'}
-                  </button>
-                  <label className={styles.secondary}>
-                    提交恢复结果
-                    <input
-                      type="file"
-                      accept="application/json,.json"
-                      hidden
-                      disabled={busyId !== null}
-                      onChange={(event) => {
-                        const file = event.target.files?.[0];
-                        if (file) void uploadTransfer(recoveryCase, file);
-                        event.target.value = '';
-                      }}
-                    />
-                  </label>
-                </div>
-              </>
+            {['approved', 'processing'].includes(recoveryCase.status) && (
+              <div className={styles.notice}>两位管理员已经确认。用户用新主密码重新登录后，系统会自动恢复仍然有效的原有访问。</div>
             )}
-            {recoveryCase.hasOfflineResult && <div className={styles.notice}>离线处理已完成，系统正在自动完成恢复。</div>}
           </div>
         );
       })}
@@ -586,26 +533,11 @@ export function AdminAccountResetApprovals({
 function recoveryCaseStatusText(recoveryCase: EnterpriseRecoveryCase): string {
   if (recoveryCase.status === 'waiting_for_target') return '等待用户设置新主密码';
   if (recoveryCase.status === 'pending_approval') return `管理员已确认 ${recoveryCase.approvalUserIds.length}/2 人`;
-  const unresolved = recoveryCase.items.length - recoveryCase.resolvedItemCount - recoveryCase.skippedItemCount;
-  if (['approved', 'processing'].includes(recoveryCase.status) && unresolved > 0 && !recoveryCase.hasOfflineResult) {
-    return '两人已确认，等待完成最后一步';
-  }
-  if (recoveryCase.status === 'approved') return '两人已确认，正在继续处理';
-  if (recoveryCase.status === 'processing') return '正在恢复原有访问';
+  if (recoveryCase.status === 'approved' || recoveryCase.status === 'processing') return '两人已确认，正在自动完成';
   if (recoveryCase.status === 'completed') return '已经完成';
   if (recoveryCase.status === 'completed_with_skips') return '已完成，失效权限已跳过';
   if (recoveryCase.status === 'expired') return '已过期';
   return '已取消';
-}
-
-function downloadJson(fileName: string, value: unknown): void {
-  const blob = new Blob([JSON.stringify(value, null, 2)], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement('a');
-  anchor.href = url;
-  anchor.download = fileName;
-  anchor.click();
-  URL.revokeObjectURL(url);
 }
 
 function MigrationPanel({ onLoggedOut }: { onLoggedOut: () => void }) {

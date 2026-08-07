@@ -47,12 +47,14 @@ test('企业恢复中心在桌面、平板和手机视口保持可用', async ({
     await expect(setup).toHaveAttribute('aria-current', 'page');
     await expect(dialog.getByRole('heading', { name: '准备企业恢复' })).toBeVisible();
     for (const heading of [
-      '1. 下载离线向导',
-      '2. 登记公开清单',
-      '3. 由另一位管理员确认',
+      '1. 核对恢复管理员',
+      '2. 自动准备恢复保护',
+      '3. 自动启用',
     ]) {
       await expect(dialog.getByRole('heading', { name: heading })).toBeVisible();
     }
+    await expect(dialog.getByText('下载离线向导', { exact: true })).toHaveCount(0);
+    await expect(dialog.getByText('登记公开清单', { exact: true })).toHaveCount(0);
     await page.screenshot({
       path: join(SCREENSHOT_DIR, `enterprise-recovery-setup-${viewport.name}-${viewport.width}x${viewport.height}.png`),
       animations: 'disabled',
@@ -61,14 +63,14 @@ test('企业恢复中心在桌面、平板和手机视口保持可用', async ({
     await pane.evaluate((element) => {
       element.scrollTop = element.scrollHeight;
     });
-    await expect(dialog.getByText(/企业恢复已经启用|企业恢复正在自动启用|两人确认后/)).toBeInViewport();
+    await expect(dialog.getByText(/企业恢复已经启用|历史密码库正在后台更新保护|两位管理员确认后/)).toBeInViewport();
     await page.screenshot({
       path: join(SCREENSHOT_DIR, `enterprise-recovery-setup-bottom-${viewport.name}-${viewport.width}x${viewport.height}.png`),
       animations: 'disabled',
     });
 
     for (const section of [
-      { navigation: '恢复案件', heading: '恢复案件' },
+      { navigation: '恢复协助', heading: '恢复协助' },
       { navigation: '历史记录', heading: '历史记录' },
     ]) {
       const button = dialog.getByRole('button', { name: section.navigation, exact: true });

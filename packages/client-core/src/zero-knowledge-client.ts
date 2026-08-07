@@ -9,6 +9,9 @@ import type {
   EncryptedSyncEvent,
   EnterpriseRecoveryCoverage,
   EnterpriseRecoveryCase,
+  EnterpriseRecoveryAdministrator,
+  EnterpriseRecoveryCustodyShare,
+  EnterpriseRecoveryCaseApprovalMaterial,
   EnterpriseRecoveryKey,
   EnterpriseRecoveryRequest,
   ExtensionSessionResponse,
@@ -165,6 +168,26 @@ export class ZeroKnowledgeClient {
 
   get currentDeviceId(): string | null {
     return this.keyring.deviceId;
+  }
+
+  prepareManagedEnterpriseRecoveryKey(
+    administrators: EnterpriseRecoveryAdministrator[],
+  ) {
+    const user = this.requireUser();
+    return this.keyring.prepareManagedEnterpriseRecoveryKey(user.id, administrators);
+  }
+
+  prepareManagedEnterpriseRecoveryKeyApproval(
+    recoveryKey: EnterpriseRecoveryKey,
+    custodyShare: EnterpriseRecoveryCustodyShare,
+  ) {
+    const user = this.requireUser();
+    return this.keyring.prepareManagedEnterpriseRecoveryKeyApproval(user.id, recoveryKey, custodyShare);
+  }
+
+  prepareManagedRecoveryCaseApproval(material: EnterpriseRecoveryCaseApprovalMaterial) {
+    const user = this.requireUser();
+    return this.keyring.prepareManagedRecoveryCaseApproval(user.id, material);
   }
 
   rekeyTaskId(vaultId: string): string | null {

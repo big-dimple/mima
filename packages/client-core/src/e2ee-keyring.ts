@@ -14,7 +14,12 @@ import type {
   EncryptedContentResponse,
   EncryptedItemMetadata,
   EnterpriseRecoveryKey,
+  EnterpriseRecoveryAdministrator,
+  EnterpriseRecoveryCustodyShare,
+  EnterpriseRecoveryCaseApprovalMaterial,
   EnterpriseRecoveryRequest,
+  ApproveEnterpriseRecoveryCaseRequest,
+  ApproveEnterpriseRecoveryKeyRequest,
   FinalizeEnterpriseRecoveryCaseRequest,
   CompleteEnterpriseRecoveryRequest,
   CompleteVaultEnvelopeTaskRequest,
@@ -25,6 +30,7 @@ import type {
   RotateCryptoProfileRequest,
   RotateEncryptedSecretRequest,
   RegisterCryptoDeviceRequest,
+  RegisterManagedEnterpriseRecoveryKeyRequest,
   RevokeCryptoDeviceRequest,
   RekeyMaterial,
   RekeyMaterialQuery,
@@ -53,6 +59,8 @@ import {
   createAccountBundle,
   createDeviceKeyBundle,
   createSignedDeviceCertificate,
+  createEnterpriseRecoveryKit,
+  createUnsignedVaultKeyGrant,
   createVaultKeyGrant,
   createVaultKeys,
   decryptBytes,
@@ -60,6 +68,7 @@ import {
   decryptItemMetadata,
   decryptVaultMetadata,
   destroyUnlockedAccount,
+  destroyKeyPair,
   destroyVaultKeys,
   encodeJson,
   encryptBytes,
@@ -69,12 +78,14 @@ import {
   assertExtensionTrustedUnlockRequest,
   deriveExtensionDeviceUnlockKey,
   fromBase64Url,
+  inspectRecoveryShare,
   openVaultKeyGrant,
   ownershipTransferAcceptanceDigest,
   signVaultKeyPossession,
   openSealedBytes,
   prepareAccountIdentityRotation,
   rewrapItemContentKey,
+  recoverEnterpriseRecoveryKey,
   signVaultKeyGrant,
   signBytes,
   sealBytes,
@@ -1584,6 +1595,291 @@ export class E2eeKeyring {
     };
   }
 
+  async prepareManagedEnterpriseRecoveryKey(
+    userId: string,
+    administrators: EnterpriseRecoveryAdministrator[],
+  ): Promise<RegisterManagedEnterpriseRecoveryKeyRequest> {
+    const account = this.requireAccount();
+    const device = this.requireDevice(account);
+    if (account.accountId !== userId
+      || administrators.length < 2
+      || administrators.length > 6
+      || !administrators.every((administrator) => (
+        administrator.ready
+        && administrator.cryptoGeneration !== null
+        && administrator.encryptionPublicKey !== null
+      ))
+      || !administrators.some((administrator) => administrator.userId === userId)
+    ) throw new Error('请先准备两至六名已设置主密码的企业恢复管理员');
+    const sorted = [...administrators].sort((left, right) => left.userId.localeCompare(right.userId));
+    const kit = await createEnterpriseRecoveryKit(`managed-${crypto.randomUUID()}`, sorted.length);
+    try {
+      const shares = [];
+      for (let index = 0; index < sorted.length; index += 1) {
+        const administrator = sorted[index]!;
+        const plaintext = utf8(kit.shares[index]!);
+        try {
+          const sealedShare = await sealBytes(plaintext, administrator.encryptionPublicKey!);
+          const sealedShareBytes = await fromBase64Url(sealedShare);
+          try {
+            shares.push({
+              administratorUserId: administrator.userId,
+              administratorKeyVersion: administrator.cryptoGeneration!,
+              shareIndex: index + 1,
+              sealedShare,
+              sealedShareDigest: await hashBytesBase64Url(sealedShareBytes),
+            });
+          } finally {
+            sealedShareBytes.fill(0);
+          }
+        } finally {
+          plaintext.fill(0);
+          kit.shares[index] = '';
+        }
+      }
+      const unsigned = {
+        idempotencyKey: crypto.randomUUID(),
+        actorDeviceId: device.deviceId,
+        key: {
+          ceremonyId: kit.ceremonyId,
+          publicEncryptionKey: kit.publicKey,
+          keyFingerprint: kit.publicKeyFingerprint,
+          threshold: 2 as const,
+          shareCount: kit.shareCount,
+          ceremonyEvidenceDigest: kit.ceremonyDigest,
+        },
+        shares,
+      };
+      return {
+        ...unsigned,
+        signature: await this.signCommand(
+          'recovery.custody.register',
+          userId,
+          {},
+          unsigned,
+        ),
+      };
+    } finally {
+      kit.shares.fill('');
+    }
+  }
+
+  async prepareManagedEnterpriseRecoveryKeyApproval(
+    userId: string,
+    recoveryKey: EnterpriseRecoveryKey,
+    custodyShare: EnterpriseRecoveryCustodyShare,
+  ): Promise<ApproveEnterpriseRecoveryKeyRequest> {
+    const account = this.requireAccount();
+    const device = this.requireDevice(account);
+    if (account.accountId !== userId
+      || recoveryKey.custodyMode !== 'administrator_accounts'
+      || custodyShare.recoveryKeyId !== recoveryKey.id
+      || custodyShare.administratorUserId !== userId
+    ) throw new Error('当前账号没有这套企业恢复设置');
+    const plaintext = await openSealedBytes(custodyShare.sealedShare, account.encryptionKeyPair);
+    try {
+      const encodedShare = new TextDecoder('utf-8', { fatal: true }).decode(plaintext);
+      const inspected = await inspectRecoveryShare(encodedShare);
+      if (inspected.ceremonyId !== recoveryKey.ceremonyId
+        || inspected.ceremonyDigest !== recoveryKey.ceremonyEvidenceDigest
+        || inspected.publicKey !== recoveryKey.publicEncryptionKey
+        || inspected.shareIndex !== custodyShare.shareIndex
+      ) throw new Error('当前管理员账号中的恢复权限校验失败');
+      const unsigned = {
+        idempotencyKey: crypto.randomUUID(),
+        ceremonyEvidenceDigest: recoveryKey.ceremonyEvidenceDigest,
+        actorDeviceId: device.deviceId,
+        sealedShareDigest: custodyShare.sealedShareDigest,
+      };
+      return {
+        ...unsigned,
+        signature: await this.signCommand(
+          'recovery.custody.approve',
+          userId,
+          {},
+          { keyId: recoveryKey.id, ...unsigned },
+        ),
+      };
+    } finally {
+      plaintext.fill(0);
+    }
+  }
+
+  async prepareManagedRecoveryCaseApproval(
+    userId: string,
+    material: EnterpriseRecoveryCaseApprovalMaterial,
+  ): Promise<ApproveEnterpriseRecoveryCaseRequest> {
+    const account = this.requireAccount();
+    const device = this.requireDevice(account);
+    const recoveryCase = material.case;
+    if (account.accountId !== userId
+      || recoveryCase.status !== 'pending_approval'
+      || !recoveryCase.caseDigest
+      || material.recoveryKey.custodyMode !== 'administrator_accounts'
+      || material.ownShare.administratorUserId !== userId
+      || material.ownShare.recoveryKeyId !== material.recoveryKey.id
+    ) throw new Error('这次恢复协助已经变化，请刷新后重试');
+    const ownPlaintext = await openSealedBytes(material.ownShare.sealedShare, account.encryptionKeyPair);
+    try {
+      const ownEncodedShare = new TextDecoder('utf-8', { fatal: true }).decode(ownPlaintext);
+      const inspected = await inspectRecoveryShare(ownEncodedShare);
+      if (inspected.ceremonyId !== material.recoveryKey.ceremonyId
+        || inspected.ceremonyDigest !== material.recoveryKey.ceremonyEvidenceDigest
+        || inspected.publicKey !== material.recoveryKey.publicEncryptionKey
+        || inspected.shareIndex !== material.ownShare.shareIndex
+      ) throw new Error('当前管理员账号中的恢复权限校验失败');
+
+      if (recoveryCase.resolutionKind === 'replace_empty_personal') {
+        const unsigned = {
+          idempotencyKey: crypto.randomUUID(),
+          caseDigest: recoveryCase.caseDigest,
+          actorDeviceId: device.deviceId,
+          replaceEmptyPersonal: true as const,
+        };
+        return {
+          ...unsigned,
+          signature: await this.signCommand(
+            'recovery.case.approve',
+            userId,
+            {},
+            { caseId: recoveryCase.id, ...unsigned },
+          ),
+        };
+      }
+
+      if (!material.firstApprovalRelay) {
+        if (material.recipients.length === 0) throw new Error('没有可共同确认的其他管理员');
+        const relays = [];
+        for (const recipient of material.recipients) {
+          const sealedShare = await sealBytes(ownPlaintext, recipient.encryptionPublicKey);
+          const sealedShareBytes = await fromBase64Url(sealedShare);
+          try {
+            relays.push({
+              recipientUserId: recipient.userId,
+              recipientKeyVersion: recipient.keyVersion,
+              sealedShare,
+              sealedShareDigest: await hashBytesBase64Url(sealedShareBytes),
+            });
+          } finally {
+            sealedShareBytes.fill(0);
+          }
+        }
+        const unsigned = {
+          idempotencyKey: crypto.randomUUID(),
+          caseDigest: recoveryCase.caseDigest,
+          actorDeviceId: device.deviceId,
+          relays,
+        };
+        return {
+          ...unsigned,
+          signature: await this.signCommand(
+            'recovery.case.approve',
+            userId,
+            {},
+            { caseId: recoveryCase.id, ...unsigned },
+          ),
+        };
+      }
+
+      const relay = material.firstApprovalRelay;
+      if (relay.toUserId !== userId || Date.parse(relay.expiresAt) <= Date.now()) {
+        throw new Error('第一位管理员的确认已经失效，请重新发起');
+      }
+      const relayedPlaintext = await openSealedBytes(relay.sealedShare, account.encryptionKeyPair);
+      let recoveryKeyPair: Awaited<ReturnType<typeof recoverEnterpriseRecoveryKey>> | null = null;
+      try {
+        const relayedEncodedShare = new TextDecoder('utf-8', { fatal: true }).decode(relayedPlaintext);
+        recoveryKeyPair = await recoverEnterpriseRecoveryKey(
+          [ownEncodedShare, relayedEncodedShare],
+          {
+            ceremonyId: material.recoveryKey.ceremonyId,
+            ceremonyDigest: material.recoveryKey.ceremonyEvidenceDigest,
+            publicKey: material.recoveryKey.publicEncryptionKey,
+          },
+        );
+        const recoveryPackage = material.package;
+        if (!recoveryPackage) throw new Error('恢复协助缺少密码库恢复材料');
+        const results = [];
+        for (const item of recoveryPackage.items) {
+          const vaultKeys = await openVaultKeyGrant(
+            item.recoveryEnvelope,
+            recoveryKeyPair,
+            item.trustedSigner.signingPublicKey,
+            {
+              vaultId: item.request.vaultId,
+              recipientId: material.recoveryKey.id,
+              epoch: item.activeEpoch,
+            },
+          );
+          try {
+            if (!vaultKeys.contentKey) throw new Error('恢复保护不包含完整密码库密钥');
+            const recoveredEnvelope = await createUnsignedVaultKeyGrant(
+              { ...vaultKeys, contentKey: vaultKeys.contentKey },
+              item.targetProfile.encryptionPublicKey,
+              {
+                vaultId: item.request.vaultId,
+                recipientKind: 'user',
+                recipientId: item.targetProfile.userId,
+                recipientKeyVersion: item.targetProfile.keyVersion,
+                capability: item.request.targetCapability,
+                signerUserId: item.targetProfile.userId,
+                signerKeyVersion: item.targetProfile.keyVersion,
+              },
+            );
+            const evidence = {
+              protocol: 'lm-e2ee-v1' as const,
+              kind: 'enterprise-recovery-transfer' as const,
+              formatVersion: 1 as const,
+              requestId: item.request.id,
+              requestDigest: item.request.requestDigest,
+              vaultId: item.request.vaultId,
+              epoch: item.activeEpoch,
+              recoveryKeyId: material.recoveryKey.id,
+              ceremonyId: material.recoveryKey.ceremonyId,
+              recoveryCeremonyDigest: material.recoveryKey.ceremonyEvidenceDigest,
+              targetUserId: item.targetProfile.userId,
+              targetCapability: item.request.targetCapability,
+              recoveredEnvelope,
+            };
+            results.push({
+              ...evidence,
+              toolEvidenceDigest: await enterpriseRecoveryTransferEvidenceDigest(evidence),
+            });
+          } finally {
+            await destroyVaultKeys(vaultKeys);
+          }
+        }
+        const transfer = {
+          protocol: 'mima-e2ee-v2' as const,
+          kind: 'enterprise-recovery-case-transfer' as const,
+          caseId: recoveryCase.id,
+          caseDigest: recoveryCase.caseDigest,
+          results,
+        };
+        const unsigned = {
+          idempotencyKey: crypto.randomUUID(),
+          caseDigest: recoveryCase.caseDigest,
+          actorDeviceId: device.deviceId,
+          transfer,
+        };
+        return {
+          ...unsigned,
+          signature: await this.signCommand(
+            'recovery.case.approve',
+            userId,
+            {},
+            { caseId: recoveryCase.id, ...unsigned },
+          ),
+        };
+      } finally {
+        relayedPlaintext.fill(0);
+        if (recoveryKeyPair) await destroyKeyPair(recoveryKeyPair);
+      }
+    } finally {
+      ownPlaintext.fill(0);
+    }
+  }
+
   async prepareInterruptedHandoffRecoveryCase(
     userId: string,
     caseId: string,
@@ -2741,6 +3037,9 @@ export type E2eeKeyringPort = Pick<E2eeKeyring,
   | 'encryptVaultDetails'
   | 'encryptVaultDirectories'
   | 'prepareEnterpriseRecoveryEnvelope'
+  | 'prepareManagedEnterpriseRecoveryKey'
+  | 'prepareManagedEnterpriseRecoveryKeyApproval'
+  | 'prepareManagedRecoveryCaseApproval'
   | 'prepareInterruptedHandoffRecoveryCase'
   | 'prepareRecovery'
   | 'commitRecovery'
@@ -3134,6 +3433,15 @@ async function hashBytes(...parts: Uint8Array[]): Promise<Uint8Array> {
     return sodium.crypto_hash_sha256(joined);
   } finally {
     sodium.memzero(joined);
+  }
+}
+
+async function hashBytesBase64Url(...parts: Uint8Array[]): Promise<string> {
+  const digest = await hashBytes(...parts);
+  try {
+    return await toBase64Url(digest);
+  } finally {
+    digest.fill(0);
   }
 }
 

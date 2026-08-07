@@ -31,7 +31,7 @@ const ADMIN_NAVIGATION: Array<{
 }> = [
   { id: 'overview', label: '总览', icon: LayoutDashboard },
   { id: 'setup', label: '准备恢复', icon: Settings2 },
-  { id: 'cases', label: '恢复案件', icon: LifeBuoy },
+  { id: 'cases', label: '恢复协助', icon: LifeBuoy },
   { id: 'history', label: '历史记录', icon: Clock3 },
 ];
 
@@ -77,11 +77,6 @@ function RecoveryWorkspaceCenter() {
         entry.targetUserId !== currentUserId
         && (
           (entry.status === 'pending_approval' && !entry.approvalUserIds.includes(currentUserId))
-          || (
-            ['approved', 'processing'].includes(entry.status)
-            && entry.items.length - entry.resolvedItemCount - entry.skippedItemCount > 0
-            && !entry.hasOfflineResult
-          )
         )
       )).length
       : activeCases.filter((entry) => entry.targetUserId === currentUserId).length,
@@ -166,9 +161,9 @@ function RecoveryWorkspaceCenter() {
             <section className={styles.paneSection} aria-labelledby="recovery-cases-heading">
               <div className={styles.paneHeading}>
                 <span>{isLocalPlatformAdmin ? '管理员协助' : '我的协助'}</span>
-                <h2 id="recovery-cases-heading">恢复案件</h2>
+                <h2 id="recovery-cases-heading">恢复协助</h2>
                 <p>{isLocalPlatformAdmin
-                  ? '同事在公司群里求助后，从这里发起；两位管理员分别确认，页面会继续提示完成最后一步。'
+                  ? '同事在公司群里求助后，从这里发起；两位管理员分别确认，第二次确认会自动完成管理员侧处理。'
                   : '管理员发起后，你只需要设置新主密码；后续由管理员继续处理。'}</p>
               </div>
               {isLocalPlatformAdmin ? (
@@ -231,7 +226,9 @@ function RecoveryCaseList({ active }: { active: boolean }) {
           <div>
             <strong>{isLocalPlatformAdmin ? entry.targetDisplayName : (entry.kind === 'forgot_password' ? '忘记主密码' : '交接中断')}</strong>
             <span>{caseStatusLabel(entry)} · {new Date(entry.createdAt).toLocaleString()}</span>
-            <span>原有密码库 {entry.items.length} 个，已恢复 {entry.resolvedItemCount} 个{entry.skippedItemCount ? `，已跳过 ${entry.skippedItemCount} 个失效权限` : ''}</span>
+            <span>{entry.resolutionKind === 'replace_empty_personal'
+              ? '旧空个人库已受控放弃，并自动准备新的“我的密码库”'
+              : `原有密码库 ${entry.items.length} 个，已恢复 ${entry.resolvedItemCount} 个${entry.skippedItemCount ? `，已跳过 ${entry.skippedItemCount} 个失效权限` : ''}`}</span>
           </div>
         </li>
       ))}

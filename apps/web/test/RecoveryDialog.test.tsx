@@ -34,12 +34,12 @@ describe('enterprise recovery center', () => {
     expect(await screen.findByRole('heading', { name: '企业恢复中心' })).toBeVisible();
     expect(screen.getByRole('navigation', { name: '企业恢复功能' })).toBeVisible();
     expect(screen.getByRole('button', { name: '总览' })).toBeVisible();
-    expect(screen.getByRole('button', { name: '恢复案件' })).toBeVisible();
+    expect(screen.getByRole('button', { name: '恢复协助' })).toBeVisible();
     expect(screen.getByRole('button', { name: '历史记录' })).toBeVisible();
     expect(screen.queryByRole('button', { name: '准备恢复' })).not.toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole('button', { name: '恢复案件' }));
-    expect(await screen.findByRole('heading', { name: '恢复案件' })).toBeVisible();
+    await userEvent.click(screen.getByRole('button', { name: '恢复协助' }));
+    expect(await screen.findByRole('heading', { name: '恢复协助' })).toBeVisible();
     expect(screen.getByText(/当前没有进行中的恢复协助/)).toBeVisible();
     expect(api.recoveryWorkspace).toHaveBeenCalledTimes(1);
   });
@@ -58,7 +58,8 @@ describe('enterprise recovery center', () => {
     const api = { recoveryWorkspace: vi.fn(async () => ({
       ...emptyWorkspace(),
       readiness: {
-        requiredAdministratorCount: 3,
+        requiredAdministratorCount: 2,
+        maximumAdministratorCount: 6,
         administratorCount: 0,
         readyAdministratorCount: 0,
         ready: false,
@@ -73,17 +74,17 @@ describe('enterprise recovery center', () => {
     );
 
     expect(await screen.findByRole('heading', { name: '企业恢复中心' })).toBeVisible();
-    for (const label of ['总览', '准备恢复', '恢复案件', '历史记录']) {
+    for (const label of ['总览', '准备恢复', '恢复协助', '历史记录']) {
       expect(screen.getByRole('button', { name: label })).toBeVisible();
     }
     await userEvent.click(screen.getByRole('button', { name: '准备恢复' }));
     expect(await screen.findByRole('heading', { name: '准备企业恢复' })).toBeVisible();
-    expect(screen.getByText(/还需设置 3 名恢复管理员/)).toBeVisible();
+    expect(screen.getByText(/还需设置 2 名恢复管理员/)).toBeVisible();
     await waitFor(() => expect(api.recoveryWorkspace).toHaveBeenCalledTimes(1));
     expect(screen.queryByText('第一次管理企业恢复？')).not.toBeInTheDocument();
   });
 
-  it('keeps the offline final step visible after both administrators approve', async () => {
+  it('keeps the two-administrator recovery automatic after approval', async () => {
     const store = createMetaStore();
     store.getState().setUser({
       id: 'admin-1',
@@ -94,7 +95,7 @@ describe('enterprise recovery center', () => {
       isPlatformAdmin: true,
       isLocalPlatformAdmin: true,
     });
-    const api = { recoveryWorkspace: vi.fn(async () => workspaceWithOfflineStep()) };
+    const api = { recoveryWorkspace: vi.fn(async () => workspaceWithAutomaticRecovery()) };
 
     render(
       <AppContext.Provider value={{ api, store, zeroKnowledge: {} } as unknown as AppServices}>
@@ -102,13 +103,11 @@ describe('enterprise recovery center', () => {
       </AppContext.Provider>,
     );
 
-    const casesButton = await screen.findByRole('button', { name: /恢复案件/ });
-    expect(casesButton).toHaveAccessibleName(/1 项待处理/);
+    const casesButton = await screen.findByRole('button', { name: /恢复协助/ });
     await userEvent.click(casesButton);
-    expect(await screen.findByText(/两人已确认，等待完成最后一步/)).toBeVisible();
-    expect(screen.getByText(/避免恢复材料接触服务器或网络/)).toBeVisible();
-    expect(screen.getByRole('button', { name: '下载案件文件' })).toBeVisible();
-    expect(screen.getByText('提交恢复结果')).toBeVisible();
+    expect(await screen.findByText(/两人已确认，正在自动完成/)).toBeVisible();
+    expect(screen.getByText(/用户用新主密码重新登录后/)).toBeVisible();
+    expect(screen.queryByText(/下载案件|提交恢复结果|离线向导/)).not.toBeInTheDocument();
   });
 });
 
@@ -124,7 +123,7 @@ function emptyWorkspace(): EnterpriseRecoveryWorkspace {
   };
 }
 
-function workspaceWithOfflineStep(): EnterpriseRecoveryWorkspace {
+function workspaceWithAutomaticRecovery(): EnterpriseRecoveryWorkspace {
   return {
     ...emptyWorkspace(),
     keys: [{
@@ -134,6 +133,8 @@ function workspaceWithOfflineStep(): EnterpriseRecoveryWorkspace {
       publicEncryptionKey: 'B'.repeat(43),
       threshold: 2,
       shareCount: 3,
+      custodyMode: 'administrator_accounts',
+      custodyUserIds: ['admin-1', 'admin-2'],
       status: 'active',
       ceremonyEvidenceDigest: 'C'.repeat(43),
       approvalUserIds: ['admin-1', 'admin-2'],
@@ -153,6 +154,7 @@ function workspaceWithOfflineStep(): EnterpriseRecoveryWorkspace {
       targetDeviceId: '30000000-0000-4000-8000-000000000001',
       targetKeyVersion: 2,
       accountResetRequestId: '40000000-0000-4000-8000-000000000001',
+      resolutionKind: 'recover_access',
       approvalUserIds: ['admin-1', 'admin-2'],
       items: [{ id: '50000000-0000-4000-8000-000000000001' }] as EnterpriseRecoveryWorkspace['cases'][number]['items'],
       resolvedItemCount: 0,

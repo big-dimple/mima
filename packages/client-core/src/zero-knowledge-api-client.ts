@@ -42,9 +42,11 @@ import type {
   EncryptedItemMetadata,
   EnterpriseRecoveryCandidate,
   EnterpriseRecoveryCase,
+  EnterpriseRecoveryCaseApprovalMaterial,
   EnterpriseRecoveryCasePackage,
   EnterpriseRecoveryCaseTransfer,
   EnterpriseRecoveryCoverage,
+  EnterpriseRecoveryCustodyShare,
   EnterpriseRecoveryKey,
   EnterpriseRecoveryReadiness,
   EnterpriseRecoveryRequest,
@@ -56,6 +58,7 @@ import type {
   LoginRequest,
   PairingCodeResponse,
   RegisterEnterpriseRecoveryKeyRequest,
+  RegisterManagedEnterpriseRecoveryKeyRequest,
   UploadEnterpriseRecoveryCaseTransferRequest,
   RegisterCryptoDeviceRequest,
   RekeyMaterial,
@@ -404,6 +407,10 @@ export class ZeroKnowledgeApiClient {
     return this.request('GET', `/api/v2/recovery/cases/${caseId}/package`);
   }
 
+  recoveryCaseApprovalMaterial(caseId: string): Promise<EnterpriseRecoveryCaseApprovalMaterial> {
+    return this.request('GET', `/api/v2/recovery/cases/${caseId}/approval-material`);
+  }
+
   uploadRecoveryCaseTransfer(
     caseId: string,
     request: UploadEnterpriseRecoveryCaseTransferRequest,
@@ -437,6 +444,16 @@ export class ZeroKnowledgeApiClient {
 
   registerRecoveryKey(request: RegisterEnterpriseRecoveryKeyRequest): Promise<EnterpriseRecoveryKey> {
     return this.request('POST', '/api/v2/recovery/key', request);
+  }
+
+  registerManagedRecoveryKey(
+    request: RegisterManagedEnterpriseRecoveryKeyRequest,
+  ): Promise<EnterpriseRecoveryKey> {
+    return this.request('POST', '/api/v2/recovery/custody', request);
+  }
+
+  recoveryCustodyShare(keyId: string): Promise<EnterpriseRecoveryCustodyShare> {
+    return this.request('GET', `/api/v2/recovery/keys/${keyId}/custody/share`);
   }
 
   approveRecoveryKey(

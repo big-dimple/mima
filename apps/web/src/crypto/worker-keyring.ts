@@ -7,7 +7,13 @@ import type {
   EncryptedContentResponse,
   EncryptedItemMetadata,
   EnterpriseRecoveryKey,
+  EnterpriseRecoveryAdministrator,
+  EnterpriseRecoveryCustodyShare,
+  EnterpriseRecoveryCaseApprovalMaterial,
   EnterpriseRecoveryRequest,
+  ApproveEnterpriseRecoveryCaseRequest,
+  ApproveEnterpriseRecoveryKeyRequest,
+  RegisterManagedEnterpriseRecoveryKeyRequest,
   CompleteEnterpriseRecoveryRequest,
   EncryptedVaultHeader,
   InitializeVaultCryptoRequest,
@@ -333,6 +339,28 @@ export class WorkerKeyring implements E2eeKeyringPort {
     ...args: Parameters<E2eeKeyring['prepareEnterpriseRecoveryEnvelope']>
   ): ReturnType<E2eeKeyring['prepareEnterpriseRecoveryEnvelope']> {
     return this.forward('prepareEnterpriseRecoveryEnvelope', args);
+  }
+
+  prepareManagedEnterpriseRecoveryKey(
+    userId: string,
+    administrators: EnterpriseRecoveryAdministrator[],
+  ): Promise<RegisterManagedEnterpriseRecoveryKeyRequest> {
+    return this.forward('prepareManagedEnterpriseRecoveryKey', [userId, administrators]);
+  }
+
+  prepareManagedEnterpriseRecoveryKeyApproval(
+    userId: string,
+    recoveryKey: EnterpriseRecoveryKey,
+    custodyShare: EnterpriseRecoveryCustodyShare,
+  ): Promise<ApproveEnterpriseRecoveryKeyRequest> {
+    return this.forward('prepareManagedEnterpriseRecoveryKeyApproval', [userId, recoveryKey, custodyShare]);
+  }
+
+  prepareManagedRecoveryCaseApproval(
+    userId: string,
+    material: EnterpriseRecoveryCaseApprovalMaterial,
+  ): Promise<ApproveEnterpriseRecoveryCaseRequest> {
+    return this.forward('prepareManagedRecoveryCaseApproval', [userId, material]);
   }
 
   prepareInterruptedHandoffRecoveryCase(

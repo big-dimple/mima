@@ -533,15 +533,34 @@ describe('legacy migration security gate', () => {
       expiredAt: null,
       lastErrorCode: null,
     };
-    const approveRecoveryCase = vi.fn().mockResolvedValue(undefined);
+    const approvalMaterial = { case: recoveryCase };
+    const preparedApproval = {
+      idempotencyKey: 'managed-case-approval',
+      caseDigest: recoveryCase.caseDigest,
+      actorDeviceId: '75000000-0000-4000-8000-000000000001',
+      relays: [{
+        recipientUserId: 'u-second-admin',
+        recipientKeyVersion: 1,
+        sealedShare: 'A'.repeat(43),
+        sealedShareDigest: 'B'.repeat(43),
+      }],
+      signature: 'C'.repeat(86),
+    };
+    const prepareManagedRecoveryCaseApproval = vi.fn().mockResolvedValue(preparedApproval);
+    const approveRecoveryCase = vi.fn().mockResolvedValue({
+      ...recoveryCase,
+      approvalUserIds: ['u-admin'],
+    });
     const store = createMetaStore();
     store.getState().setUser(adminUser);
     const services = {
       store,
       api: {
         recoveryCases: vi.fn().mockResolvedValue([recoveryCase]),
+        recoveryCaseApprovalMaterial: vi.fn().mockResolvedValue(approvalMaterial),
         approveRecoveryCase,
       },
+      zeroKnowledge: { prepareManagedRecoveryCaseApproval },
     } as unknown as AppServices;
     render(
       <AppContext.Provider value={services}>
@@ -555,10 +574,8 @@ describe('legacy migration security gate', () => {
     expect(screen.queryByText(/FULL_CASE_DIGEST_IS_BOUND_BUT_NOT_SHOWN/)).not.toBeInTheDocument();
     const confirmButtons = screen.getAllByRole('button', { name: '身份已确认，同意协助' });
     await userEvent.click(confirmButtons.at(-1)!);
-    await waitFor(() => expect(approveRecoveryCase).toHaveBeenCalledWith(recoveryCase.id, {
-      idempotencyKey: expect.any(String),
-      caseDigest: recoveryCase.caseDigest,
-    }));
+    await waitFor(() => expect(prepareManagedRecoveryCaseApproval).toHaveBeenCalledWith(approvalMaterial));
+    expect(approveRecoveryCase).toHaveBeenCalledWith(recoveryCase.id, preparedApproval);
   });
 });
 

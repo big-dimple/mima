@@ -17,7 +17,8 @@ import {
 import type { UnsignedVaultKeyEnvelopeInput } from './vault.ts';
 
 const RECOVERY_THRESHOLD = 2 as const;
-const RECOVERY_SHARE_COUNT = 3 as const;
+const MIN_RECOVERY_SHARE_COUNT = 2;
+const MAX_RECOVERY_SHARE_COUNT = 6;
 
 export interface EnterpriseRecoveryKit {
   ceremonyId: string;
@@ -25,9 +26,14 @@ export interface EnterpriseRecoveryKit {
   publicKey: string;
   publicKeyFingerprint: string;
   threshold: typeof RECOVERY_THRESHOLD;
-  shareCount: typeof RECOVERY_SHARE_COUNT;
-  shares: [string, string, string];
+  shareCount: number;
+  shares: string[];
 }
+
+export type ThreeShareEnterpriseRecoveryKit = Omit<EnterpriseRecoveryKit, 'shareCount' | 'shares'> & {
+  shareCount: 3;
+  shares: [string, string, string];
+};
 
 export interface RecoveryShareInfo {
   ceremonyId: string;
@@ -36,7 +42,7 @@ export interface RecoveryShareInfo {
   publicKeyFingerprint: string;
   shareIndex: number;
   threshold: typeof RECOVERY_THRESHOLD;
-  shareCount: typeof RECOVERY_SHARE_COUNT;
+  shareCount: number;
 }
 
 export interface EnterpriseRecoveryTransferEvidenceInput {
@@ -63,8 +69,22 @@ interface RecoveryShareEnvelope extends RecoveryShareInfo {
   checksum: string;
 }
 
-export async function createEnterpriseRecoveryKit(ceremonyId: string): Promise<EnterpriseRecoveryKit> {
+export function createEnterpriseRecoveryKit(ceremonyId: string): Promise<ThreeShareEnterpriseRecoveryKit>;
+export function createEnterpriseRecoveryKit(
+  ceremonyId: string,
+  shareCount: number,
+): Promise<EnterpriseRecoveryKit>;
+export async function createEnterpriseRecoveryKit(
+  ceremonyId: string,
+  shareCount = 3,
+): Promise<EnterpriseRecoveryKit> {
   assertIdentifier(ceremonyId, 'ceremonyId');
+  if (!Number.isSafeInteger(shareCount)
+    || shareCount < MIN_RECOVERY_SHARE_COUNT
+    || shareCount > MAX_RECOVERY_SHARE_COUNT
+  ) {
+    throw new E2eeError('invalid_input', 'Enterprise recovery share count must be between two and six');
+  }
   const crypto = await sodiumReady();
   const keyPair = crypto.crypto_box_keypair();
   try {
@@ -74,8 +94,9 @@ export async function createEnterpriseRecoveryKit(ceremonyId: string): Promise<E
       ceremonyId,
       publicKey,
       publicKeyFingerprint,
+      shareCount,
     });
-    const rawShares = await split(keyPair.privateKey, RECOVERY_SHARE_COUNT, RECOVERY_THRESHOLD);
+    const rawShares = await split(keyPair.privateKey, shareCount, RECOVERY_THRESHOLD);
     try {
       const encodedShares = await Promise.all(rawShares.map(async (share, index) => {
         const unsigned = {
@@ -87,7 +108,7 @@ export async function createEnterpriseRecoveryKit(ceremonyId: string): Promise<E
           publicKeyFingerprint,
           shareIndex: index + 1,
           threshold: RECOVERY_THRESHOLD,
-          shareCount: RECOVERY_SHARE_COUNT,
+          shareCount,
           share: await toBase64Url(share),
         };
         return encodeRecoveryShare({
@@ -101,8 +122,8 @@ export async function createEnterpriseRecoveryKit(ceremonyId: string): Promise<E
         publicKey,
         publicKeyFingerprint,
         threshold: RECOVERY_THRESHOLD,
-        shareCount: RECOVERY_SHARE_COUNT,
-        shares: encodedShares as [string, string, string],
+        shareCount,
+        shares: encodedShares,
       };
     } finally {
       rawShares.forEach((share) => crypto.memzero(share));
@@ -117,8 +138,8 @@ export async function recoverEnterpriseRecoveryKey(
   encodedShares: readonly string[],
   expected: { ceremonyId?: string; ceremonyDigest?: string; publicKey?: string } = {},
 ): Promise<EncryptionKeyPair> {
-  if (encodedShares.length < RECOVERY_THRESHOLD || encodedShares.length > RECOVERY_SHARE_COUNT) {
-    throw new E2eeError('invalid_input', 'Enterprise recovery requires two or three shares');
+  if (encodedShares.length < RECOVERY_THRESHOLD || encodedShares.length > MAX_RECOVERY_SHARE_COUNT) {
+    throw new E2eeError('invalid_input', 'Enterprise recovery requires between two and six shares');
   }
   const envelopes = await Promise.all(encodedShares.map(decodeRecoveryShareEnvelope));
   const first = envelopes[0]!;
@@ -131,7 +152,8 @@ export async function recoverEnterpriseRecoveryKey(
       envelope.ceremonyId !== first.ceremonyId ||
       envelope.ceremonyDigest !== first.ceremonyDigest ||
       envelope.publicKey !== first.publicKey ||
-      envelope.publicKeyFingerprint !== first.publicKeyFingerprint
+      envelope.publicKeyFingerprint !== first.publicKeyFingerprint ||
+      envelope.shareCount !== first.shareCount
     ) {
       throw new E2eeError('verification_failed', 'Enterprise recovery shares do not belong together');
     }
@@ -203,9 +225,12 @@ async function decodeRecoveryShareEnvelope(encodedShare: string): Promise<Recove
       typeof parsed.publicKeyFingerprint !== 'string' ||
       !Number.isSafeInteger(parsed.shareIndex) ||
       parsed.shareIndex! < 1 ||
-      parsed.shareIndex! > RECOVERY_SHARE_COUNT ||
+      parsed.shareIndex! > MAX_RECOVERY_SHARE_COUNT ||
       parsed.threshold !== RECOVERY_THRESHOLD ||
-      parsed.shareCount !== RECOVERY_SHARE_COUNT ||
+      !Number.isSafeInteger(parsed.shareCount) ||
+      parsed.shareCount! < MIN_RECOVERY_SHARE_COUNT ||
+      parsed.shareCount! > MAX_RECOVERY_SHARE_COUNT ||
+      parsed.shareIndex! > parsed.shareCount! ||
       typeof parsed.share !== 'string' ||
       typeof parsed.checksum !== 'string'
     ) {
@@ -234,14 +259,22 @@ export async function enterpriseRecoveryCeremonyDigest(input: {
   ceremonyId: string;
   publicKey: string;
   publicKeyFingerprint: string;
+  shareCount?: number;
 }): Promise<string> {
+  const shareCount = input.shareCount ?? 3;
+  if (!Number.isSafeInteger(shareCount)
+    || shareCount < MIN_RECOVERY_SHARE_COUNT
+    || shareCount > MAX_RECOVERY_SHARE_COUNT
+  ) {
+    throw new E2eeError('invalid_input', 'Enterprise recovery share count must be between two and six');
+  }
   const body: JsonValue = {
     ceremonyId: input.ceremonyId,
     kind: 'enterprise-recovery-ceremony',
     protocol: E2EE_PROTOCOL,
     publicKey: input.publicKey,
     publicKeyFingerprint: input.publicKeyFingerprint,
-    shareCount: RECOVERY_SHARE_COUNT,
+    shareCount,
     threshold: RECOVERY_THRESHOLD,
   };
   return sha256Base64Url(utf8(canonicalJson(body)));

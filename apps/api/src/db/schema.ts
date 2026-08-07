@@ -365,6 +365,10 @@ export const enterpriseRecoveryKeys = pgTable(
     publicEncryptionKey: bytea('public_encryption_key').notNull(),
     threshold: integer('threshold').notNull().default(2),
     shareCount: integer('share_count').notNull().default(3),
+    custodyMode: text('custody_mode')
+      .$type<'legacy_offline' | 'administrator_accounts'>()
+      .notNull()
+      .default('legacy_offline'),
     status: text('status')
       .$type<'pending' | 'staged' | 'active' | 'retired' | 'compromised' | 'cancelled'>()
       .notNull()
@@ -397,9 +401,38 @@ export const enterpriseRecoveryKeyApprovals = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: 'restrict' }),
     ceremonyEvidenceDigest: bytea('ceremony_evidence_digest').notNull(),
+    actorDeviceId: uuid('actor_device_id').references(() => userDevices.id, { onDelete: 'restrict' }),
+    sealedShareDigest: bytea('sealed_share_digest'),
+    approvalSignature: bytea('approval_signature'),
     approvedAt: timestamp('approved_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [primaryKey({ columns: [t.recoveryKeyId, t.approverUserId] })],
+);
+
+export const enterpriseRecoveryCustodyShares = pgTable(
+  'enterprise_recovery_custody_shares',
+  {
+    recoveryKeyId: uuid('recovery_key_id')
+      .notNull()
+      .references(() => enterpriseRecoveryKeys.id, { onDelete: 'restrict' }),
+    administratorUserId: text('administrator_user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    administratorKeyVersion: integer('administrator_key_version').notNull(),
+    administratorEncryptionPublicKey: bytea('administrator_encryption_public_key').notNull(),
+    shareIndex: integer('share_index').notNull(),
+    sealedShareCiphertext: bytea('sealed_share_ciphertext').notNull(),
+    sealedShareDigest: bytea('sealed_share_digest').notNull(),
+    registeredByUserId: text('registered_by_user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.recoveryKeyId, t.administratorUserId] }),
+    uniqueIndex('enterprise_recovery_custody_shares_index_uq')
+      .on(t.recoveryKeyId, t.shareIndex),
+  ],
 );
 
 export const userCryptoProfiles = pgTable(
@@ -1415,6 +1448,11 @@ export const enterpriseRecoveryCases = pgTable(
       () => accountCryptoResetRequests.id,
       { onDelete: 'restrict' },
     ),
+    resolutionKind: text('resolution_kind').$type<'recover_access' | 'replace_empty_personal'>()
+      .notNull().default('recover_access'),
+    abandonedVaultId: uuid('abandoned_vault_id'),
+    replacementVaultId: uuid('replacement_vault_id'),
+    emptyVaultWitnessDigest: bytea('empty_vault_witness_digest'),
     createdByUserId: text('created_by_user_id')
       .notNull()
       .references(() => users.id, { onDelete: 'restrict' }),
@@ -1446,9 +1484,42 @@ export const enterpriseRecoveryCaseApprovals = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: 'restrict' }),
     caseDigest: bytea('case_digest').notNull(),
+    actorDeviceId: uuid('actor_device_id').references(() => userDevices.id, { onDelete: 'restrict' }),
+    approvalSignature: bytea('approval_signature'),
     approvedAt: timestamp('approved_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [primaryKey({ columns: [t.caseId, t.approverUserId] })],
+);
+
+export const enterpriseRecoveryCaseShareRelays = pgTable(
+  'enterprise_recovery_case_share_relays',
+  {
+    caseId: uuid('case_id')
+      .notNull()
+      .references(() => enterpriseRecoveryCases.id, { onDelete: 'restrict' }),
+    fromUserId: text('from_user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    toUserId: text('to_user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    toKeyVersion: integer('to_key_version').notNull(),
+    sealedShareCiphertext: bytea('sealed_share_ciphertext').notNull(),
+    sealedShareDigest: bytea('sealed_share_digest').notNull(),
+    caseDigest: bytea('case_digest').notNull(),
+    actorDeviceId: uuid('actor_device_id')
+      .notNull()
+      .references(() => userDevices.id, { onDelete: 'restrict' }),
+    relaySignature: bytea('relay_signature').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    consumedAt: timestamp('consumed_at', { withTimezone: true }),
+  },
+  (t) => [
+    primaryKey({ columns: [t.caseId, t.fromUserId, t.toUserId] }),
+    index('enterprise_recovery_case_share_relays_recipient_idx')
+      .on(t.toUserId, t.expiresAt, t.consumedAt),
+  ],
 );
 
 export const enterpriseRecoveryCaseTransfers = pgTable(

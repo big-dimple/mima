@@ -213,7 +213,9 @@ export const EnterpriseRecoveryKeySchema = z.object({
   keyFingerprint: Base64UrlSchema,
   publicEncryptionKey: Base64UrlSchema,
   threshold: z.literal(2),
-  shareCount: z.literal(3),
+  shareCount: z.number().int().min(2).max(6),
+  custodyMode: z.enum(['legacy_offline', 'administrator_accounts']).optional(),
+  custodyUserIds: z.array(z.string()).max(6).optional(),
   status: z.enum(['pending', 'staged', 'active', 'retired', 'compromised', 'cancelled']),
   ceremonyEvidenceDigest: Base64UrlSchema,
   approvalUserIds: z.array(z.string()).max(2),
@@ -231,6 +233,8 @@ export const EnterpriseRecoveryAdministratorSchema = z.object({
   active: z.boolean(),
   hasCryptoProfile: z.boolean(),
   activeDeviceCount: z.number().int().nonnegative(),
+  cryptoGeneration: z.number().int().positive().nullable(),
+  encryptionPublicKey: Base64UrlSchema.nullable(),
   ready: z.boolean(),
 });
 export type EnterpriseRecoveryAdministrator = z.infer<
@@ -238,13 +242,34 @@ export type EnterpriseRecoveryAdministrator = z.infer<
 >;
 
 export const EnterpriseRecoveryReadinessSchema = z.object({
-  requiredAdministratorCount: z.literal(3),
+  requiredAdministratorCount: z.literal(2),
+  maximumAdministratorCount: z.literal(6),
   administratorCount: z.number().int().nonnegative(),
   readyAdministratorCount: z.number().int().nonnegative(),
   ready: z.boolean(),
   administrators: z.array(EnterpriseRecoveryAdministratorSchema),
 });
 export type EnterpriseRecoveryReadiness = z.infer<typeof EnterpriseRecoveryReadinessSchema>;
+
+export const EnterpriseRecoveryCustodyShareSchema = z.object({
+  recoveryKeyId: z.string().uuid(),
+  administratorUserId: z.string(),
+  administratorKeyVersion: z.number().int().positive(),
+  shareIndex: z.number().int().min(1).max(6),
+  sealedShare: Base64UrlSchema,
+  sealedShareDigest: Base64UrlSchema,
+});
+export type EnterpriseRecoveryCustodyShare = z.infer<typeof EnterpriseRecoveryCustodyShareSchema>;
+
+export const EnterpriseRecoveryCaseRelaySchema = z.object({
+  fromUserId: z.string(),
+  toUserId: z.string(),
+  toKeyVersion: z.number().int().positive(),
+  sealedShare: Base64UrlSchema,
+  sealedShareDigest: Base64UrlSchema,
+  expiresAt: z.string(),
+});
+export type EnterpriseRecoveryCaseRelay = z.infer<typeof EnterpriseRecoveryCaseRelaySchema>;
 
 export const EnterpriseRecoveryVaultCoverageSchema = z.object({
   vaultId: z.string().uuid(),
@@ -333,6 +358,7 @@ export const EnterpriseRecoveryCaseSchema = z.object({
   targetDeviceId: z.string().uuid().nullable(),
   targetKeyVersion: z.number().int().positive().nullable(),
   accountResetRequestId: z.string().uuid().nullable(),
+  resolutionKind: z.enum(['recover_access', 'replace_empty_personal']),
   approvalUserIds: z.array(z.string()).max(2),
   items: z.array(EnterpriseRecoveryRequestSchema),
   resolvedItemCount: z.number().int().nonnegative(),
@@ -1080,16 +1106,46 @@ export const RegisterEnterpriseRecoveryKeyRequestSchema = z.object({
   publicEncryptionKey: Base64UrlSchema,
   keyFingerprint: Base64UrlSchema,
   threshold: z.literal(2),
-  shareCount: z.literal(3),
+  shareCount: z.number().int().min(2).max(6),
   ceremonyEvidenceDigest: Base64UrlSchema,
 });
 export type RegisterEnterpriseRecoveryKeyRequest = z.infer<
   typeof RegisterEnterpriseRecoveryKeyRequestSchema
 >;
 
+export const RegisterManagedEnterpriseRecoveryKeyRequestSchema = z.object({
+  idempotencyKey: z.string().min(8).max(80),
+  actorDeviceId: z.string().uuid(),
+  key: RegisterEnterpriseRecoveryKeyRequestSchema,
+  shares: z.array(z.object({
+    administratorUserId: z.string().min(1).max(200),
+    administratorKeyVersion: z.number().int().positive(),
+    shareIndex: z.number().int().min(1).max(6),
+    sealedShare: Base64UrlSchema,
+    sealedShareDigest: Base64UrlSchema,
+  })).min(2).max(6),
+  signature: Base64UrlSchema,
+});
+export type RegisterManagedEnterpriseRecoveryKeyRequest = z.infer<
+  typeof RegisterManagedEnterpriseRecoveryKeyRequestSchema
+>;
+
 export const ApproveEnterpriseRecoveryKeyRequestSchema = z.object({
   idempotencyKey: z.string().min(8).max(80),
   ceremonyEvidenceDigest: Base64UrlSchema,
+  actorDeviceId: z.string().uuid().optional(),
+  sealedShareDigest: Base64UrlSchema.optional(),
+  signature: Base64UrlSchema.optional(),
+}).superRefine((value, ctx) => {
+  const managedFieldCount = Number(Boolean(value.actorDeviceId))
+    + Number(Boolean(value.sealedShareDigest))
+    + Number(Boolean(value.signature));
+  if (managedFieldCount !== 0 && managedFieldCount !== 3) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'managed recovery approval fields must be submitted together',
+    });
+  }
 });
 export type ApproveEnterpriseRecoveryKeyRequest = z.infer<
   typeof ApproveEnterpriseRecoveryKeyRequestSchema
@@ -1165,10 +1221,45 @@ export type FinalizeEnterpriseRecoveryCaseRequest = z.infer<
   typeof FinalizeEnterpriseRecoveryCaseRequestSchema
 >;
 
-export const ApproveEnterpriseRecoveryCaseRequestSchema = z.object({
+export const EnterpriseRecoveryCaseRelayInputSchema = z.object({
+  recipientUserId: z.string().min(1).max(200),
+  recipientKeyVersion: z.number().int().positive(),
+  sealedShare: Base64UrlSchema,
+  sealedShareDigest: Base64UrlSchema,
+});
+export type EnterpriseRecoveryCaseRelayInput = z.infer<
+  typeof EnterpriseRecoveryCaseRelayInputSchema
+>;
+
+const LegacyApproveEnterpriseRecoveryCaseRequestSchema = z.object({
   idempotencyKey: z.string().min(8).max(80),
   caseDigest: Base64UrlSchema,
 });
+
+const ManagedApproveEnterpriseRecoveryCaseRequestSchema = z.object({
+  idempotencyKey: z.string().min(8).max(80),
+  caseDigest: Base64UrlSchema,
+  actorDeviceId: z.string().uuid(),
+  relays: z.array(EnterpriseRecoveryCaseRelayInputSchema).min(1).max(5).optional(),
+  transfer: z.lazy(() => EnterpriseRecoveryCaseTransferSchema).optional(),
+  replaceEmptyPersonal: z.literal(true).optional(),
+  signature: Base64UrlSchema,
+}).superRefine((value, ctx) => {
+  const actionCount = Number(Boolean(value.relays))
+    + Number(Boolean(value.transfer))
+    + Number(Boolean(value.replaceEmptyPersonal));
+  if (actionCount !== 1) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'approval must contain either relays or a transfer',
+    });
+  }
+});
+
+export const ApproveEnterpriseRecoveryCaseRequestSchema = z.union([
+  ManagedApproveEnterpriseRecoveryCaseRequestSchema,
+  LegacyApproveEnterpriseRecoveryCaseRequestSchema,
+]);
 export type ApproveEnterpriseRecoveryCaseRequest = z.infer<
   typeof ApproveEnterpriseRecoveryCaseRequestSchema
 >;
@@ -1265,6 +1356,22 @@ export const EnterpriseRecoveryCaseTransferSchema = z.object({
   results: z.array(OfflineRecoveryResultSchema).min(1),
 });
 export type EnterpriseRecoveryCaseTransfer = z.infer<typeof EnterpriseRecoveryCaseTransferSchema>;
+
+export const EnterpriseRecoveryCaseApprovalMaterialSchema = z.object({
+  case: EnterpriseRecoveryCaseSchema,
+  recoveryKey: EnterpriseRecoveryKeySchema,
+  ownShare: EnterpriseRecoveryCustodyShareSchema,
+  firstApprovalRelay: EnterpriseRecoveryCaseRelaySchema.nullable(),
+  recipients: z.array(z.object({
+    userId: z.string(),
+    keyVersion: z.number().int().positive(),
+    encryptionPublicKey: Base64UrlSchema,
+  })).max(5),
+  package: EnterpriseRecoveryCasePackageSchema.nullable(),
+});
+export type EnterpriseRecoveryCaseApprovalMaterial = z.infer<
+  typeof EnterpriseRecoveryCaseApprovalMaterialSchema
+>;
 
 export const UploadEnterpriseRecoveryCaseTransferRequestSchema = z.object({
   idempotencyKey: z.string().min(8).max(80),

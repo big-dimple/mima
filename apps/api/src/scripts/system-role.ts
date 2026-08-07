@@ -2,7 +2,7 @@ import { AuditAnchorStore, loadAuditKey } from '@mima/crypto';
 import { and, eq, sql } from 'drizzle-orm';
 import { env } from '../env.ts';
 import { createDb, createPool } from '../db/client.ts';
-import { systemRoleAssignments, users } from '../db/schema.ts';
+import { enterpriseRecoveryKeys, systemRoleAssignments, users } from '../db/schema.ts';
 import { appendAudit, recordAnchor } from '../services/audit.ts';
 
 const argumentsList = process.argv.slice(2);
@@ -62,6 +62,24 @@ try {
       anchors: new AuditAnchorStore(env.auditKeyDir, dbName),
     };
     const head = await db.transaction(async (tx) => {
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext('mima:platform-admin'))`);
+      const currentAssignments = await tx.select({ userId: systemRoleAssignments.userId })
+        .from(systemRoleAssignments)
+        .where(eq(systemRoleAssignments.role, 'platform-admin'))
+        .for('update');
+      const alreadyAssigned = currentAssignments.some((entry) => entry.userId === user.id);
+      if (action === 'grant' && !alreadyAssigned && currentAssignments.length >= 6) {
+        throw new Error('企业恢复管理员最多只能设置 6 位；请先撤销一位不再参与的管理员');
+      }
+      if (action === 'revoke' && alreadyAssigned && currentAssignments.length <= 2) {
+        const activeRecovery = (await tx.select({ id: enterpriseRecoveryKeys.id })
+          .from(enterpriseRecoveryKeys)
+          .where(eq(enterpriseRecoveryKeys.status, 'active'))
+          .limit(1))[0];
+        if (activeRecovery) {
+          throw new Error('企业恢复启用后必须至少保留 2 位管理员；请先添加替代管理员');
+        }
+      }
       let changed: Array<{ userId: string }>;
       if (action === 'grant') {
         changed = await tx

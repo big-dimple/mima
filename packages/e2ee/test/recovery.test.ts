@@ -95,4 +95,21 @@ describe('enterprise recovery', () => {
     const corrupted = `${first.shares[1].slice(0, -1)}${first.shares[1].endsWith('A') ? 'B' : 'A'}`;
     await expect(recoverEnterpriseRecoveryKey([first.shares[0], corrupted])).rejects.toThrow();
   });
+
+  it('supports any two administrator shares from sets of two through six', async () => {
+    for (const shareCount of [2, 4, 6]) {
+      const kit = await createEnterpriseRecoveryKit(`managed-${shareCount}`, shareCount);
+      expect(kit).toMatchObject({ threshold: 2, shareCount });
+      expect(kit.shares).toHaveLength(shareCount);
+      const recovered = await recoverEnterpriseRecoveryKey(
+        [kit.shares[0]!, kit.shares[shareCount - 1]!],
+        { ceremonyDigest: kit.ceremonyDigest, publicKey: kit.publicKey },
+      );
+      expect(recovered.publicKey).toBe(kit.publicKey);
+      await destroyKeyPair(recovered);
+    }
+
+    await expect(createEnterpriseRecoveryKit('too-few', 1)).rejects.toThrow();
+    await expect(createEnterpriseRecoveryKit('too-many', 7)).rejects.toThrow();
+  });
 });

@@ -16,10 +16,12 @@ import {
   DistributeEnterpriseRecoveryEnvelopeResponseSchema,
   EnterpriseRecoveryCandidateSchema,
   EnterpriseRecoveryCoverageSchema,
+  EnterpriseRecoveryCustodyShareSchema,
   EnterpriseRecoveryKeySchema,
   EnterpriseRecoveryReadinessSchema,
   EnterpriseRecoveryRequestSchema,
   EnterpriseRecoveryWorkspaceSchema,
+  RegisterManagedEnterpriseRecoveryKeyRequestSchema,
   RegisterEnterpriseRecoveryKeyRequestSchema,
 } from '@mima/contracts';
 import {
@@ -27,6 +29,8 @@ import {
   accountCryptoResetVaults,
   encryptedVaultHeaders,
   enterpriseRecoveryApprovals,
+  enterpriseRecoveryCases,
+  enterpriseRecoveryCustodyShares,
   enterpriseRecoveryKeyApprovals,
   enterpriseRecoveryKeys,
   enterpriseRecoveryRequests,
@@ -205,10 +209,11 @@ export function registerE2eeRecoveryRoutes(app: FastifyInstance): void {
     if (publicKeyFingerprint(req.body.publicEncryptionKey) !== req.body.keyFingerprint) {
       return badRequest(reply, '企业恢复公钥指纹不匹配');
     }
-    const expectedCeremonyDigest = await enterpriseRecoveryCeremonyDigest({
-      ceremonyId: req.body.ceremonyId,
-      publicKey: req.body.publicEncryptionKey,
-      publicKeyFingerprint: req.body.keyFingerprint,
+      const expectedCeremonyDigest = await enterpriseRecoveryCeremonyDigest({
+        ceremonyId: req.body.ceremonyId,
+        publicKey: req.body.publicEncryptionKey,
+        publicKeyFingerprint: req.body.keyFingerprint,
+        shareCount: req.body.shareCount,
     });
     if (expectedCeremonyDigest !== req.body.ceremonyEvidenceDigest) {
       return badRequest(reply, '企业恢复仪式证据摘要不匹配');
@@ -220,7 +225,7 @@ export function registerE2eeRecoveryRoutes(app: FastifyInstance): void {
           keyFingerprint: req.body.keyFingerprint,
           publicEncryptionKey: publicKey,
           threshold: 2,
-          shareCount: 3,
+          shareCount: req.body.shareCount,
           ceremonyEvidenceDigest: evidenceDigest,
           createdByUserId: req.user.id,
         }).returning())[0]!;
@@ -240,6 +245,100 @@ export function registerE2eeRecoveryRoutes(app: FastifyInstance): void {
     }
   });
 
+  r.post('/api/v2/recovery/custody', {
+    preHandler: recoveryKeyWriteGuard,
+    schema: {
+      tags: ['e2ee-recovery'],
+      body: RegisterManagedEnterpriseRecoveryKeyRequestSchema,
+      response: { 201: EnterpriseRecoveryKeySchema, '4xx': ZeroKnowledgeApiErrorSchema },
+    },
+  }, async (req, reply) => {
+    if (req.sessionRow.locked || req.sessionRow.unlockedDeviceId !== req.body.actorDeviceId) {
+      return forbidden(reply, '请先用当前设备解锁工作台');
+    }
+    const validation = await validateManagedCustodyRequest(db, req.user.id, req.body);
+    if (validation instanceof RecoveryRequestError) return sendRecoveryRequestError(reply, validation);
+    try {
+      const result = await runCommand(db, bus, audit, req.user.id, req.body.idempotencyKey, async (tx) => {
+        await lockEnterpriseRecoveryCoverage(tx);
+        await lockEnterpriseRecoveryAdministration(tx);
+        const locked = await validateManagedCustodyRequest(tx, req.user.id, req.body);
+        if (locked instanceof RecoveryRequestError) throw locked;
+        const row = (await tx.insert(enterpriseRecoveryKeys).values({
+          ceremonyId: req.body.key.ceremonyId,
+          keyFingerprint: req.body.key.keyFingerprint,
+          publicEncryptionKey: locked.publicKey,
+          threshold: 2,
+          shareCount: req.body.key.shareCount,
+          custodyMode: 'administrator_accounts',
+          ceremonyEvidenceDigest: locked.evidenceDigest,
+          createdByUserId: req.user.id,
+        }).returning())[0]!;
+        for (const share of locked.shares) {
+          await tx.insert(enterpriseRecoveryCustodyShares).values({
+            recoveryKeyId: row.id,
+            administratorUserId: share.administratorUserId,
+            administratorKeyVersion: share.administratorKeyVersion,
+            administratorEncryptionPublicKey: share.administratorEncryptionPublicKey,
+            shareIndex: share.shareIndex,
+            sealedShareCiphertext: share.sealedShareCiphertext,
+            sealedShareDigest: share.sealedShareDigest,
+            registeredByUserId: req.user.id,
+          });
+        }
+        const ownShare = locked.shares.find((share) => share.administratorUserId === req.user.id)!;
+        await tx.insert(enterpriseRecoveryKeyApprovals).values({
+          recoveryKeyId: row.id,
+          approverUserId: req.user.id,
+          ceremonyEvidenceDigest: locked.evidenceDigest,
+          actorDeviceId: req.body.actorDeviceId,
+          sealedShareDigest: ownShare.sealedShareDigest,
+          approvalSignature: locked.signature,
+        });
+        await appendAudit(tx, audit, {
+          actorUserId: req.user.id,
+          action: 'recovery.custody.register',
+          success: true,
+          details: { administratorCount: locked.shares.length },
+        });
+        return { statusCode: 201, response: await recoveryKeyDto(tx, row) };
+      }, commandIdentity('recovery.custody.register', req.body));
+      return reply.code(201).send(result.response);
+    } catch (error) {
+      if (error instanceof RecoveryRequestError) return sendRecoveryRequestError(reply, error);
+      if (isUniqueViolation(error)) return conflict(reply, '已经存在正在准备的企业恢复设置');
+      throw error;
+    }
+  });
+
+  r.get('/api/v2/recovery/keys/:keyId/custody/share', {
+    preHandler: [app.requireSession, requireLocalRecoveryAdmin],
+    schema: {
+      tags: ['e2ee-recovery'],
+      params: RecoveryKeyParams,
+      response: { 200: EnterpriseRecoveryCustodyShareSchema, '4xx': ZeroKnowledgeApiErrorSchema },
+    },
+  }, async (req, reply) => {
+    const [key, share, profile] = await Promise.all([
+      db.select().from(enterpriseRecoveryKeys)
+        .where(eq(enterpriseRecoveryKeys.id, req.params.keyId)).limit(1),
+      db.select().from(enterpriseRecoveryCustodyShares).where(and(
+        eq(enterpriseRecoveryCustodyShares.recoveryKeyId, req.params.keyId),
+        eq(enterpriseRecoveryCustodyShares.administratorUserId, req.user.id),
+      )).limit(1),
+      getCryptoProfile(db, req.user.id),
+    ]);
+    if (!key[0] || key[0].custodyMode !== 'administrator_accounts' || !share[0]) {
+      return reply.code(404).send(notFoundBody('当前账号没有这套企业恢复设置') as never);
+    }
+    if (!profile
+      || profile.cryptoGeneration !== share[0].administratorKeyVersion
+      || !Buffer.from(profile.publicEncryptionKey).equals(share[0].administratorEncryptionPublicKey)
+    ) return conflict(reply, '当前管理员的账号安全信息已更新，请重新准备企业恢复');
+    reply.header('cache-control', 'no-store');
+    return custodyShareDto(share[0]);
+  });
+
   r.post('/api/v2/recovery/keys/:keyId/approve', {
     preHandler: recoveryKeyWriteGuard,
     schema: {
@@ -257,6 +356,22 @@ export function registerE2eeRecoveryRoutes(app: FastifyInstance): void {
       return conflict(reply, '企业恢复仪式证据摘要不匹配');
     }
     if (!['pending', 'staged'].includes(key.status)) return conflict(reply, '该企业恢复公钥不再接受审批');
+    let managedApproval: {
+      actorDeviceId: string;
+      sealedShareDigest: Buffer;
+      signature: Buffer;
+    } | null = null;
+    if (key.custodyMode === 'administrator_accounts') {
+      if (!req.body.actorDeviceId
+        || req.sessionRow.locked
+        || req.sessionRow.unlockedDeviceId !== req.body.actorDeviceId
+      ) return forbidden(reply, '请先用当前设备解锁工作台');
+      const validation = await validateManagedCustodyApproval(db, req.user.id, key.id, req.body);
+      if (validation instanceof RecoveryRequestError) {
+        return sendRecoveryRequestError(reply, validation);
+      }
+      managedApproval = validation;
+    }
     try {
       const result = await runCommand(db, bus, audit, req.user.id, req.body.idempotencyKey, async (tx, collect) => {
         await lockEnterpriseRecoveryCoverage(tx);
@@ -265,6 +380,18 @@ export function registerE2eeRecoveryRoutes(app: FastifyInstance): void {
           .where(eq(enterpriseRecoveryKeys.id, key.id)).for('update').limit(1))[0];
         if (!lockedKey || !['pending', 'staged'].includes(lockedKey.status)) {
           throw new RecoveryRequestError(409, '这份公开清单已经结束，请刷新查看最新状态');
+        }
+        if (lockedKey.custodyMode === 'administrator_accounts') {
+          const lockedApproval = await validateManagedCustodyApproval(
+            tx,
+            req.user.id,
+            lockedKey.id,
+            req.body,
+          );
+          if (!lockedApproval || lockedApproval instanceof RecoveryRequestError) {
+          throw lockedApproval ?? new RecoveryRequestError(409, '当前管理员账号中的恢复权限不可用');
+          }
+          managedApproval = lockedApproval;
         }
         const approvals = await tx.select({ userId: enterpriseRecoveryKeyApprovals.approverUserId })
           .from(enterpriseRecoveryKeyApprovals)
@@ -279,6 +406,9 @@ export function registerE2eeRecoveryRoutes(app: FastifyInstance): void {
           recoveryKeyId: lockedKey.id,
           approverUserId: req.user.id,
           ceremonyEvidenceDigest: evidenceDigest,
+          actorDeviceId: managedApproval?.actorDeviceId ?? null,
+          sealedShareDigest: managedApproval?.sealedShareDigest ?? null,
+          approvalSignature: managedApproval?.signature ?? null,
         });
         let automaticallyActivated = false;
         if (approvals.length === 1) {
@@ -550,7 +680,7 @@ export function registerE2eeRecoveryRoutes(app: FastifyInstance): void {
         }
         const readiness = await enterpriseRecoveryReadinessDto(tx);
         if (!readiness.ready) {
-          throw new RecoveryKeyConflictError('至少需要三名已准备的实名 OIDC 管理员才能启用企业恢复');
+            throw new RecoveryKeyConflictError('至少需要两名已准备的实名 OIDC 管理员才能启用企业恢复');
         }
         const previous = await tx.select().from(enterpriseRecoveryKeys)
           .where(eq(enterpriseRecoveryKeys.status, 'active'))
@@ -570,6 +700,38 @@ export function registerE2eeRecoveryRoutes(app: FastifyInstance): void {
             inArray(enterpriseRecoveryRequests.recoveryKeyId, previousIds),
             inArray(enterpriseRecoveryRequests.status, ['pending', 'approved']),
           ));
+          const previousCases = await tx.select({
+            id: enterpriseRecoveryCases.id,
+            accountResetRequestId: enterpriseRecoveryCases.accountResetRequestId,
+          }).from(enterpriseRecoveryCases).where(and(
+            inArray(enterpriseRecoveryCases.recoveryKeyId, previousIds),
+            inArray(enterpriseRecoveryCases.status, [
+              'waiting_for_target',
+              'pending_approval',
+              'approved',
+              'processing',
+            ]),
+          )).orderBy(asc(enterpriseRecoveryCases.id)).for('update');
+          const resetIds = previousCases
+            .map((recoveryCase) => recoveryCase.accountResetRequestId)
+            .filter((requestId): requestId is string => Boolean(requestId));
+          if (resetIds.length) {
+            await tx.update(accountCryptoResetRequests).set({
+              status: 'cancelled',
+              cancelledAt: now,
+              lastErrorCode: 'recovery_key_rotated',
+            }).where(and(
+              inArray(accountCryptoResetRequests.id, resetIds),
+              inArray(accountCryptoResetRequests.status, ['pending', 'approved']),
+            ));
+          }
+          if (previousCases.length) {
+            await tx.update(enterpriseRecoveryCases).set({
+              status: 'cancelled',
+              cancelledAt: now,
+              lastErrorCode: 'recovery_key_rotated',
+            }).where(inArray(enterpriseRecoveryCases.id, previousCases.map((recoveryCase) => recoveryCase.id)));
+          }
         }
         const states = await tx.select().from(vaultCryptoStates)
           .where(eq(vaultCryptoStates.storageMode, 'e2ee'))
@@ -1175,17 +1337,25 @@ export function registerE2eeRecoveryRoutes(app: FastifyInstance): void {
 }
 
 async function recoveryKeyDto(db: DbOrTx, row: typeof enterpriseRecoveryKeys.$inferSelect) {
-  const approvals = await db.select({ userId: enterpriseRecoveryKeyApprovals.approverUserId })
-    .from(enterpriseRecoveryKeyApprovals)
-    .where(eq(enterpriseRecoveryKeyApprovals.recoveryKeyId, row.id))
-    .orderBy(asc(enterpriseRecoveryKeyApprovals.approvedAt));
+  const [approvals, custody] = await Promise.all([
+    db.select({ userId: enterpriseRecoveryKeyApprovals.approverUserId })
+      .from(enterpriseRecoveryKeyApprovals)
+      .where(eq(enterpriseRecoveryKeyApprovals.recoveryKeyId, row.id))
+      .orderBy(asc(enterpriseRecoveryKeyApprovals.approvedAt)),
+    db.select({ userId: enterpriseRecoveryCustodyShares.administratorUserId })
+      .from(enterpriseRecoveryCustodyShares)
+      .where(eq(enterpriseRecoveryCustodyShares.recoveryKeyId, row.id))
+      .orderBy(asc(enterpriseRecoveryCustodyShares.shareIndex)),
+  ]);
   return {
     id: row.id,
     ceremonyId: row.ceremonyId,
     keyFingerprint: row.keyFingerprint,
     publicEncryptionKey: encodeBase64Url(row.publicEncryptionKey),
     threshold: 2 as const,
-    shareCount: 3 as const,
+    shareCount: row.shareCount,
+    custodyMode: row.custodyMode,
+    custodyUserIds: custody.map((entry) => entry.userId),
     status: row.status,
     ceremonyEvidenceDigest: encodeBase64Url(row.ceremonyEvidenceDigest),
     approvalUserIds: approvals.map((approval) => approval.userId),
@@ -1209,7 +1379,11 @@ async function enterpriseRecoveryReadinessDto(db: DbOrTx) {
   const userIds = assignments.map((assignment) => assignment.userId);
   const [profiles, devices] = userIds.length > 0
     ? await Promise.all([
-        db.select({ userId: userCryptoProfiles.userId, generation: userCryptoProfiles.cryptoGeneration })
+        db.select({
+          userId: userCryptoProfiles.userId,
+          generation: userCryptoProfiles.cryptoGeneration,
+          encryptionPublicKey: userCryptoProfiles.publicEncryptionKey,
+        })
           .from(userCryptoProfiles).where(inArray(userCryptoProfiles.userId, userIds)),
         db.select({
           userId: userDevices.userId,
@@ -1220,28 +1394,182 @@ async function enterpriseRecoveryReadinessDto(db: DbOrTx) {
         )),
       ])
     : [[], []];
-  const profileGenerationByUser = new Map(profiles.map((profile) => [profile.userId, profile.generation]));
+  const profileByUser = new Map(profiles.map((profile) => [profile.userId, profile]));
   const activeDeviceCountByUser = new Map<string, number>();
   for (const device of devices) {
-    if (device.generation !== profileGenerationByUser.get(device.userId)) continue;
+    if (device.generation !== profileByUser.get(device.userId)?.generation) continue;
     activeDeviceCountByUser.set(device.userId, (activeDeviceCountByUser.get(device.userId) ?? 0) + 1);
   }
   const administrators = assignments.map((assignment) => {
-    const hasCryptoProfile = profileGenerationByUser.has(assignment.userId);
+    const profile = profileByUser.get(assignment.userId);
+    const hasCryptoProfile = Boolean(profile);
     const activeDeviceCount = activeDeviceCountByUser.get(assignment.userId) ?? 0;
     const ready = assignment.active
       && assignment.identitySource === 'oidc'
       && hasCryptoProfile
       && activeDeviceCount > 0;
-    return { ...assignment, hasCryptoProfile, activeDeviceCount, ready };
+    return {
+      ...assignment,
+      hasCryptoProfile,
+      activeDeviceCount,
+      cryptoGeneration: profile?.generation ?? null,
+      encryptionPublicKey: profile ? encodeBase64Url(profile.encryptionPublicKey) : null,
+      ready,
+    };
   });
   const readyAdministratorCount = administrators.filter((administrator) => administrator.ready).length;
   return {
-    requiredAdministratorCount: 3 as const,
+    requiredAdministratorCount: 2 as const,
+    maximumAdministratorCount: 6 as const,
     administratorCount: administrators.length,
     readyAdministratorCount,
-    ready: readyAdministratorCount >= 3,
+    ready: administrators.length >= 2
+      && administrators.length <= 6
+      && readyAdministratorCount === administrators.length,
     administrators,
+  };
+}
+
+function custodyShareDto(row: typeof enterpriseRecoveryCustodyShares.$inferSelect) {
+  return {
+    recoveryKeyId: row.recoveryKeyId,
+    administratorUserId: row.administratorUserId,
+    administratorKeyVersion: row.administratorKeyVersion,
+    shareIndex: row.shareIndex,
+    sealedShare: encodeBase64Url(row.sealedShareCiphertext),
+    sealedShareDigest: encodeBase64Url(row.sealedShareDigest),
+  };
+}
+
+async function validateManagedCustodyRequest(
+  db: DbOrTx,
+  userId: string,
+  request: z.infer<typeof RegisterManagedEnterpriseRecoveryKeyRequestSchema>,
+) {
+  const readiness = await enterpriseRecoveryReadinessDto(db);
+  if (!readiness.ready) {
+    return new RecoveryRequestError(409, '请先准备两至六名已设置主密码的企业恢复管理员');
+  }
+  if (request.key.shareCount !== readiness.administratorCount
+    || request.shares.length !== readiness.administratorCount
+  ) return new RecoveryRequestError(409, '管理员名单已经变化，请刷新后重新准备');
+  const expectedUsers = new Set(readiness.administrators.map((entry) => entry.userId));
+  const submittedUsers = new Set(request.shares.map((entry) => entry.administratorUserId));
+  const submittedIndexes = new Set(request.shares.map((entry) => entry.shareIndex));
+  if (submittedUsers.size !== request.shares.length
+    || submittedIndexes.size !== request.shares.length
+    || [...expectedUsers].some((entry) => !submittedUsers.has(entry))
+    || !expectedUsers.has(userId)
+  ) return new RecoveryRequestError(409, '管理员名单已经变化，请刷新后重新准备');
+
+  let publicKey: Buffer;
+  let evidenceDigest: Buffer;
+  let signature: Buffer;
+  try {
+    publicKey = decodeBase64Url(request.key.publicEncryptionKey, { exact: 32 });
+    evidenceDigest = decodeBase64Url(request.key.ceremonyEvidenceDigest, { exact: 32 });
+    signature = decodeBase64Url(request.signature, { exact: 64 });
+  } catch {
+    return new RecoveryRequestError(400, '企业恢复设置格式不正确');
+  }
+  if (publicKeyFingerprint(request.key.publicEncryptionKey) !== request.key.keyFingerprint) {
+    return new RecoveryRequestError(400, '企业恢复公钥指纹不匹配');
+  }
+  const expectedDigest = await enterpriseRecoveryCeremonyDigest({
+    ceremonyId: request.key.ceremonyId,
+    publicKey: request.key.publicEncryptionKey,
+    publicKeyFingerprint: request.key.keyFingerprint,
+    shareCount: request.key.shareCount,
+  });
+  if (expectedDigest !== request.key.ceremonyEvidenceDigest) {
+    return new RecoveryRequestError(400, '企业恢复设置校验失败');
+  }
+  const [actor, profile] = await Promise.all([
+    getActiveDevice(db, userId, request.actorDeviceId),
+    getCryptoProfile(db, userId),
+  ]);
+  if (!actor || !profile || !await verifyCommandSignature(
+    request.signature,
+    encodeBase64Url(actor.publicSigningKey),
+    'recovery.custody.register',
+    { userId, request: without(request, 'signature') },
+  )) return new RecoveryRequestError(401, '当前管理员的安全确认无效，请重新解锁后再试');
+
+  const administratorById = new Map(readiness.administrators.map((entry) => [entry.userId, entry]));
+  const shares = [];
+  for (const share of request.shares) {
+    const administrator = administratorById.get(share.administratorUserId);
+    if (!administrator?.ready
+      || administrator.cryptoGeneration !== share.administratorKeyVersion
+      || !administrator.encryptionPublicKey
+    ) return new RecoveryRequestError(409, '管理员账号安全信息已经变化，请刷新后重新准备');
+    let sealedShareCiphertext: Buffer;
+    let sealedShareDigest: Buffer;
+    let administratorEncryptionPublicKey: Buffer;
+    try {
+      sealedShareCiphertext = decodeBase64Url(share.sealedShare, { min: 49, max: 20_000 });
+      sealedShareDigest = decodeBase64Url(share.sealedShareDigest, { exact: 32 });
+      administratorEncryptionPublicKey = decodeBase64Url(administrator.encryptionPublicKey, { exact: 32 });
+    } catch {
+      return new RecoveryRequestError(400, '管理员恢复材料格式不正确');
+    }
+    if (!sha256(sealedShareCiphertext).equals(sealedShareDigest)) {
+      return new RecoveryRequestError(400, '管理员恢复材料校验失败');
+    }
+    shares.push({
+      administratorUserId: share.administratorUserId,
+      administratorKeyVersion: share.administratorKeyVersion,
+      administratorEncryptionPublicKey,
+      shareIndex: share.shareIndex,
+      sealedShareCiphertext,
+      sealedShareDigest,
+    });
+  }
+  return { publicKey, evidenceDigest, signature, shares };
+}
+
+async function validateManagedCustodyApproval(
+  db: DbOrTx,
+  userId: string,
+  keyId: string,
+  request: z.infer<typeof ApproveEnterpriseRecoveryKeyRequestSchema>,
+) {
+  if (!request.actorDeviceId || !request.sealedShareDigest || !request.signature) {
+    return new RecoveryRequestError(400, '请先在当前浏览器核对自己的恢复材料');
+  }
+  const [share, actor, profile] = await Promise.all([
+    db.select().from(enterpriseRecoveryCustodyShares).where(and(
+      eq(enterpriseRecoveryCustodyShares.recoveryKeyId, keyId),
+      eq(enterpriseRecoveryCustodyShares.administratorUserId, userId),
+    )).limit(1),
+    getActiveDevice(db, userId, request.actorDeviceId),
+    getCryptoProfile(db, userId),
+  ]);
+  if (!share[0] || !actor || !profile
+    || profile.cryptoGeneration !== share[0].administratorKeyVersion
+    || !Buffer.from(profile.publicEncryptionKey).equals(share[0].administratorEncryptionPublicKey)
+  ) return new RecoveryRequestError(409, '当前管理员的恢复材料已失效，请重新准备企业恢复');
+  let sealedShareDigest: Buffer;
+  let signature: Buffer;
+  try {
+    sealedShareDigest = decodeBase64Url(request.sealedShareDigest, { exact: 32 });
+    signature = decodeBase64Url(request.signature, { exact: 64 });
+  } catch {
+    return new RecoveryRequestError(400, '管理员恢复材料确认格式不正确');
+  }
+  if (!Buffer.from(share[0].sealedShareDigest).equals(sealedShareDigest)) {
+    return new RecoveryRequestError(409, '管理员恢复材料已经变化，请刷新后重试');
+  }
+  if (!await verifyCommandSignature(
+    request.signature,
+    encodeBase64Url(actor.publicSigningKey),
+    'recovery.custody.approve',
+    { userId, request: { keyId, ...without(request, 'signature') } },
+  )) return new RecoveryRequestError(401, '当前管理员的安全确认无效，请重新解锁后再试');
+  return {
+    actorDeviceId: request.actorDeviceId,
+    sealedShareDigest,
+    signature,
   };
 }
 

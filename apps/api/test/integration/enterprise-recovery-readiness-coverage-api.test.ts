@@ -122,7 +122,7 @@ describe('enterprise recovery readiness and initial coverage', () => {
       .map((event) => event.vaultId).sort()).toEqual([...vaultIds].sort());
   });
 
-  it('requires three ready administrators but does not block first activation on offline owners', async () => {
+  it('accepts two to six ready administrators and does not block first activation on offline owners', async () => {
     const readinessResponse = await app.inject({
       method: 'GET',
       url: '/api/v2/recovery/readiness',
@@ -131,7 +131,8 @@ describe('enterprise recovery readiness and initial coverage', () => {
     expect(readinessResponse.statusCode, readinessResponse.body).toBe(200);
     const readiness = readinessResponse.json() as EnterpriseRecoveryReadiness;
     expect(readiness).toMatchObject({
-      requiredAdministratorCount: 3,
+      requiredAdministratorCount: 2,
+      maximumAdministratorCount: 6,
       administratorCount: 3,
       readyAdministratorCount: 3,
       ready: true,

@@ -9938,10 +9938,23 @@
                           ]
                         },
                         "shareCount": {
-                          "type": "number",
+                          "type": "integer",
+                          "minimum": 2,
+                          "maximum": 6
+                        },
+                        "custodyMode": {
+                          "type": "string",
                           "enum": [
-                            3
+                            "legacy_offline",
+                            "administrator_accounts"
                           ]
+                        },
+                        "custodyUserIds": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          },
+                          "maxItems": 6
                         },
                         "status": {
                           "type": "string",
@@ -13769,10 +13782,23 @@
                           ]
                         },
                         "shareCount": {
-                          "type": "number",
+                          "type": "integer",
+                          "minimum": 2,
+                          "maximum": 6
+                        },
+                        "custodyMode": {
+                          "type": "string",
                           "enum": [
-                            3
+                            "legacy_offline",
+                            "administrator_accounts"
                           ]
+                        },
+                        "custodyUserIds": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          },
+                          "maxItems": 6
                         },
                         "status": {
                           "type": "string",
@@ -14721,10 +14747,23 @@
                               ]
                             },
                             "shareCount": {
-                              "type": "number",
+                              "type": "integer",
+                              "minimum": 2,
+                              "maximum": 6
+                            },
+                            "custodyMode": {
+                              "type": "string",
                               "enum": [
-                                3
+                                "legacy_offline",
+                                "administrator_accounts"
                               ]
+                            },
+                            "custodyUserIds": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              },
+                              "maxItems": 6
                             },
                             "status": {
                               "type": "string",
@@ -16184,10 +16223,23 @@
                       ]
                     },
                     "shareCount": {
-                      "type": "number",
+                      "type": "integer",
+                      "minimum": 2,
+                      "maximum": 6
+                    },
+                    "custodyMode": {
+                      "type": "string",
                       "enum": [
-                        3
+                        "legacy_offline",
+                        "administrator_accounts"
                       ]
+                    },
+                    "custodyUserIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "maxItems": 6
                     },
                     "status": {
                       "type": "string",
@@ -16321,10 +16373,9 @@
                     ]
                   },
                   "shareCount": {
-                    "type": "number",
-                    "enum": [
-                      3
-                    ]
+                    "type": "integer",
+                    "minimum": 2,
+                    "maximum": 6
                   },
                   "ceremonyEvidenceDigest": {
                     "type": "string",
@@ -16382,10 +16433,23 @@
                       ]
                     },
                     "shareCount": {
-                      "type": "number",
+                      "type": "integer",
+                      "minimum": 2,
+                      "maximum": 6
+                    },
+                    "custodyMode": {
+                      "type": "string",
                       "enum": [
-                        3
+                        "legacy_offline",
+                        "administrator_accounts"
                       ]
+                    },
+                    "custodyUserIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "maxItems": 6
                     },
                     "status": {
                       "type": "string",
@@ -16532,10 +16596,23 @@
                         ]
                       },
                       "shareCount": {
-                        "type": "number",
+                        "type": "integer",
+                        "minimum": 2,
+                        "maximum": 6
+                      },
+                      "custodyMode": {
+                        "type": "string",
                         "enum": [
-                          3
+                          "legacy_offline",
+                          "administrator_accounts"
                         ]
+                      },
+                      "custodyUserIds": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        },
+                        "maxItems": 6
                       },
                       "status": {
                         "type": "string",
@@ -16651,7 +16728,13 @@
                     "requiredAdministratorCount": {
                       "type": "number",
                       "enum": [
-                        3
+                        2
+                      ]
+                    },
+                    "maximumAdministratorCount": {
+                      "type": "number",
+                      "enum": [
+                        6
                       ]
                     },
                     "administratorCount": {
@@ -16698,6 +16781,19 @@
                             "type": "integer",
                             "minimum": 0
                           },
+                          "cryptoGeneration": {
+                            "type": "integer",
+                            "exclusiveMinimum": true,
+                            "minimum": 0,
+                            "nullable": true
+                          },
+                          "encryptionPublicKey": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200000,
+                            "pattern": "^[A-Za-z0-9_-]+$",
+                            "nullable": true
+                          },
                           "ready": {
                             "type": "boolean"
                           }
@@ -16710,6 +16806,8 @@
                           "active",
                           "hasCryptoProfile",
                           "activeDeviceCount",
+                          "cryptoGeneration",
+                          "encryptionPublicKey",
                           "ready"
                         ],
                         "additionalProperties": false
@@ -16718,6 +16816,7 @@
                   },
                   "required": [
                     "requiredAdministratorCount",
+                    "maximumAdministratorCount",
                     "administratorCount",
                     "readyAdministratorCount",
                     "ready",
@@ -16820,10 +16919,23 @@
                             ]
                           },
                           "shareCount": {
-                            "type": "number",
+                            "type": "integer",
+                            "minimum": 2,
+                            "maximum": 6
+                          },
+                          "custodyMode": {
+                            "type": "string",
                             "enum": [
-                              3
+                              "legacy_offline",
+                              "administrator_accounts"
                             ]
+                          },
+                          "custodyUserIds": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            },
+                            "maxItems": 6
                           },
                           "status": {
                             "type": "string",
@@ -16883,7 +16995,13 @@
                         "requiredAdministratorCount": {
                           "type": "number",
                           "enum": [
-                            3
+                            2
+                          ]
+                        },
+                        "maximumAdministratorCount": {
+                          "type": "number",
+                          "enum": [
+                            6
                           ]
                         },
                         "administratorCount": {
@@ -16930,6 +17048,19 @@
                                 "type": "integer",
                                 "minimum": 0
                               },
+                              "cryptoGeneration": {
+                                "type": "integer",
+                                "exclusiveMinimum": true,
+                                "minimum": 0,
+                                "nullable": true
+                              },
+                              "encryptionPublicKey": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 200000,
+                                "pattern": "^[A-Za-z0-9_-]+$",
+                                "nullable": true
+                              },
                               "ready": {
                                 "type": "boolean"
                               }
@@ -16942,6 +17073,8 @@
                               "active",
                               "hasCryptoProfile",
                               "activeDeviceCount",
+                              "cryptoGeneration",
+                              "encryptionPublicKey",
                               "ready"
                             ],
                             "additionalProperties": false
@@ -16950,6 +17083,7 @@
                       },
                       "required": [
                         "requiredAdministratorCount",
+                        "maximumAdministratorCount",
                         "administratorCount",
                         "readyAdministratorCount",
                         "ready",
@@ -17276,6 +17410,13 @@
                             "format": "uuid",
                             "nullable": true
                           },
+                          "resolutionKind": {
+                            "type": "string",
+                            "enum": [
+                              "recover_access",
+                              "replace_empty_personal"
+                            ]
+                          },
                           "approvalUserIds": {
                             "type": "array",
                             "items": {
@@ -17470,6 +17611,7 @@
                           "targetDeviceId",
                           "targetKeyVersion",
                           "accountResetRequestId",
+                          "resolutionKind",
                           "approvalUserIds",
                           "items",
                           "resolvedItemCount",
@@ -17680,6 +17822,405 @@
         ]
       }
     },
+    "/api/v2/recovery/custody": {
+      "post": {
+        "tags": [
+          "企业恢复"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "idempotencyKey": {
+                    "type": "string",
+                    "minLength": 8,
+                    "maxLength": 80
+                  },
+                  "actorDeviceId": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "key": {
+                    "type": "object",
+                    "properties": {
+                      "ceremonyId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200
+                      },
+                      "publicEncryptionKey": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200000,
+                        "pattern": "^[A-Za-z0-9_-]+$"
+                      },
+                      "keyFingerprint": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200000,
+                        "pattern": "^[A-Za-z0-9_-]+$"
+                      },
+                      "threshold": {
+                        "type": "number",
+                        "enum": [
+                          2
+                        ]
+                      },
+                      "shareCount": {
+                        "type": "integer",
+                        "minimum": 2,
+                        "maximum": 6
+                      },
+                      "ceremonyEvidenceDigest": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200000,
+                        "pattern": "^[A-Za-z0-9_-]+$"
+                      }
+                    },
+                    "required": [
+                      "ceremonyId",
+                      "publicEncryptionKey",
+                      "keyFingerprint",
+                      "threshold",
+                      "shareCount",
+                      "ceremonyEvidenceDigest"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "shares": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "administratorUserId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "administratorKeyVersion": {
+                          "type": "integer",
+                          "exclusiveMinimum": true,
+                          "minimum": 0
+                        },
+                        "shareIndex": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 6
+                        },
+                        "sealedShare": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200000,
+                          "pattern": "^[A-Za-z0-9_-]+$"
+                        },
+                        "sealedShareDigest": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200000,
+                          "pattern": "^[A-Za-z0-9_-]+$"
+                        }
+                      },
+                      "required": [
+                        "administratorUserId",
+                        "administratorKeyVersion",
+                        "shareIndex",
+                        "sealedShare",
+                        "sealedShareDigest"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "minItems": 2,
+                    "maxItems": 6
+                  },
+                  "signature": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200000,
+                    "pattern": "^[A-Za-z0-9_-]+$"
+                  }
+                },
+                "required": [
+                  "idempotencyKey",
+                  "actorDeviceId",
+                  "key",
+                  "shares",
+                  "signature"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "请求成功。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "ceremonyId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 200
+                    },
+                    "keyFingerprint": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 200000,
+                      "pattern": "^[A-Za-z0-9_-]+$"
+                    },
+                    "publicEncryptionKey": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 200000,
+                      "pattern": "^[A-Za-z0-9_-]+$"
+                    },
+                    "threshold": {
+                      "type": "number",
+                      "enum": [
+                        2
+                      ]
+                    },
+                    "shareCount": {
+                      "type": "integer",
+                      "minimum": 2,
+                      "maximum": 6
+                    },
+                    "custodyMode": {
+                      "type": "string",
+                      "enum": [
+                        "legacy_offline",
+                        "administrator_accounts"
+                      ]
+                    },
+                    "custodyUserIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "maxItems": 6
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "pending",
+                        "staged",
+                        "active",
+                        "retired",
+                        "compromised",
+                        "cancelled"
+                      ]
+                    },
+                    "ceremonyEvidenceDigest": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 200000,
+                      "pattern": "^[A-Za-z0-9_-]+$"
+                    },
+                    "approvalUserIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "maxItems": 2
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    },
+                    "retiredAt": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "cancelledAt": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "ceremonyId",
+                    "keyFingerprint",
+                    "publicEncryptionKey",
+                    "threshold",
+                    "shareCount",
+                    "status",
+                    "ceremonyEvidenceDigest",
+                    "approvalUserIds",
+                    "createdAt",
+                    "retiredAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "请求校验、认证、授权、资源状态或版本冲突失败。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "integer"
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentVersion": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "statusCode",
+                    "error",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "operationId": "registerManagedRecoveryCustody",
+        "summary": "准备管理员账号托管的企业恢复",
+        "security": [
+          {
+            "webSession": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/csrfToken"
+          }
+        ]
+      }
+    },
+    "/api/v2/recovery/keys/{keyId}/custody/share": {
+      "get": {
+        "tags": [
+          "企业恢复"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "in": "path",
+            "name": "keyId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "请求成功。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "recoveryKeyId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "administratorUserId": {
+                      "type": "string"
+                    },
+                    "administratorKeyVersion": {
+                      "type": "integer",
+                      "exclusiveMinimum": true,
+                      "minimum": 0
+                    },
+                    "shareIndex": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 6
+                    },
+                    "sealedShare": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 200000,
+                      "pattern": "^[A-Za-z0-9_-]+$"
+                    },
+                    "sealedShareDigest": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 200000,
+                      "pattern": "^[A-Za-z0-9_-]+$"
+                    }
+                  },
+                  "required": [
+                    "recoveryKeyId",
+                    "administratorUserId",
+                    "administratorKeyVersion",
+                    "shareIndex",
+                    "sealedShare",
+                    "sealedShareDigest"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "请求校验、认证、授权、资源状态或版本冲突失败。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "integer"
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentVersion": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "statusCode",
+                    "error",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getManagedRecoveryCustodyShare",
+        "summary": "读取当前管理员的加密恢复份额",
+        "security": [
+          {
+            "webSession": []
+          }
+        ]
+      }
+    },
     "/api/v2/recovery/keys/{keyId}/approve": {
       "post": {
         "tags": [
@@ -17698,6 +18239,22 @@
                     "maxLength": 80
                   },
                   "ceremonyEvidenceDigest": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200000,
+                    "pattern": "^[A-Za-z0-9_-]+$"
+                  },
+                  "actorDeviceId": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "sealedShareDigest": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200000,
+                    "pattern": "^[A-Za-z0-9_-]+$"
+                  },
+                  "signature": {
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 200000,
@@ -17763,10 +18320,23 @@
                       ]
                     },
                     "shareCount": {
-                      "type": "number",
+                      "type": "integer",
+                      "minimum": 2,
+                      "maximum": 6
+                    },
+                    "custodyMode": {
+                      "type": "string",
                       "enum": [
-                        3
+                        "legacy_offline",
+                        "administrator_accounts"
                       ]
+                    },
+                    "custodyUserIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "maxItems": 6
                     },
                     "status": {
                       "type": "string",
@@ -17948,10 +18518,23 @@
                       ]
                     },
                     "shareCount": {
-                      "type": "number",
+                      "type": "integer",
+                      "minimum": 2,
+                      "maximum": 6
+                    },
+                    "custodyMode": {
+                      "type": "string",
                       "enum": [
-                        3
+                        "legacy_offline",
+                        "administrator_accounts"
                       ]
+                    },
+                    "custodyUserIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "maxItems": 6
                     },
                     "status": {
                       "type": "string",
@@ -18338,10 +18921,23 @@
                       ]
                     },
                     "shareCount": {
-                      "type": "number",
+                      "type": "integer",
+                      "minimum": 2,
+                      "maximum": 6
+                    },
+                    "custodyMode": {
+                      "type": "string",
                       "enum": [
-                        3
+                        "legacy_offline",
+                        "administrator_accounts"
                       ]
+                    },
+                    "custodyUserIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "maxItems": 6
                     },
                     "status": {
                       "type": "string",
@@ -20070,6 +20666,13 @@
                         "format": "uuid",
                         "nullable": true
                       },
+                      "resolutionKind": {
+                        "type": "string",
+                        "enum": [
+                          "recover_access",
+                          "replace_empty_personal"
+                        ]
+                      },
                       "approvalUserIds": {
                         "type": "array",
                         "items": {
@@ -20264,6 +20867,7 @@
                       "targetDeviceId",
                       "targetKeyVersion",
                       "accountResetRequestId",
+                      "resolutionKind",
                       "approvalUserIds",
                       "items",
                       "resolvedItemCount",
@@ -20435,6 +21039,13 @@
                       "format": "uuid",
                       "nullable": true
                     },
+                    "resolutionKind": {
+                      "type": "string",
+                      "enum": [
+                        "recover_access",
+                        "replace_empty_personal"
+                      ]
+                    },
                     "approvalUserIds": {
                       "type": "array",
                       "items": {
@@ -20629,6 +21240,7 @@
                     "targetDeviceId",
                     "targetKeyVersion",
                     "accountResetRequestId",
+                    "resolutionKind",
                     "approvalUserIds",
                     "items",
                     "resolvedItemCount",
@@ -20782,6 +21394,13 @@
                       "format": "uuid",
                       "nullable": true
                     },
+                    "resolutionKind": {
+                      "type": "string",
+                      "enum": [
+                        "recover_access",
+                        "replace_empty_personal"
+                      ]
+                    },
                     "approvalUserIds": {
                       "type": "array",
                       "items": {
@@ -20976,6 +21595,7 @@
                     "targetDeviceId",
                     "targetKeyVersion",
                     "accountResetRequestId",
+                    "resolutionKind",
                     "approvalUserIds",
                     "items",
                     "resolvedItemCount",
@@ -21246,6 +21866,13 @@
                       "format": "uuid",
                       "nullable": true
                     },
+                    "resolutionKind": {
+                      "type": "string",
+                      "enum": [
+                        "recover_access",
+                        "replace_empty_personal"
+                      ]
+                    },
                     "approvalUserIds": {
                       "type": "array",
                       "items": {
@@ -21440,6 +22067,7 @@
                     "targetDeviceId",
                     "targetKeyVersion",
                     "accountResetRequestId",
+                    "resolutionKind",
                     "approvalUserIds",
                     "items",
                     "resolvedItemCount",
@@ -21504,6 +22132,995 @@
         ]
       }
     },
+    "/api/v2/recovery/cases/{caseId}/approval-material": {
+      "get": {
+        "tags": [
+          "企业恢复"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "in": "path",
+            "name": "caseId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "请求成功。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "case": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "forgot_password",
+                            "interrupted_handoff"
+                          ]
+                        },
+                        "targetUserId": {
+                          "type": "string"
+                        },
+                        "targetUsername": {
+                          "type": "string"
+                        },
+                        "targetDisplayName": {
+                          "type": "string"
+                        },
+                        "recoveryKeyId": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "waiting_for_target",
+                            "pending_approval",
+                            "approved",
+                            "processing",
+                            "completed",
+                            "completed_with_skips",
+                            "cancelled",
+                            "expired"
+                          ]
+                        },
+                        "caseDigest": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200000,
+                          "pattern": "^[A-Za-z0-9_-]+$",
+                          "nullable": true
+                        },
+                        "targetDeviceId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "nullable": true
+                        },
+                        "targetKeyVersion": {
+                          "type": "integer",
+                          "exclusiveMinimum": true,
+                          "minimum": 0,
+                          "nullable": true
+                        },
+                        "accountResetRequestId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "nullable": true
+                        },
+                        "resolutionKind": {
+                          "type": "string",
+                          "enum": [
+                            "recover_access",
+                            "replace_empty_personal"
+                          ]
+                        },
+                        "approvalUserIds": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          },
+                          "maxItems": 2
+                        },
+                        "items": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "format": "uuid"
+                              },
+                              "caseId": {
+                                "type": "string",
+                                "format": "uuid",
+                                "nullable": true
+                              },
+                              "vaultId": {
+                                "type": "string",
+                                "format": "uuid"
+                              },
+                              "recoveryKeyId": {
+                                "type": "string",
+                                "format": "uuid"
+                              },
+                              "keyEpoch": {
+                                "type": "integer",
+                                "exclusiveMinimum": true,
+                                "minimum": 0
+                              },
+                              "targetUserId": {
+                                "type": "string"
+                              },
+                              "targetDeviceId": {
+                                "type": "string",
+                                "format": "uuid"
+                              },
+                              "targetEncryptionPublicKey": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 200000,
+                                "pattern": "^[A-Za-z0-9_-]+$"
+                              },
+                              "targetKeyVersion": {
+                                "type": "integer",
+                                "exclusiveMinimum": true,
+                                "minimum": 0
+                              },
+                              "targetCapability": {
+                                "type": "string",
+                                "enum": [
+                                  "metadata",
+                                  "full"
+                                ]
+                              },
+                              "accountResetRequestId": {
+                                "type": "string",
+                                "format": "uuid",
+                                "nullable": true
+                              },
+                              "requestDigest": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 200000,
+                                "pattern": "^[A-Za-z0-9_-]+$"
+                              },
+                              "status": {
+                                "type": "string",
+                                "enum": [
+                                  "pending",
+                                  "approved",
+                                  "satisfied",
+                                  "completed",
+                                  "cancelled",
+                                  "expired",
+                                  "failed"
+                                ]
+                              },
+                              "approvalUserIds": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                },
+                                "maxItems": 2
+                              },
+                              "createdAt": {
+                                "type": "string"
+                              },
+                              "expiresAt": {
+                                "type": "string"
+                              },
+                              "completedAt": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "cancelledAt": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "expiredAt": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "lastErrorCode": {
+                                "type": "string",
+                                "nullable": true
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "vaultId",
+                              "recoveryKeyId",
+                              "keyEpoch",
+                              "targetUserId",
+                              "targetDeviceId",
+                              "targetEncryptionPublicKey",
+                              "targetKeyVersion",
+                              "targetCapability",
+                              "accountResetRequestId",
+                              "requestDigest",
+                              "status",
+                              "approvalUserIds",
+                              "createdAt",
+                              "expiresAt",
+                              "completedAt"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "resolvedItemCount": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "skippedItemCount": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "hasOfflineResult": {
+                          "type": "boolean"
+                        },
+                        "createdByUserId": {
+                          "type": "string"
+                        },
+                        "createdAt": {
+                          "type": "string"
+                        },
+                        "expiresAt": {
+                          "type": "string"
+                        },
+                        "finalizedAt": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "approvedAt": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "processingAt": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "completedAt": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "cancelledAt": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "expiredAt": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "lastErrorCode": {
+                          "type": "string",
+                          "nullable": true
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "kind",
+                        "targetUserId",
+                        "targetUsername",
+                        "targetDisplayName",
+                        "recoveryKeyId",
+                        "status",
+                        "caseDigest",
+                        "targetDeviceId",
+                        "targetKeyVersion",
+                        "accountResetRequestId",
+                        "resolutionKind",
+                        "approvalUserIds",
+                        "items",
+                        "resolvedItemCount",
+                        "skippedItemCount",
+                        "hasOfflineResult",
+                        "createdByUserId",
+                        "createdAt",
+                        "expiresAt",
+                        "finalizedAt",
+                        "approvedAt",
+                        "processingAt",
+                        "completedAt",
+                        "cancelledAt",
+                        "expiredAt",
+                        "lastErrorCode"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "recoveryKey": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "ceremonyId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "keyFingerprint": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200000,
+                          "pattern": "^[A-Za-z0-9_-]+$"
+                        },
+                        "publicEncryptionKey": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200000,
+                          "pattern": "^[A-Za-z0-9_-]+$"
+                        },
+                        "threshold": {
+                          "type": "number",
+                          "enum": [
+                            2
+                          ]
+                        },
+                        "shareCount": {
+                          "type": "integer",
+                          "minimum": 2,
+                          "maximum": 6
+                        },
+                        "custodyMode": {
+                          "type": "string",
+                          "enum": [
+                            "legacy_offline",
+                            "administrator_accounts"
+                          ]
+                        },
+                        "custodyUserIds": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          },
+                          "maxItems": 6
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "pending",
+                            "staged",
+                            "active",
+                            "retired",
+                            "compromised",
+                            "cancelled"
+                          ]
+                        },
+                        "ceremonyEvidenceDigest": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200000,
+                          "pattern": "^[A-Za-z0-9_-]+$"
+                        },
+                        "approvalUserIds": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          },
+                          "maxItems": 2
+                        },
+                        "createdAt": {
+                          "type": "string"
+                        },
+                        "retiredAt": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "cancelledAt": {
+                          "type": "string",
+                          "nullable": true
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "ceremonyId",
+                        "keyFingerprint",
+                        "publicEncryptionKey",
+                        "threshold",
+                        "shareCount",
+                        "status",
+                        "ceremonyEvidenceDigest",
+                        "approvalUserIds",
+                        "createdAt",
+                        "retiredAt"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "ownShare": {
+                      "type": "object",
+                      "properties": {
+                        "recoveryKeyId": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "administratorUserId": {
+                          "type": "string"
+                        },
+                        "administratorKeyVersion": {
+                          "type": "integer",
+                          "exclusiveMinimum": true,
+                          "minimum": 0
+                        },
+                        "shareIndex": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 6
+                        },
+                        "sealedShare": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200000,
+                          "pattern": "^[A-Za-z0-9_-]+$"
+                        },
+                        "sealedShareDigest": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200000,
+                          "pattern": "^[A-Za-z0-9_-]+$"
+                        }
+                      },
+                      "required": [
+                        "recoveryKeyId",
+                        "administratorUserId",
+                        "administratorKeyVersion",
+                        "shareIndex",
+                        "sealedShare",
+                        "sealedShareDigest"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "firstApprovalRelay": {
+                      "type": "object",
+                      "properties": {
+                        "fromUserId": {
+                          "type": "string"
+                        },
+                        "toUserId": {
+                          "type": "string"
+                        },
+                        "toKeyVersion": {
+                          "type": "integer",
+                          "exclusiveMinimum": true,
+                          "minimum": 0
+                        },
+                        "sealedShare": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200000,
+                          "pattern": "^[A-Za-z0-9_-]+$"
+                        },
+                        "sealedShareDigest": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200000,
+                          "pattern": "^[A-Za-z0-9_-]+$"
+                        },
+                        "expiresAt": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "fromUserId",
+                        "toUserId",
+                        "toKeyVersion",
+                        "sealedShare",
+                        "sealedShareDigest",
+                        "expiresAt"
+                      ],
+                      "additionalProperties": false,
+                      "nullable": true
+                    },
+                    "recipients": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "userId": {
+                            "type": "string"
+                          },
+                          "keyVersion": {
+                            "type": "integer",
+                            "exclusiveMinimum": true,
+                            "minimum": 0
+                          },
+                          "encryptionPublicKey": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200000,
+                            "pattern": "^[A-Za-z0-9_-]+$"
+                          }
+                        },
+                        "required": [
+                          "userId",
+                          "keyVersion",
+                          "encryptionPublicKey"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "maxItems": 5
+                    },
+                    "package": {
+                      "type": "object",
+                      "properties": {
+                        "protocol": {
+                          "type": "string",
+                          "enum": [
+                            "mima-e2ee-v2"
+                          ]
+                        },
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "enterprise-recovery-case-package"
+                          ]
+                        },
+                        "caseId": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "caseDigest": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200000,
+                          "pattern": "^[A-Za-z0-9_-]+$"
+                        },
+                        "recoveryKey": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "format": "uuid"
+                            },
+                            "ceremonyId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 200
+                            },
+                            "keyFingerprint": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 200000,
+                              "pattern": "^[A-Za-z0-9_-]+$"
+                            },
+                            "publicEncryptionKey": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 200000,
+                              "pattern": "^[A-Za-z0-9_-]+$"
+                            },
+                            "threshold": {
+                              "type": "number",
+                              "enum": [
+                                2
+                              ]
+                            },
+                            "shareCount": {
+                              "type": "integer",
+                              "minimum": 2,
+                              "maximum": 6
+                            },
+                            "custodyMode": {
+                              "type": "string",
+                              "enum": [
+                                "legacy_offline",
+                                "administrator_accounts"
+                              ]
+                            },
+                            "custodyUserIds": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              },
+                              "maxItems": 6
+                            },
+                            "status": {
+                              "type": "string",
+                              "enum": [
+                                "pending",
+                                "staged",
+                                "active",
+                                "retired",
+                                "compromised",
+                                "cancelled"
+                              ]
+                            },
+                            "ceremonyEvidenceDigest": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 200000,
+                              "pattern": "^[A-Za-z0-9_-]+$"
+                            },
+                            "approvalUserIds": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              },
+                              "maxItems": 2
+                            },
+                            "createdAt": {
+                              "type": "string"
+                            },
+                            "retiredAt": {
+                              "type": "string",
+                              "nullable": true
+                            },
+                            "cancelledAt": {
+                              "type": "string",
+                              "nullable": true
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "ceremonyId",
+                            "keyFingerprint",
+                            "publicEncryptionKey",
+                            "threshold",
+                            "shareCount",
+                            "status",
+                            "ceremonyEvidenceDigest",
+                            "approvalUserIds",
+                            "createdAt",
+                            "retiredAt"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "items": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "request": {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string",
+                                    "format": "uuid"
+                                  },
+                                  "caseId": {
+                                    "type": "string",
+                                    "format": "uuid",
+                                    "nullable": true
+                                  },
+                                  "vaultId": {
+                                    "type": "string",
+                                    "format": "uuid"
+                                  },
+                                  "recoveryKeyId": {
+                                    "type": "string",
+                                    "format": "uuid"
+                                  },
+                                  "keyEpoch": {
+                                    "type": "integer",
+                                    "exclusiveMinimum": true,
+                                    "minimum": 0
+                                  },
+                                  "targetUserId": {
+                                    "type": "string"
+                                  },
+                                  "targetDeviceId": {
+                                    "type": "string",
+                                    "format": "uuid"
+                                  },
+                                  "targetEncryptionPublicKey": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 200000,
+                                    "pattern": "^[A-Za-z0-9_-]+$"
+                                  },
+                                  "targetKeyVersion": {
+                                    "type": "integer",
+                                    "exclusiveMinimum": true,
+                                    "minimum": 0
+                                  },
+                                  "targetCapability": {
+                                    "type": "string",
+                                    "enum": [
+                                      "metadata",
+                                      "full"
+                                    ]
+                                  },
+                                  "accountResetRequestId": {
+                                    "type": "string",
+                                    "format": "uuid",
+                                    "nullable": true
+                                  },
+                                  "requestDigest": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 200000,
+                                    "pattern": "^[A-Za-z0-9_-]+$"
+                                  },
+                                  "status": {
+                                    "type": "string",
+                                    "enum": [
+                                      "pending",
+                                      "approved",
+                                      "satisfied",
+                                      "completed",
+                                      "cancelled",
+                                      "expired",
+                                      "failed"
+                                    ]
+                                  },
+                                  "approvalUserIds": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    },
+                                    "maxItems": 2
+                                  },
+                                  "createdAt": {
+                                    "type": "string"
+                                  },
+                                  "expiresAt": {
+                                    "type": "string"
+                                  },
+                                  "completedAt": {
+                                    "type": "string",
+                                    "nullable": true
+                                  },
+                                  "cancelledAt": {
+                                    "type": "string",
+                                    "nullable": true
+                                  },
+                                  "expiredAt": {
+                                    "type": "string",
+                                    "nullable": true
+                                  },
+                                  "lastErrorCode": {
+                                    "type": "string",
+                                    "nullable": true
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "vaultId",
+                                  "recoveryKeyId",
+                                  "keyEpoch",
+                                  "targetUserId",
+                                  "targetDeviceId",
+                                  "targetEncryptionPublicKey",
+                                  "targetKeyVersion",
+                                  "targetCapability",
+                                  "accountResetRequestId",
+                                  "requestDigest",
+                                  "status",
+                                  "approvalUserIds",
+                                  "createdAt",
+                                  "expiresAt",
+                                  "completedAt"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "activeEpoch": {
+                                "type": "integer",
+                                "exclusiveMinimum": true,
+                                "minimum": 0
+                              },
+                              "recoveryEnvelope": {
+                                "type": "object",
+                                "properties": {
+                                  "vaultId": {
+                                    "type": "string",
+                                    "format": "uuid"
+                                  },
+                                  "epoch": {
+                                    "type": "integer",
+                                    "exclusiveMinimum": true,
+                                    "minimum": 0
+                                  },
+                                  "recipientKind": {
+                                    "type": "string",
+                                    "enum": [
+                                      "user",
+                                      "device",
+                                      "recovery"
+                                    ]
+                                  },
+                                  "recipientId": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 200
+                                  },
+                                  "recipientKeyVersion": {
+                                    "type": "integer",
+                                    "exclusiveMinimum": true,
+                                    "minimum": 0
+                                  },
+                                  "capability": {
+                                    "type": "string",
+                                    "enum": [
+                                      "metadata",
+                                      "full",
+                                      "recovery"
+                                    ]
+                                  },
+                                  "sealedKeyBundle": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 200000,
+                                    "pattern": "^[A-Za-z0-9_-]+$"
+                                  },
+                                  "signerUserId": {
+                                    "type": "string"
+                                  },
+                                  "signerKeyVersion": {
+                                    "type": "integer",
+                                    "exclusiveMinimum": true,
+                                    "minimum": 0
+                                  },
+                                  "signature": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 200000,
+                                    "pattern": "^[A-Za-z0-9_-]+$"
+                                  }
+                                },
+                                "required": [
+                                  "vaultId",
+                                  "epoch",
+                                  "recipientKind",
+                                  "recipientId",
+                                  "recipientKeyVersion",
+                                  "capability",
+                                  "sealedKeyBundle",
+                                  "signerUserId",
+                                  "signerKeyVersion",
+                                  "signature"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "trustedSigner": {
+                                "type": "object",
+                                "properties": {
+                                  "userId": {
+                                    "type": "string"
+                                  },
+                                  "keyVersion": {
+                                    "type": "integer",
+                                    "exclusiveMinimum": true,
+                                    "minimum": 0
+                                  },
+                                  "signingPublicKey": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 200000,
+                                    "pattern": "^[A-Za-z0-9_-]+$"
+                                  }
+                                },
+                                "required": [
+                                  "userId",
+                                  "keyVersion",
+                                  "signingPublicKey"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "targetProfile": {
+                                "type": "object",
+                                "properties": {
+                                  "userId": {
+                                    "type": "string"
+                                  },
+                                  "keyVersion": {
+                                    "type": "integer",
+                                    "exclusiveMinimum": true,
+                                    "minimum": 0
+                                  },
+                                  "encryptionPublicKey": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 200000,
+                                    "pattern": "^[A-Za-z0-9_-]+$"
+                                  },
+                                  "signingPublicKey": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 200000,
+                                    "pattern": "^[A-Za-z0-9_-]+$"
+                                  }
+                                },
+                                "required": [
+                                  "userId",
+                                  "keyVersion",
+                                  "encryptionPublicKey",
+                                  "signingPublicKey"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "required": [
+                              "request",
+                              "activeEpoch",
+                              "recoveryEnvelope",
+                              "trustedSigner",
+                              "targetProfile"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "minItems": 1
+                        }
+                      },
+                      "required": [
+                        "protocol",
+                        "kind",
+                        "caseId",
+                        "caseDigest",
+                        "recoveryKey",
+                        "items"
+                      ],
+                      "additionalProperties": false,
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "case",
+                    "recoveryKey",
+                    "ownShare",
+                    "firstApprovalRelay",
+                    "recipients",
+                    "package"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "请求校验、认证、授权、资源状态或版本冲突失败。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "integer"
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentVersion": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "statusCode",
+                    "error",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getRecoveryCaseApprovalMaterial",
+        "summary": "读取管理员浏览器确认材料",
+        "security": [
+          {
+            "webSession": []
+          }
+        ]
+      }
+    },
     "/api/v2/recovery/cases/{caseId}/approve": {
       "post": {
         "tags": [
@@ -21514,25 +23131,302 @@
           "content": {
             "application/json": {
               "schema": {
-                "type": "object",
-                "properties": {
-                  "idempotencyKey": {
-                    "type": "string",
-                    "minLength": 8,
-                    "maxLength": 80
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "idempotencyKey": {
+                        "type": "string",
+                        "minLength": 8,
+                        "maxLength": 80
+                      },
+                      "caseDigest": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200000,
+                        "pattern": "^[A-Za-z0-9_-]+$"
+                      },
+                      "actorDeviceId": {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      "relays": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "recipientUserId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 200
+                            },
+                            "recipientKeyVersion": {
+                              "type": "integer",
+                              "exclusiveMinimum": true,
+                              "minimum": 0
+                            },
+                            "sealedShare": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 200000,
+                              "pattern": "^[A-Za-z0-9_-]+$"
+                            },
+                            "sealedShareDigest": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 200000,
+                              "pattern": "^[A-Za-z0-9_-]+$"
+                            }
+                          },
+                          "required": [
+                            "recipientUserId",
+                            "recipientKeyVersion",
+                            "sealedShare",
+                            "sealedShareDigest"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "minItems": 1,
+                        "maxItems": 5
+                      },
+                      "transfer": {
+                        "type": "object",
+                        "properties": {
+                          "protocol": {
+                            "type": "string",
+                            "enum": [
+                              "mima-e2ee-v2"
+                            ]
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "enterprise-recovery-case-transfer"
+                            ]
+                          },
+                          "caseId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "caseDigest": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200000,
+                            "pattern": "^[A-Za-z0-9_-]+$"
+                          },
+                          "results": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "protocol": {
+                                  "type": "string",
+                                  "enum": [
+                                    "lm-e2ee-v1"
+                                  ]
+                                },
+                                "kind": {
+                                  "type": "string",
+                                  "enum": [
+                                    "enterprise-recovery-transfer"
+                                  ]
+                                },
+                                "formatVersion": {
+                                  "type": "number",
+                                  "enum": [
+                                    1
+                                  ]
+                                },
+                                "requestId": {
+                                  "type": "string",
+                                  "format": "uuid"
+                                },
+                                "requestDigest": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 200000,
+                                  "pattern": "^[A-Za-z0-9_-]+$"
+                                },
+                                "vaultId": {
+                                  "type": "string",
+                                  "format": "uuid"
+                                },
+                                "epoch": {
+                                  "type": "integer",
+                                  "exclusiveMinimum": true,
+                                  "minimum": 0
+                                },
+                                "recoveryKeyId": {
+                                  "type": "string",
+                                  "format": "uuid"
+                                },
+                                "ceremonyId": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 200
+                                },
+                                "recoveryCeremonyDigest": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 200000,
+                                  "pattern": "^[A-Za-z0-9_-]+$"
+                                },
+                                "targetUserId": {
+                                  "type": "string"
+                                },
+                                "targetCapability": {
+                                  "type": "string",
+                                  "enum": [
+                                    "metadata",
+                                    "full"
+                                  ]
+                                },
+                                "toolEvidenceDigest": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 200000,
+                                  "pattern": "^[A-Za-z0-9_-]+$"
+                                },
+                                "recoveredEnvelope": {
+                                  "type": "object",
+                                  "properties": {
+                                    "vaultId": {
+                                      "type": "string",
+                                      "format": "uuid"
+                                    },
+                                    "epoch": {
+                                      "type": "integer",
+                                      "exclusiveMinimum": true,
+                                      "minimum": 0
+                                    },
+                                    "recipientKind": {
+                                      "type": "string",
+                                      "enum": [
+                                        "user",
+                                        "device",
+                                        "recovery"
+                                      ]
+                                    },
+                                    "recipientId": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 200
+                                    },
+                                    "recipientKeyVersion": {
+                                      "type": "integer",
+                                      "exclusiveMinimum": true,
+                                      "minimum": 0
+                                    },
+                                    "capability": {
+                                      "type": "string",
+                                      "enum": [
+                                        "metadata",
+                                        "full",
+                                        "recovery"
+                                      ]
+                                    },
+                                    "sealedKeyBundle": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 200000,
+                                      "pattern": "^[A-Za-z0-9_-]+$"
+                                    },
+                                    "signerUserId": {
+                                      "type": "string"
+                                    },
+                                    "signerKeyVersion": {
+                                      "type": "integer",
+                                      "exclusiveMinimum": true,
+                                      "minimum": 0
+                                    }
+                                  },
+                                  "required": [
+                                    "vaultId",
+                                    "epoch",
+                                    "recipientKind",
+                                    "recipientId",
+                                    "recipientKeyVersion",
+                                    "capability",
+                                    "sealedKeyBundle",
+                                    "signerUserId",
+                                    "signerKeyVersion"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              },
+                              "required": [
+                                "protocol",
+                                "kind",
+                                "formatVersion",
+                                "requestId",
+                                "requestDigest",
+                                "vaultId",
+                                "epoch",
+                                "recoveryKeyId",
+                                "ceremonyId",
+                                "recoveryCeremonyDigest",
+                                "targetUserId",
+                                "targetCapability",
+                                "toolEvidenceDigest",
+                                "recoveredEnvelope"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "minItems": 1
+                          }
+                        },
+                        "required": [
+                          "protocol",
+                          "kind",
+                          "caseId",
+                          "caseDigest",
+                          "results"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "replaceEmptyPersonal": {
+                        "type": "boolean",
+                        "enum": [
+                          true
+                        ]
+                      },
+                      "signature": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200000,
+                        "pattern": "^[A-Za-z0-9_-]+$"
+                      }
+                    },
+                    "required": [
+                      "idempotencyKey",
+                      "caseDigest",
+                      "actorDeviceId",
+                      "signature"
+                    ],
+                    "additionalProperties": false
                   },
-                  "caseDigest": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 200000,
-                    "pattern": "^[A-Za-z0-9_-]+$"
+                  {
+                    "type": "object",
+                    "properties": {
+                      "idempotencyKey": {
+                        "type": "string",
+                        "minLength": 8,
+                        "maxLength": 80
+                      },
+                      "caseDigest": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200000,
+                        "pattern": "^[A-Za-z0-9_-]+$"
+                      }
+                    },
+                    "required": [
+                      "idempotencyKey",
+                      "caseDigest"
+                    ],
+                    "additionalProperties": false
                   }
-                },
-                "required": [
-                  "idempotencyKey",
-                  "caseDigest"
-                ],
-                "additionalProperties": false
+                ]
               }
             }
           }
@@ -21619,6 +23513,13 @@
                       "format": "uuid",
                       "nullable": true
                     },
+                    "resolutionKind": {
+                      "type": "string",
+                      "enum": [
+                        "recover_access",
+                        "replace_empty_personal"
+                      ]
+                    },
                     "approvalUserIds": {
                       "type": "array",
                       "items": {
@@ -21813,6 +23714,7 @@
                     "targetDeviceId",
                     "targetKeyVersion",
                     "accountResetRequestId",
+                    "resolutionKind",
                     "approvalUserIds",
                     "items",
                     "resolvedItemCount",
@@ -21993,6 +23895,13 @@
                       "format": "uuid",
                       "nullable": true
                     },
+                    "resolutionKind": {
+                      "type": "string",
+                      "enum": [
+                        "recover_access",
+                        "replace_empty_personal"
+                      ]
+                    },
                     "approvalUserIds": {
                       "type": "array",
                       "items": {
@@ -22187,6 +24096,7 @@
                     "targetDeviceId",
                     "targetKeyVersion",
                     "accountResetRequestId",
+                    "resolutionKind",
                     "approvalUserIds",
                     "items",
                     "resolvedItemCount",
@@ -22328,10 +24238,23 @@
                           ]
                         },
                         "shareCount": {
-                          "type": "number",
+                          "type": "integer",
+                          "minimum": 2,
+                          "maximum": 6
+                        },
+                        "custodyMode": {
+                          "type": "string",
                           "enum": [
-                            3
+                            "legacy_offline",
+                            "administrator_accounts"
                           ]
+                        },
+                        "custodyUserIds": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          },
+                          "maxItems": 6
                         },
                         "status": {
                           "type": "string",
@@ -23027,6 +24950,13 @@
                       "format": "uuid",
                       "nullable": true
                     },
+                    "resolutionKind": {
+                      "type": "string",
+                      "enum": [
+                        "recover_access",
+                        "replace_empty_personal"
+                      ]
+                    },
                     "approvalUserIds": {
                       "type": "array",
                       "items": {
@@ -23221,6 +25151,7 @@
                     "targetDeviceId",
                     "targetKeyVersion",
                     "accountResetRequestId",
+                    "resolutionKind",
                     "approvalUserIds",
                     "items",
                     "resolvedItemCount",

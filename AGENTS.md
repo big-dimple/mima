@@ -9,3 +9,4 @@ Before changing Mima, read `README.md`, `LLMWIKI.md`, `SECURITY.md` and, for run
 - Keep public documentation limited to `README.md`, `DEPLOYMENT.md`, `SECURITY.md`, `LLMWIKI.md`, `AGENTS.md` and `CLAUDE.md`.
 - Run the focused tests first, then the repository gates listed in `README.md`.
 - Do not weaken E2EE, authorization, concurrency or failure-closed behavior to make a test pass.
+- Enterprise recovery uses two to six administrator-account custody shares and exactly two different administrator clients per recovery. The service must never receive plaintext shares, the recovery private key or vault keys; the legacy offline-share protocol remains internal compatibility only.

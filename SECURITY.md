@@ -38,13 +38,13 @@ The service should not receive:
 - user/device private keys or active vault/content keys;
 - plaintext vault names, titles, accounts, URLs, notes, folders, tags or credentials;
 - plaintext search indexes;
-- enterprise recovery shares.
+- plaintext enterprise recovery shares or a reconstructed recovery private key.
 
 The Web E2EE model still trusts the JavaScript currently served to the browser. It does not protect against a malicious build, XSS, a compromised endpoint, a malicious browser extension, keylogging, screen capture, browser vulnerabilities or an authorized user exporting data. Weak master passwords may be guessed offline. Revocation cannot erase content a former member already viewed or copied.
 
 Platform administrators are inside the service trust boundary for operations but do not receive vault keys through that role. Including platform administrators, nobody can use the platform to inspect a protected vault. Enterprise recovery can only return an approved set of still-valid permissions to the original user; it does not expose a browsing path or let an administrator sign in as that user.
 
-For a recovery case, the recovered vault envelope is addressed to the user's new account public key, not to the browser where the new master password was chosen. After the second approval activates that encrypted account profile, the user may sign in from any browser, unlock with the new master password, and complete recovery through that browser's current active session. The service still verifies the user key, active session, current device signature, key generation, live authorization, vault epoch and recovery evidence without receiving a password or private key.
+When enterprise recovery is enabled, two to six administrators each receive one Shamir share sealed to that administrator's account public key. The service stores only ciphertext. The first approving administrator opens one share inside the Crypto Worker and relays it encrypted to the other administrators. The second approving administrator combines that relay with their own share inside the Crypto Worker, reconstructs the recovery key only long enough to create vault envelopes for the user's new account public key, and then destroys the temporary key material. The service still verifies both administrators, current device signatures, account key generations, live authorization, vault epochs and recovery evidence without receiving a master password, plaintext share, recovery private key or vault key.
 
 ## Non-negotiable invariants
 
@@ -76,8 +76,10 @@ Do not replace algorithms, parameters, AAD, canonical encoding or envelope forma
 
 `deploy/runtime.env`, `.mima/`, backups and recovery artifacts must never be committed. A complete server recovery requires the database plus runtime keys, audit keys, identity secrets and the stable extension identity. Backups created by `deploy/mima.sh backup` are sensitive and are not additionally encrypted by the script.
 
-Enterprise recovery is optional and disabled by default. When enabled, three shares are created offline and any two are required. Shares must stay outside the server, Git, chat, tickets and normal backups.
+Enterprise recovery is optional and disabled by default. When enabled, configure two to six explicit platform administrators; any recovery requires exactly two different administrators. Encrypted custody shares are part of the database state and are useless without the corresponding administrator account private keys. Plaintext shares, relays after decryption, reconstructed recovery keys and vault keys must never enter the service, Git, chat, tickets, logs or normal browser storage.
 
-For a forgotten master password, an administrator starts one recovery case, the user chooses a new master password, and two different administrators confirm the user's identity. Unlocked owner clients restore access automatically. Only vaults that no owner can open require the offline wizard, which handles the whole approved case with any two different shares. Revoked permissions, stale key generations and expired cases are filtered before any envelope is delivered.
+For a forgotten master password, an administrator starts one recovery case, the user chooses a new master password, and two different administrators confirm the user's identity. The second administrator's browser automatically creates the approved target envelopes. Revoked permissions, stale administrator or target key generations, changed administrator sets, changed vault epochs and expired cases are rejected before delivery. A personal vault may be replaced only when the transaction proves that it has no active records, history, folders or blocking references; the replacement vault is initialized with active recovery coverage.
+
+The repository retains the previous offline-share protocol and tool for compatibility and auditability, but it is not part of the normal UI and cannot process the current account-custody key. Returning to offline custody requires a new recovery key, complete owner-driven vault coverage and retirement of the previous key.
 
 See [DEPLOYMENT.md](DEPLOYMENT.md) for the operational procedure and [LLMWIKI.md](LLMWIKI.md) for implementation invariants.
