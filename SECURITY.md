@@ -59,6 +59,7 @@ When enterprise recovery is enabled, two to six administrators each receive one 
 - Existing database migrations are immutable and protected by `apps/api/src/db/migration-lock.json`.
 - Demo authentication requires `MIMA_DEMO_MODE=true` and loopback-only origins.
 - Production extension builds require HTTPS and a deployment-specific stable manifest identity.
+- An administrator account being ready, signed in or unlocked is not a recovery-setup approval. Setup and rotation require explicit confirmation from two different administrators; passive login must never count toward the two-person control.
 
 ## Cryptography
 
