@@ -26,6 +26,7 @@
     { "id": "0023_enterprise_recovery_integrity", "file": "migrations/0023_enterprise_recovery_integrity.sql", "sha256": "e80563a0e57ee190854ad365299adfd5566a8cb6ed67b543b5a518a8d0d70b22" },
     { "id": "0024_enterprise_recovery_cases", "file": "migrations/0024_enterprise_recovery_cases.sql", "sha256": "0df58ff632dc1ea1b1216098aac4a4e1ec17494b2a36ae33ce19c95f3602382d" },
     { "id": "0025_nonblocking_initial_recovery", "file": "migrations/0025_nonblocking_initial_recovery.sql", "sha256": "634d06b6f30f9cbab648ed7257a8d62fed6b31c9e5c88a1e16df4c7beff0dd6c" },
-    { "id": "0026_administrator_account_recovery", "file": "migrations/0026_administrator_account_recovery.sql", "sha256": "210de23a654f3a54f32866c23dd58b2f8640d81850d2c08d605623016e333ed3" }
+    { "id": "0026_administrator_account_recovery", "file": "migrations/0026_administrator_account_recovery.sql", "sha256": "210de23a654f3a54f32866c23dd58b2f8640d81850d2c08d605623016e333ed3" },
+    { "id": "0027_recovery_case_terminal_transitions", "file": "migrations/0027_recovery_case_terminal_transitions.sql", "sha256": "8eebf1a56aa06f20763396d53ac8a42e7d81f293f4e7fda3c99c023b6813009d" }
   ]
 }

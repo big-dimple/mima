@@ -18,7 +18,7 @@
 - 包管理器：pnpm 10.33.2
 - 数据库：PostgreSQL 18 Compose 基线
 - E2EE 协议标识：`lm-e2ee-v1`（为兼容保持此名称）
-- 数据库迁移头：`0026_administrator_account_recovery`
+- 数据库迁移头：`0027_recovery_case_terminal_transitions`
 - 元数据格式：v5；v4 数据可读，写入与 rekey 只允许 v5
 - vault header：v3；兼容读取 v2/v3，新写入只允许 v3
 - 公开仓库只承诺全新安装，不承诺兼容开源前的私有数据库或运行目录
