@@ -48,7 +48,7 @@ test('企业恢复中心在桌面、平板和手机视口保持可用', async ({
     await expect(dialog.getByRole('heading', { name: '准备企业恢复' })).toBeVisible();
     for (const heading of [
       '1. 核对恢复管理员',
-      '2. 自动准备恢复保护',
+      '2. 两位管理员确认设置',
       '3. 自动启用',
     ]) {
       await expect(dialog.getByRole('heading', { name: heading })).toBeVisible();

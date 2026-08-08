@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import {
   AlertTriangle,
   CheckCircle2,
+  ChevronRight,
   Copy,
   KeyRound,
   LockKeyhole,
@@ -396,10 +397,12 @@ export function AdminAccountResetApprovals({
   showEmpty = false,
   recoveryWorkspace = null,
   onRecoveryChanged,
+  onOpenRecoverySetup,
 }: {
   showEmpty?: boolean;
   recoveryWorkspace?: EnterpriseRecoveryWorkspace | null;
   onRecoveryChanged?: () => void | Promise<void>;
+  onOpenRecoverySetup?: () => void;
 } = {}) {
   const { api, zeroKnowledge } = useApp();
   const currentUserId = useMeta((state) => state.user?.id ?? '');
@@ -475,16 +478,69 @@ export function AdminAccountResetApprovals({
     }
   };
   const activeCases = cases.filter((entry) => ['waiting_for_target', 'pending_approval', 'approved', 'processing'].includes(entry.status));
-  const recoveryReady = recoveryWorkspace === null
-    || recoveryWorkspace.keys.some((key) => (
-      key.status === 'active' && key.custodyMode === 'administrator_accounts'
-    ));
+  const activeManagedKey = recoveryWorkspace?.keys.find((key) => (
+    key.status === 'active' && key.custodyMode === 'administrator_accounts'
+  )) ?? null;
+  const managedSetupKey = recoveryWorkspace?.keys.find((key) => (
+    key.custodyMode === 'administrator_accounts'
+    && (key.status === 'pending' || key.status === 'staged')
+  )) ?? null;
+  const recoveryReady = recoveryWorkspace === null || activeManagedKey !== null;
+  const readyAdministratorCount = recoveryWorkspace?.readiness?.readyAdministratorCount ?? 0;
+  const setupApprovedByCurrentUser = managedSetupKey?.approvalUserIds.includes(currentUserId) ?? false;
+  const preparationNotice = !recoveryReady && recoveryWorkspace
+    ? !recoveryWorkspace.readiness?.ready
+      ? {
+          title: '恢复管理员账号尚未就绪',
+          body: '请先在“准备恢复”查看具体是哪位管理员还没有设置主密码或完成登录。',
+          action: '查看准备状态',
+        }
+      : managedSetupKey?.status === 'pending'
+        ? setupApprovedByCurrentUser
+          ? {
+              title: '还差 1 位管理员确认',
+              body: `${readyAdministratorCount} 位恢复管理员账号都已就绪；你的设置确认已记录。请让另一位管理员进入“准备恢复”，完成第二次确认。`,
+              action: '查看准备状态',
+            }
+          : {
+              title: '还差你完成第二次确认',
+              body: `${readyAdministratorCount} 位恢复管理员账号都已就绪。请进入“准备恢复”核对并确认；完成后系统自动继续。`,
+              action: '去完成确认',
+            }
+        : managedSetupKey?.status === 'staged'
+          ? {
+              title: '两位管理员已确认，系统正在自动更新保护',
+              body: '无需再审批或处理文件；现有密码库更新完成后，恢复协助会自动开放。',
+              action: '查看准备进度',
+            }
+          : recoveryWorkspace.keys.some((key) => key.status === 'active' && key.custodyMode === 'legacy_offline')
+            ? {
+                title: '当前仍是旧恢复方式',
+                body: '管理员账号已就绪，但浏览器自动恢复还没有由两位管理员确认启用。',
+                action: '去启用新流程',
+              }
+            : {
+                title: '恢复管理员账号已就绪，恢复设置尚未启用',
+                body: '请在“准备恢复”发起设置，再由另一位管理员确认；后续由系统自动完成。',
+                action: '去准备恢复',
+              }
+    : null;
   if (loading) return <LoadingState label="正在查看恢复协助…" />;
   return (
     <section className={styles.adminSection} aria-label="恢复协助">
       <h2>发起恢复协助</h2>
       <p>同事忘记主密码或交接中断时，由管理员在这里发起。一次协助覆盖其仍然有效的原有权限，不需要逐个密码库操作。</p>
-      {!recoveryReady && <div className={styles.notice}>企业恢复尚未准备完成，请先打开“准备恢复”完成设置。</div>}
+      {preparationNotice && (
+        <div className={styles.notice} role="status">
+          <strong>{preparationNotice.title}</strong>
+          <span>{preparationNotice.body}</span>
+          {onOpenRecoverySetup && (
+            <button type="button" className={styles.noticeAction} onClick={onOpenRecoverySetup}>
+              {preparationNotice.action}<ChevronRight size={14} aria-hidden />
+            </button>
+          )}
+        </div>
+      )}
       <form className={styles.resetForm} onSubmit={create}>
         <label htmlFor="recovery-target-user">需要帮助的同事</label>
         <UserPicker

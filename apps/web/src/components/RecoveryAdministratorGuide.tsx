@@ -65,7 +65,7 @@ export function RecoveryAdministratorGuide({
 function administratorStatus(
   administrator: EnterpriseRecoveryReadiness['administrators'][number],
 ): string {
-  if (administrator.ready) return '可参与确认';
+  if (administrator.ready) return '账号已就绪';
   if (!administrator.active) return '账号已停用';
   if (administrator.identitySource !== 'oidc') return '需要使用公司统一登录';
   if (!administrator.hasCryptoProfile) return '尚未设置主密码';

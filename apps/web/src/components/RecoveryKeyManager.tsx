@@ -86,6 +86,7 @@ export function RecoveryKeyManager() {
   ), [currentManagedKey]);
   const administratorSetCurrent = expectedAdministratorIds.length === managedAdministratorIds.length
     && expectedAdministratorIds.every((entry, index) => entry === managedAdministratorIds[index]);
+  const setupConfirmed = currentManagedKey?.status === 'staged' || currentManagedKey?.status === 'active';
 
   const prepare = async () => {
     if (!state?.readiness.ready) return;
@@ -153,7 +154,7 @@ export function RecoveryKeyManager() {
       <div className={styles.sectionHeading}>
         <div>
           <h2 id="recovery-key-heading"><KeyRound size={16} aria-hidden />准备企业恢复</h2>
-          <p>设置两至六位恢复管理员。任何一次恢复只需要其中两位分别确认。</p>
+          <p>管理员账号就绪后，还需两位不同管理员各确认一次；第二次确认后系统自动继续。</p>
         </div>
       </div>
       {actionError && <div className={styles.actionError} role="alert">{actionError}</div>}
@@ -169,10 +170,10 @@ export function RecoveryKeyManager() {
             </div>
           </section>
 
-          <section className={styles.workflowStep} data-complete={Boolean(currentManagedKey)}>
-            <div className={styles.stepRail} aria-hidden>{currentManagedKey ? <CheckCircle2 size={17} /> : <KeyRound size={17} />}</div>
+          <section className={styles.workflowStep} data-complete={setupConfirmed}>
+            <div className={styles.stepRail} aria-hidden>{setupConfirmed ? <CheckCircle2 size={17} /> : <KeyRound size={17} />}</div>
             <div className={styles.stepBody}>
-              <div className={styles.stepTitle}><h3><KeyRound size={17} aria-hidden />2. 自动准备恢复保护</h3></div>
+              <div className={styles.stepTitle}><h3><KeyRound size={17} aria-hidden />2. 两位管理员确认设置</h3></div>
               {!state.readiness.ready && <p>所有恢复管理员完成首次登录并设置主密码后，即可继续。</p>}
               {state.readiness.ready && (!currentManagedKey || !administratorSetCurrent) && (
                 <button type="button" disabled={busyAction !== null} onClick={() => void prepare()}>
@@ -181,12 +182,12 @@ export function RecoveryKeyManager() {
                 </button>
               )}
               {currentManagedKey?.status === 'pending' && currentManagedKey.approvalUserIds.includes(currentUserId) && (
-                <p>你的确认已经完成，等待另一位管理员进入本页确认。</p>
+                <p>你的设置确认已记录；还差 1 位不同管理员进入本页，完成第二次确认。</p>
               )}
               {currentManagedKey?.status === 'pending' && !currentManagedKey.approvalUserIds.includes(currentUserId) && (
                 <button type="button" disabled={busyAction !== null} onClick={() => void approve(currentManagedKey)}>
                   <CheckCircle2 size={15} aria-hidden />
-                  {busyAction?.startsWith('approve:') ? '正在核对…' : '核对并完成第二次确认'}
+                  {busyAction?.startsWith('approve:') ? '正在核对…' : '完成第二位管理员确认'}
                 </button>
               )}
             </div>
@@ -200,7 +201,7 @@ export function RecoveryKeyManager() {
                 <p className={styles.completedLine}><CheckCircle2 size={15} aria-hidden />企业恢复已经启用，现有密码库均已保护。</p>
               )}
               {currentManagedKey?.status === 'pending' && (
-                <p>还需要另一位管理员确认，确认后系统会自动继续。</p>
+                <p>人员账号已就绪，但恢复设置尚未完成。第二位管理员确认后，系统会自动继续。</p>
               )}
               {currentManagedKey?.status === 'staged' && (
                 <p>两位管理员已经确认，历史密码库正在后台更新保护，无需额外保管或来回处理文件。</p>

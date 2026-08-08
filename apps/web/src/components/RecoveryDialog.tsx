@@ -72,6 +72,10 @@ function RecoveryWorkspaceCenter() {
     ['waiting_for_target', 'pending_approval', 'approved', 'processing'].includes(entry.status)
   )) ?? [];
   const counts = useMemo<Partial<Record<RecoverySection, number>>>(() => ({
+    setup: isLocalPlatformAdmin && workspace
+      && !workspace.keys.some((key) => (
+        key.status === 'active' && key.custodyMode === 'administrator_accounts'
+      )) ? 1 : 0,
     cases: isLocalPlatformAdmin
       ? activeCases.filter((entry) => (
         entry.targetUserId !== currentUserId
@@ -80,7 +84,7 @@ function RecoveryWorkspaceCenter() {
         )
       )).length
       : activeCases.filter((entry) => entry.targetUserId === currentUserId).length,
-  }), [activeCases, currentUserId, isLocalPlatformAdmin]);
+  }), [activeCases, currentUserId, isLocalPlatformAdmin, workspace]);
 
   return (
     <div className={styles.workspaceShell}>
@@ -134,7 +138,7 @@ function RecoveryWorkspaceCenter() {
               >
                 <Icon size={17} aria-hidden />
                 <span>{label}</span>
-                {count > 0 && <strong aria-label={`${count} 项待处理`}>{count}</strong>}
+                {count > 0 && <strong aria-hidden>{count}</strong>}
               </button>
             );
           })}
@@ -171,6 +175,7 @@ function RecoveryWorkspaceCenter() {
                   showEmpty
                   recoveryWorkspace={workspace}
                   onRecoveryChanged={refresh}
+                  onOpenRecoverySetup={() => setActiveSection('setup')}
                 />
               ) : <RecoveryCaseList active />}
             </section>

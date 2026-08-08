@@ -75,9 +75,9 @@ describe('enterprise recovery center', () => {
 
     expect(await screen.findByRole('heading', { name: '企业恢复中心' })).toBeVisible();
     for (const label of ['总览', '准备恢复', '恢复协助', '历史记录']) {
-      expect(screen.getByRole('button', { name: label })).toBeVisible();
+      expect(screen.getByRole('button', { name: new RegExp(label) })).toBeVisible();
     }
-    await userEvent.click(screen.getByRole('button', { name: '准备恢复' }));
+    await userEvent.click(screen.getByRole('button', { name: /准备恢复/ }));
     expect(await screen.findByRole('heading', { name: '准备企业恢复' })).toBeVisible();
     expect(screen.getByText(/还需设置 2 名恢复管理员/)).toBeVisible();
     await waitFor(() => expect(api.recoveryWorkspace).toHaveBeenCalledTimes(1));
@@ -108,6 +108,36 @@ describe('enterprise recovery center', () => {
     expect(await screen.findByText(/两人已确认，正在自动完成/)).toBeVisible();
     expect(screen.getByText(/用户用新主密码重新登录后/)).toBeVisible();
     expect(screen.queryByText(/下载案件|提交恢复结果|离线向导/)).not.toBeInTheDocument();
+  });
+
+  it('separates ready administrator accounts from the missing second setup confirmation', async () => {
+    const store = createMetaStore();
+    store.getState().setUser({
+      id: 'admin-1',
+      username: 'admin-1',
+      displayName: 'Admin One',
+      email: 'admin-1@example.test',
+      groups: [],
+      isPlatformAdmin: true,
+      isLocalPlatformAdmin: true,
+    });
+    const api = { recoveryWorkspace: vi.fn(async () => workspaceAwaitingSecondSetupConfirmation()) };
+
+    render(
+      <AppContext.Provider value={{ api, store, zeroKnowledge: {} } as unknown as AppServices}>
+        <RecoveryDialog />
+      </AppContext.Provider>,
+    );
+
+    await userEvent.click(await screen.findByRole('button', { name: /恢复协助/ }));
+    expect(await screen.findByText('还差 1 位管理员确认')).toBeVisible();
+    expect(screen.getByText(/3 位恢复管理员账号都已就绪/)).toBeVisible();
+    expect(screen.queryByText(/企业恢复尚未准备完成/)).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: '查看准备状态' }));
+    expect(await screen.findByRole('heading', { name: '准备企业恢复' })).toBeVisible();
+    expect(screen.getByText(/还差 1 位不同管理员/)).toBeVisible();
+    expect(screen.getAllByText('账号已就绪')).toHaveLength(3);
   });
 });
 
@@ -171,5 +201,56 @@ function workspaceWithAutomaticRecovery(): EnterpriseRecoveryWorkspace {
       expiredAt: null,
       lastErrorCode: null,
     }],
+  };
+}
+
+function workspaceAwaitingSecondSetupConfirmation(): EnterpriseRecoveryWorkspace {
+  const managedKey = {
+    id: '10000000-0000-4000-8000-000000000010',
+    ceremonyId: 'managed-recovery-2026',
+    keyFingerprint: 'E'.repeat(43),
+    publicEncryptionKey: 'F'.repeat(43),
+    threshold: 2 as const,
+    shareCount: 3,
+    custodyMode: 'administrator_accounts' as const,
+    custodyUserIds: ['admin-1', 'admin-2', 'admin-3'],
+    status: 'pending' as const,
+    ceremonyEvidenceDigest: 'G'.repeat(43),
+    approvalUserIds: ['admin-1'],
+    createdAt: '2026-08-08T00:00:00.000Z',
+    retiredAt: null,
+    cancelledAt: null,
+  };
+  const legacyKey = {
+    ...managedKey,
+    id: '10000000-0000-4000-8000-000000000011',
+    ceremonyId: 'legacy-recovery-2025',
+    custodyMode: 'legacy_offline' as const,
+    custodyUserIds: [],
+    status: 'active' as const,
+    approvalUserIds: ['admin-1', 'admin-2'],
+  };
+  return {
+    ...emptyWorkspace(),
+    keys: [managedKey, legacyKey],
+    readiness: {
+      requiredAdministratorCount: 2,
+      maximumAdministratorCount: 6,
+      administratorCount: 3,
+      readyAdministratorCount: 3,
+      ready: true,
+      administrators: ['admin-1', 'admin-2', 'admin-3'].map((username, index) => ({
+        userId: username,
+        username,
+        displayName: `Admin ${index + 1}`,
+        identitySource: 'oidc' as const,
+        active: true,
+        hasCryptoProfile: true,
+        activeDeviceCount: 1,
+        cryptoGeneration: 1,
+        encryptionPublicKey: String.fromCharCode(72 + index).repeat(43),
+        ready: true,
+      })),
+    },
   };
 }

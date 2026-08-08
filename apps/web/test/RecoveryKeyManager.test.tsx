@@ -35,7 +35,7 @@ describe('enterprise recovery key manager', () => {
 
     renderManager(api, { prepareManagedEnterpriseRecoveryKey });
 
-    expect(await screen.findByText(/设置两至六位恢复管理员/)).toBeVisible();
+    expect(await screen.findByText(/管理员账号就绪后，还需两位不同管理员/)).toBeVisible();
     expect(screen.getByText(/最少两位，最多六位/)).toBeVisible();
     expect(screen.queryByLabelText(/文件/)).not.toBeInTheDocument();
     expect(screen.queryByText(/下载|上传|离线向导/)).not.toBeInTheDocument();
@@ -46,7 +46,10 @@ describe('enterprise recovery key manager', () => {
     await waitFor(() => expect(prepareManagedEnterpriseRecoveryKey)
       .toHaveBeenCalledWith(readyAdministrators().administrators));
     expect(api.registerManagedRecoveryKey).toHaveBeenCalledTimes(1);
-    expect(await screen.findByText(/你的确认已经完成/)).toBeVisible();
+    expect(await screen.findByText(/你的设置确认已记录/)).toBeVisible();
+    expect(screen.getAllByText('账号已就绪')).toHaveLength(3);
+    expect(screen.getByRole('heading', { name: /2\. 两位管理员确认设置/ }).closest('section'))
+      .toHaveAttribute('data-complete', 'false');
   });
 
   it('lets a different administrator complete the second confirmation', async () => {
@@ -77,7 +80,7 @@ describe('enterprise recovery key manager', () => {
 
     renderManager(api, { prepareManagedEnterpriseRecoveryKeyApproval }, 'admin-2');
 
-    await userEvent.click(await screen.findByRole('button', { name: '核对并完成第二次确认' }));
+    await userEvent.click(await screen.findByRole('button', { name: '完成第二位管理员确认' }));
     await userEvent.click(screen.getByRole('button', { name: '核对并确认' }));
 
     await waitFor(() => expect(api.approveRecoveryKey).toHaveBeenCalledWith(pending.id, preparedApproval));
@@ -87,6 +90,8 @@ describe('enterprise recovery key manager', () => {
     );
     await waitFor(() => expect(api.activateRecoveryKey).toHaveBeenCalled());
     expect(await screen.findByText(/历史密码库正在后台更新保护/)).toBeVisible();
+    expect(screen.getByRole('heading', { name: /2\. 两位管理员确认设置/ }).closest('section'))
+      .toHaveAttribute('data-complete', 'true');
     expect(screen.queryByText(/1\/2/)).not.toBeInTheDocument();
   });
 
@@ -96,7 +101,7 @@ describe('enterprise recovery key manager', () => {
 
     renderManager(api, {}, 'admin-1');
 
-    expect(await screen.findByText(/你的确认已经完成/)).toBeVisible();
+    expect(await screen.findByText(/你的设置确认已记录/)).toBeVisible();
     expect(screen.queryByRole('button', { name: /第二次确认/ })).not.toBeInTheDocument();
   });
 
